@@ -72,7 +72,7 @@ Kích thước vừa vặn để đựng mỹ phẩm, dụng cụ học tập ho
     featured: true,
     sort_order: 1,
     weight_gram: 100,
-    thumbnail: "/images/products/pouch-mam-mo-1.jpg",
+    thumbnail: "/images/products/pounch_1.png",
     category_id: "cat-1",
     category: MOCK_CATEGORIES[0],
     created_at: new Date().toISOString(),
@@ -80,8 +80,8 @@ Kích thước vừa vặn để đựng mỹ phẩm, dụng cụ học tập ho
     badge: "best_seller",
     badge_label: "Bán chạy",
     images: [
-      "/images/products/pouch-mam-mo-1.jpg",
-      "/images/products/pouch-mam-mo-2.jpg",
+      "/images/products/pounch_1.png",
+      "/images/products/pounch_2.jpg",
     ],
     variants: [
       {
