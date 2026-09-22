@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -51,29 +52,34 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         />
       )}
 
-      {/* Sidebar Container */}
+      {/* Sidebar Container with Warm Forest Moss Tone */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-emerald-950 text-emerald-100 flex flex-col border-r border-emerald-900 transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-[#16281D] text-[#E5DCD2] flex flex-col border-r border-[#263D2E] transition-transform duration-300 lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Header */}
-        <div className="h-16 flex items-center justify-between px-5 border-b border-emerald-900">
+        {/* Header with Official Logo */}
+        <div className="h-16 flex items-center justify-between px-5 border-b border-[#263D2E]">
           <Link href="/admin/dashboard" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-soft-green flex items-center justify-center text-emerald-950 font-bold text-sm">
-              🌱
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#BFE9C3] shadow-xs bg-white shrink-0">
+              <Image
+                src="/images/logo_gieo mơ.jpg"
+                alt="Gieo Mơ Admin"
+                fill
+                className="object-cover"
+              />
             </div>
             <div>
-              <span className="font-heading font-extrabold text-lg text-white tracking-tight leading-none block">
+              <span className="font-heading font-extrabold text-base text-white tracking-tight leading-none block">
                 Gieo Mơ
               </span>
-              <span className="text-[10px] text-emerald-400 font-medium">Admin Portal</span>
+              <span className="text-[10px] text-[#BFE9C3] font-semibold">Admin Portal</span>
             </div>
           </Link>
 
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-emerald-400 hover:text-white lg:hidden"
+            className="p-1 rounded-lg text-[#A39688] hover:text-white lg:hidden"
           >
             <X className="w-5 h-5" />
           </button>
@@ -90,13 +96,13 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   isActive
-                    ? "bg-soft-green text-emerald-950 font-bold shadow-2xs"
-                    : "text-emerald-200/80 hover:bg-emerald-900/60 hover:text-white"
+                    ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
+                    : "text-[#C8BEB2] hover:bg-[#203728] hover:text-white"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-emerald-950" : "text-emerald-400"}`} />
+                <Icon className={`w-4 h-4 ${isActive ? "text-[#16381D]" : "text-[#BFE9C3]"}`} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -104,18 +110,18 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </nav>
 
         {/* Footer User Info */}
-        <div className="p-4 border-t border-emerald-900 flex items-center justify-between">
+        <div className="p-4 border-t border-[#263D2E] flex items-center justify-between">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-soft-green/30 border border-soft-green/50 flex items-center justify-center text-xs font-bold text-soft-green">
-              AD
+            <div className="w-8 h-8 rounded-full bg-[#BFE9C3]/20 border border-[#BFE9C3]/40 flex items-center justify-center text-xs font-bold text-[#BFE9C3]">
+              🌱
             </div>
             <div className="truncate">
               <span className="text-xs font-bold text-white block truncate">BTC Mầm Mơ</span>
-              <span className="text-[10px] text-emerald-400 block truncate">Admin Role</span>
+              <span className="text-[10px] text-[#A39688] block truncate">Quản trị viên</span>
             </div>
           </div>
 
-          <Link href="/admin/login" className="p-2 text-emerald-400 hover:text-red-400 transition-colors" title="Đăng xuất">
+          <Link href="/admin/login" className="p-2 text-[#A39688] hover:text-[#FFB98A] transition-colors" title="Đăng xuất">
             <LogOut className="w-4 h-4" />
           </Link>
         </div>

@@ -2,11 +2,12 @@
 
 /* ===========================
    GIEO MƠ — DESIGN SYSTEM
-   Brand: "Mầm khám phá thế giới may vá"
+   Brand Concept: "Mầm khám phá thế giới may vá"
+   Source of truth: palete_mau.jpg & cover_gieomo.jpg
    =========================== */
 
 @theme inline {
-  /* Brand Colors */
+  /* Brand Palette (From palete_mau.jpg) */
   --color-soft-green: #BFE9C3;
   --color-powder-blue: #CFE8FF;
   --color-butter-yellow: #FFE7A8;
@@ -14,43 +15,45 @@
   --color-soft-pink: #FFD1E1;
   --color-cream: #FFF8EE;
 
-  /* Semantic Colors */
+  /* Semantic & Warm Typography Colors */
   --color-brand: #BFE9C3;
-  --color-brand-dark: #8FD498;
-  --color-brand-darker: #5BBF6B;
+  --color-brand-dark: #65B374;
+  --color-brand-darker: #2D6338;
   --color-accent: #FFB98A;
-  --color-accent-dark: #F59E5E;
+  --color-accent-dark: #E2884E;
 
-  --color-background: var(--color-cream);
-  --color-foreground: #2D2D2D;
+  /* Warm Storybook Neutral Palette (Replacing harsh cold grays/blacks) */
+  --color-background: #FFF8EE;
+  --color-foreground: #342A24;
+  --color-title: #231B16;
   --color-surface: #FFFFFF;
-  --color-surface-hover: #F9FAFB;
-  --color-muted: #6B7280;
-  --color-muted-light: #9CA3AF;
-  --color-border: #E5E7EB;
-  --color-border-light: #F3F4F6;
+  --color-surface-hover: #FDF9F3;
+  --color-muted: #7E7068;
+  --color-muted-light: #A89B92;
+  --color-border: #F0E5D8;
+  --color-border-light: #F7EFE6;
 
-  --color-success: #22C55E;
-  --color-success-light: #DCFCE7;
-  --color-warning: #F59E0B;
+  /* Status Colors (Harmonized with Pastel Theme) */
+  --color-success: #38A169;
+  --color-success-light: #E6F7EC;
+  --color-warning: #DD6B20;
   --color-warning-light: #FEF3C7;
-  --color-danger: #EF4444;
-  --color-danger-light: #FEE2E2;
-  --color-info: #3B82F6;
-  --color-info-light: #DBEAFE;
+  --color-danger: #E53E3E;
+  --color-danger-light: #FED7D7;
+  --color-info: #3182CE;
+  --color-info-light: #EBF8FF;
 
   /* Typography */
   --font-display: 'Boldonse', cursive;
   --font-heading: 'Montserrat', sans-serif;
   --font-body: 'Montserrat', sans-serif;
-
   --font-sans: 'Montserrat', sans-serif;
 
-  /* Border Radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
+  /* Border Radius (Friendly & Soft) */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
   --radius-full: 9999px;
 }
 
@@ -63,7 +66,7 @@ html {
 }
 
 body {
-  background: var(--color-background);
+  background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-body);
   line-height: 1.6;
@@ -71,35 +74,79 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Heading font */
+/* Heading font with warm chocolate tone */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 700;
+  color: var(--color-title);
+  line-height: 1.25;
 }
 
 /* ===========================
-   GRADIENTS
+   GRADIENTS (STRICTLY FROM palete_mau.jpg)
    =========================== */
 
+/* Main Gradient: Soft Green -> Butter Yellow (Background chính) */
 .gradient-main {
-  background: linear-gradient(135deg, var(--color-cream) 0%, #f0f7f1 50%, var(--color-powder-blue) 100%);
+  background: linear-gradient(135deg, #BFE9C3 0%, #FFE7A8 100%);
 }
 
+/* Dreamy Gradient: Powder Blue -> Soft Pink (Highlight/Featured) */
 .gradient-dreamy {
-  background: linear-gradient(135deg, var(--color-powder-blue) 0%, var(--color-soft-pink) 50%, var(--color-butter-yellow) 100%);
+  background: linear-gradient(135deg, #CFE8FF 0%, #FFD1E1 100%);
 }
 
+/* Warm Gradient: Butter Yellow -> Warm Orange -> Soft Pink (Accent) */
 .gradient-warm {
-  background: linear-gradient(135deg, var(--color-warm-orange) 0%, var(--color-soft-pink) 100%);
+  background: linear-gradient(135deg, #FFE7A8 0%, #FFB98A 50%, #FFD1E1 100%);
 }
 
+/* Soft Gradient: Soft Green -> Powder Blue (Secondary surface/card) */
 .gradient-soft {
-  background: linear-gradient(135deg, var(--color-cream) 0%, var(--color-surface) 100%);
+  background: linear-gradient(135deg, #BFE9C3 0%, #CFE8FF 100%);
 }
 
+/* Brand Trio: Soft Green -> Powder Blue -> Butter Yellow */
 .gradient-brand {
-  background: linear-gradient(135deg, var(--color-soft-green) 0%, var(--color-powder-blue) 100%);
+  background: linear-gradient(135deg, #BFE9C3 0%, #CFE8FF 50%, #FFE7A8 100%);
+}
+
+/* Fairy Sky Gradient for Hero */
+.gradient-fairy {
+  background: radial-gradient(circle at 50% 20%, #FFFDF9 0%, #FFF4E5 40%, #E9F4EE 70%, #DCEEFF 100%);
+}
+
+/* ===========================
+   STITCH & HANDMADE DETAILS
+   =========================== */
+
+.border-stitch {
+  border-style: dashed;
+  border-width: 2px;
+  border-color: #FFB98A;
+}
+
+.border-stitch-green {
+  border-style: dashed;
+  border-width: 2px;
+  border-color: #8FD498;
+}
+
+.shadow-dreamy {
+  box-shadow: 0 10px 30px -5px rgba(255, 185, 138, 0.25), 0 4px 15px -2px rgba(191, 233, 195, 0.3);
+}
+
+.shadow-soft {
+  box-shadow: 0 4px 20px -2px rgba(92, 70, 56, 0.06);
+}
+
+.shadow-card-hover {
+  box-shadow: 0 12px 30px -4px rgba(92, 70, 56, 0.12);
+}
+
+/* Button-shaped accent detail */
+.button-emboss {
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.6), 0 3px 6px rgba(52, 42, 36, 0.1);
 }
 
 /* ===========================
@@ -112,119 +159,36 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #FFF8EE;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: #EADBCC;
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted-light);
+  background: #FFB98A;
 }
 
 /* ===========================
    ANIMATIONS
    =========================== */
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1.5deg); }
 }
 
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.03); }
 }
 
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+.animate-float {
+  animation: float-slow 4s ease-in-out infinite;
 }
 
-@keyframes slide-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.4s ease-out;
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.3s ease-out;
-}
-
-.animate-scale-in {
-  animation: scale-in 0.2s ease-out;
-}
-
-/* Respect reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* ===========================
-   STITCH / HANDMADE DETAILS
-   =========================== */
-
-.border-stitch {
-  border-style: dashed;
-  border-width: 2px;
-  border-color: var(--color-brand);
-}
-
-.shadow-soft {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.02);
-}
-
-.shadow-card {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
-}
-
-.shadow-card-hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
-}
-
-/* ===========================
-   UTILITY CLASSES
-   =========================== */
-
-/* Money display — always use VND formatting */
-.money::after {
-  content: "đ";
-}
-
-/* Truncate multi-line */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
 }
