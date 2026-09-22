@@ -3,8 +3,8 @@ import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_PRODUCTS, MOCK_COMBOS } from "@/lib/data/mockData";
-import { Sparkles, ArrowRight, Heart, Gift, Scissors, Compass } from "lucide-react";
+import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
 
 export default function HomePage() {
   const featuredProducts = MOCK_PRODUCTS.slice(0, 4);
@@ -142,47 +142,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ========================================================
-            SET COMBO BANNER: WARM GRADIENT SAVINGS
-            ======================================================== */}
-        <section className="py-12 container mx-auto px-4 sm:px-6">
-          <div className="rounded-3xl gradient-warm p-6 sm:p-10 border border-[#FFB98A]/50 shadow-soft relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="space-y-3 text-center md:text-left max-w-xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/80 text-[#542B07] text-xs font-extrabold shadow-2xs">
-                <Gift className="w-3.5 h-3.5 text-[#E2884E]" />
-                <span>Set quà tặng trọn gói • Tiết kiệm hơn</span>
-              </div>
-              <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#3A1E07]">
-                Bộ Set Combo &quot;Gieo Ước Mơ&quot;
-              </h2>
-              <p className="text-xs sm:text-sm text-[#5C320E] leading-relaxed font-medium">
-                Sự kết hợp tinh tế giữa Túi Pouch may vá, Móc khóa mầm cây và Huy hiệu cúc áo. Một món quà tròn đầy ý nghĩa để bạn gửi tặng người thân thương!
-              </p>
-              <div className="pt-2">
-                <Link
-                  href="/combos"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-[#4A2603] font-extrabold text-xs shadow-xs hover:shadow-md transition-all active:scale-95"
-                >
-                  <span>Khám phá các Set Combo ➔</span>
-                </Link>
-              </div>
-            </div>
-
-            {/* Visual combo thumbnails */}
-            <div className="grid grid-cols-2 gap-3 shrink-0">
-              <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-white/90 p-2 shadow-xs border border-white flex flex-col items-center justify-center text-center">
-                <span className="text-3xl mb-1">🎁</span>
-                <span className="text-[11px] font-bold text-[#4A2603]">Combo Gieo Hạt</span>
-                <span className="text-[10px] text-[#E2884E] font-extrabold">125.000đ</span>
-              </div>
-              <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-white/90 p-2 shadow-xs border border-white flex flex-col items-center justify-center text-center">
-                <span className="text-3xl mb-1">✨</span>
-                <span className="text-[11px] font-bold text-[#4A2603]">Combo Nảy Mầm</span>
-                <span className="text-[10px] text-[#E2884E] font-extrabold">195.000đ</span>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* ========================================================
             BRAND VALUES & IMPACT: 4 PASTEL PALETTE CARDS

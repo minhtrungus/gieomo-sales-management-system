@@ -146,7 +146,9 @@ export default function AdminMembersPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-3 text-center w-12">STT</th>
                 <th className="py-3.5 px-5">Thành viên</th>
+                <th className="py-3.5 px-4">Trạng thái</th>
                 <th className="py-3.5 px-4">Vai trò (Phân quyền)</th>
                 <th className="py-3.5 px-4">Ngày tham gia BTC</th>
                 <th className="py-3.5 px-4">Mã Referral</th>
@@ -156,8 +158,12 @@ export default function AdminMembersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
-              {members.map((m) => (
+              {members.map((m, idx) => (
                 <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
+                  <td className="py-4 px-3 text-center text-[#7E7068] font-bold text-xs">
+                    {idx + 1}
+                  </td>
+
                   <td className="py-4 px-5">
                     <span
                       onClick={() => setViewingOrdersMember(m)}
@@ -167,6 +173,19 @@ export default function AdminMembersPage() {
                       {m.fullName}
                     </span>
                     <span className="text-[11px] text-[#7E7068] block">{m.email} • {m.phone}</span>
+                  </td>
+
+                  <td className="py-4 px-4 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${
+                        m.status === "active"
+                          ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3]"
+                          : "bg-gray-100 text-gray-500 border-gray-300"
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
+                      <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
+                    </span>
                   </td>
 
                   <td className="py-4 px-4 font-semibold">

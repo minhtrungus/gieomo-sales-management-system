@@ -210,6 +210,7 @@ export default function AdminProductsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-3 text-center w-12">STT</th>
                 <th className="py-3.5 px-5">Sản phẩm</th>
                 <th className="py-3.5 px-4">Danh mục</th>
                 <th className="py-3.5 px-4">Giá bán / Giá vốn</th>
@@ -219,10 +220,14 @@ export default function AdminProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
-              {filteredProducts.map((p) => {
+              {filteredProducts.map((p, idx) => {
                 const totalStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) ?? 10;
                 return (
                   <tr key={p.product_id} className="hover:bg-[#FFFDF9] transition-colors">
+                    <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                      {idx + 1}
+                    </td>
+
                     <td className="py-3.5 px-5 flex items-center gap-3">
                       <div className="relative w-12 h-12 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center text-lg shadow-2xs">
                         {p.images?.[0] ? (

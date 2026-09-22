@@ -150,6 +150,7 @@ export default function AdminOrdersPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-3 text-center w-12">STT</th>
                 <th className="py-3.5 px-4">Mã đơn</th>
                 <th className="py-3.5 px-4">Thời gian đặt</th>
                 <th className="py-3.5 px-4">Khách hàng</th>
@@ -164,8 +165,12 @@ export default function AdminOrdersPage() {
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {filteredOrders.length > 0 ? (
-                filteredOrders.map((ord) => (
+                filteredOrders.map((ord, idx) => (
                   <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
+                    <td className="py-4 px-3 text-center text-[#7E7068] font-bold text-xs">
+                      {idx + 1}
+                    </td>
+
                     <td className="py-4 px-4 font-mono font-bold text-[#1B3622]">
                       <Link href={`/admin/orders/${ord.order_id}`} className="hover:underline">
                         {ord.order_code}

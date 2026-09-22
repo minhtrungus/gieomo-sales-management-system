@@ -191,6 +191,7 @@ export default function AdminInventoryPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
+                <th className="py-3 px-3 text-center w-12">STT</th>
                 <th className="py-3 px-5">Sản phẩm</th>
                 <th className="py-3 px-4">Phân loại</th>
                 <th className="py-3 px-4">SKU</th>
@@ -200,10 +201,13 @@ export default function AdminInventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
-              {inventoryRows.map((row) => {
+              {inventoryRows.map((row, idx) => {
                 const isLowStock = row.stock <= 10;
                 return (
                   <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
+                    <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                      {idx + 1}
+                    </td>
                     <td className="py-3.5 px-5 font-bold text-[#231B16]">
                       {row.productName}
                     </td>
@@ -280,6 +284,7 @@ export default function AdminInventoryPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
+                <th className="py-3 px-3 text-center w-12">STT</th>
                 <th className="py-3 px-5">Mã phiếu</th>
                 <th className="py-3 px-4">Thời gian duyệt</th>
                 <th className="py-3 px-4">Sản phẩm & Phân loại</th>
@@ -291,8 +296,11 @@ export default function AdminInventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
-              {inflowLogs.map((log) => (
+              {inflowLogs.map((log, idx) => (
                 <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
+                  <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                    {idx + 1}
+                  </td>
                   <td className="py-3.5 px-5 font-mono font-bold text-[#1B3622]">
                     {log.receiptCode}
                   </td>
