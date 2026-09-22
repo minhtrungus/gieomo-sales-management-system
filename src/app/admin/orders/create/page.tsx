@@ -128,13 +128,14 @@ export default function AdminCreateOrderPage() {
               />
 
               <Select
-                label="Thành viên chốt đơn"
+                label="Thành viên giới thiệu / Chốt đơn"
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
                 options={[
-                  { value: "", label: "-- Chọn thành viên --" },
-                  { value: "mem-1", label: "Nguyễn Văn A (Mã: MEM01)" },
-                  { value: "mem-2", label: "Trần Thị B (Mã: MEM02)" },
+                  { value: "", label: "Trực tiếp / Không qua giới thiệu" },
+                  { value: "mem-1", label: "Nguyễn Thị Mai Lan (MAM-LAN)" },
+                  { value: "mem-2", label: "Trần Minh Quang (MAM-QUANG)" },
+                  { value: "mem-0", label: "BTC Mầm Mơ (MAM-ADMIN)" },
                 ]}
               />
             </div>

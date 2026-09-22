@@ -35,6 +35,7 @@ export default function CheckoutPage() {
     pickup_point_id: "",
     note: "",
     voucher_code: "",
+    introducer_info: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -187,6 +188,13 @@ export default function CheckoutPage() {
                 value={formData.buyer_email}
                 onChange={(e) => handleInputChange("buyer_email", e.target.value)}
                 error={errors.buyer_email}
+              />
+
+              <Input
+                label="Bạn quen ai trong CLB Mầm Mơ? / Mã người giới thiệu (nếu có)"
+                placeholder="Ví dụ: Mai Lan, MAM-LAN, hoặc để trống..."
+                value={formData.introducer_info}
+                onChange={(e) => handleInputChange("introducer_info", e.target.value)}
               />
 
               <div className="pt-2">
@@ -495,6 +503,12 @@ export default function CheckoutPage() {
                     <span className="font-semibold text-[#342A24] text-right max-w-[200px] truncate">
                       {formData.address_detail}, {formData.district}
                     </span>
+                  </div>
+                )}
+                {formData.introducer_info && (
+                  <div className="flex justify-between">
+                    <span className="text-[#7E7068]">Người giới thiệu:</span>
+                    <span className="font-bold text-[#2D6338]">🌱 {formData.introducer_info}</span>
                   </div>
                 )}
                 <div className="flex justify-between">

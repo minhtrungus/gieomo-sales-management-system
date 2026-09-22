@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { Plus, Copy, Check, X, UserPlus, Shield, User, Trash2, AlertTriangle, Calendar } from "lucide-react";
+import { Plus, Copy, Check, X, UserPlus, Shield, User, Trash2, AlertTriangle, Calendar, Eye, ExternalLink, ShoppingBag } from "lucide-react";
+import { MOCK_ORDERS } from "@/lib/data/mockData";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 
 interface MemberItem {
   memberId: string;
@@ -19,6 +22,7 @@ interface MemberItem {
 }
 
 export default function AdminMembersPage() {
+  const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
   const [members, setMembers] = useState<MemberItem[]>([
     {
       memberId: "mem-0",
@@ -155,7 +159,13 @@ export default function AdminMembersPage() {
               {members.map((m) => (
                 <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
                   <td className="py-4 px-5">
-                    <span className="font-bold text-[#342A24] block text-sm">{m.fullName}</span>
+                    <span
+                      onClick={() => setViewingOrdersMember(m)}
+                      className="font-bold text-[#342A24] hover:text-[#2D6338] hover:underline cursor-pointer block text-sm"
+                      title="Nhấn để xem chi tiết đơn hàng giới thiệu"
+                    >
+                      {m.fullName}
+                    </span>
                     <span className="text-[11px] text-[#7E7068] block">{m.email} • {m.phone}</span>
                   </td>
 
@@ -185,7 +195,14 @@ export default function AdminMembersPage() {
                   </td>
 
                   <td className="py-4 px-4 font-bold text-[#342A24]">
-                    {m.totalOrders} đơn
+                    <button
+                      onClick={() => setViewingOrdersMember(m)}
+                      className="px-3 py-1.5 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-xs inline-flex items-center gap-1.5 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
+                      title="Nhấn để xem danh sách đơn hàng chi tiết"
+                    >
+                      <span>{m.totalOrders} đơn</span>
+                      <Eye className="w-3.5 h-3.5 text-[#2D6338] group-hover:scale-110 transition-transform" />
+                    </button>
                   </td>
 
                   <td className="py-4 px-4">
@@ -194,6 +211,15 @@ export default function AdminMembersPage() {
 
                   <td className="py-4 px-5 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setViewingOrdersMember(m)}
+                        className="px-2.5 py-1.5 rounded-xl border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Xem các đơn hàng đã giới thiệu"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#2D6338]" />
+                        <span className="hidden sm:inline">Xem đơn</span>
+                      </button>
+
                       <button
                         onClick={() => handleCopy(m.referralCode)}
                         className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -376,6 +402,169 @@ export default function AdminMembersPage() {
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
               >
                 Xác nhận thu hồi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CHI TIẾT CÁC ĐƠN HÀNG DO THÀNH VIÊN GIỚI THIỆU */}
+      {viewingOrdersMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-4xl bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-5 bg-[#FFF8EE] border-b border-[#F0E5D8] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D] font-extrabold text-base shadow-xs">
+                  🌱
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+                      Đơn hàng do {viewingOrdersMember.fullName} giới thiệu
+                    </h3>
+                    <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-full bg-white text-[#2D6338] border border-[#9ed4a3]">
+                      {viewingOrdersMember.referralCode}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#7E7068] mt-0.5">
+                    {viewingOrdersMember.email} • {viewingOrdersMember.phone} • Tham gia từ {viewingOrdersMember.joinedDate}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingOrdersMember(null)}
+                className="p-2 rounded-full hover:bg-white text-gray-400 hover:text-gray-700 cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Top Summary Stats */}
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#FFFDF9] border-b border-[#F0E5D8]">
+              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                <span className="text-[11px] font-bold text-[#7E7068] block">Tổng đơn đã chốt</span>
+                <span className="text-xl font-extrabold text-[#231B16] mt-0.5 block">
+                  {viewingOrdersMember.totalOrders} đơn
+                </span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                <span className="text-[11px] font-bold text-[#7E7068] block">Doanh số gây quỹ mang lại</span>
+                <MoneyDisplay amount={viewingOrdersMember.totalRevenue} className="text-xl font-extrabold text-[#2D6338] mt-0.5 block" />
+              </div>
+              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                <span className="text-[11px] font-bold text-[#7E7068] block">Tình trạng ghi nhận</span>
+                <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Orders Table */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {(() => {
+                const memberOrders = MOCK_ORDERS.filter(
+                  (o) =>
+                    o.created_by_member_id === viewingOrdersMember.memberId ||
+                    o.referral_code === viewingOrdersMember.referralCode ||
+                    (o.introducer_info && o.introducer_info.includes(viewingOrdersMember.referralCode))
+                );
+
+                if (memberOrders.length === 0) {
+                  return (
+                    <div className="py-12 text-center space-y-2">
+                      <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto" />
+                      <p className="font-bold text-sm text-[#231B16]">Chưa có đơn hàng mẫu nào</p>
+                      <p className="text-xs text-[#7E7068]">
+                        Các đơn hàng tiếp theo được đặt với mã {viewingOrdersMember.referralCode} sẽ tự động hiển thị tại đây.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="border border-[#F0E5D8] rounded-2xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase">
+                          <th className="py-3 px-3.5">Mã đơn</th>
+                          <th className="py-3 px-3.5">Thời gian đặt</th>
+                          <th className="py-3 px-3.5">Khách hàng</th>
+                          <th className="py-3 px-3.5">Địa chỉ nhận</th>
+                          <th className="py-3 px-3.5">Tổng tiền</th>
+                          <th className="py-3 px-3.5">Thanh toán</th>
+                          <th className="py-3 px-3.5">Trạng thái</th>
+                          <th className="py-3 px-3.5 text-right">Chi tiết</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F0E5D8]">
+                        {memberOrders.map((ord) => (
+                          <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
+                            <td className="py-3 px-3.5 font-mono font-bold text-[#1B3622]">
+                              {ord.order_code}
+                            </td>
+                            <td className="py-3 px-3.5 text-[#7E7068] whitespace-nowrap">
+                              {new Date(ord.created_at).toLocaleDateString("vi-VN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                day: "2-digit",
+                                month: "2-digit",
+                              })}
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <span className="font-bold text-[#231B16] block">{ord.buyer_name}</span>
+                              <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
+                            </td>
+                            <td className="py-3 px-3.5 text-[#7E7068] max-w-[150px] truncate">
+                              {ord.address_detail}, {ord.district}
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <MoneyDisplay amount={ord.final_amount} className="font-extrabold text-[#1B3622]" />
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
+                                {PAYMENT_STATUS_LABELS[ord.payment_status]}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-3.5">
+                              <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                                {ORDER_STATUS_LABELS[ord.order_status]}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-3.5 text-right">
+                              <Link
+                                href={`/admin/orders/${ord.order_id}`}
+                                className="px-2.5 py-1 rounded-lg bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[11px] font-bold border border-[#F0E5D8] inline-flex items-center gap-1 transition-colors"
+                              >
+                                <span>Xem</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-[#FFF8EE] border-t border-[#F0E5D8] flex items-center justify-between">
+              <Link
+                href="/admin/orders"
+                className="text-xs font-bold text-[#2D6338] hover:underline inline-flex items-center gap-1"
+              >
+                <span>Chuyển đến trang Tất cả đơn hàng</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+              <button
+                onClick={() => setViewingOrdersMember(null)}
+                className="px-5 py-2 rounded-full bg-white border border-[#F0E5D8] text-xs font-bold text-[#5C4D44] hover:bg-gray-100 cursor-pointer shadow-2xs transition-colors"
+              >
+                Đóng
               </button>
             </div>
           </div>

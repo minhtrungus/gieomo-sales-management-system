@@ -204,6 +204,7 @@ export interface Order {
   seller_id?: string | null;
   source_type?: OrderSource;
   introducer_info?: string | null;
+  referral_code?: string | null;
   buyer_name?: string;
   buyer_phone?: string;
   buyer_email?: string;

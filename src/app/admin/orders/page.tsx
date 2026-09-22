@@ -13,6 +13,7 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState(MOCK_ORDERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [introducerFilter, setIntroducerFilter] = useState<string>("all");
 
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     orderId: string;
@@ -39,11 +40,16 @@ export default function AdminOrdersPage() {
 
   const filteredOrders = orders.filter((ord) => {
     if (statusFilter !== "all" && ord.order_status !== statusFilter) return false;
+    if (introducerFilter !== "all") {
+      if (introducerFilter === "direct" && ord.introducer_info && ord.introducer_info !== "Trực tiếp (Website)") return false;
+      if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) return false;
+    }
     if (
       searchQuery.trim() !== "" &&
       !ord.order_code.toLowerCase().includes(searchQuery.toLowerCase()) &&
       !ord.buyer_name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !ord.buyer_phone?.includes(searchQuery)
+      !ord.buyer_phone?.includes(searchQuery) &&
+      !ord.introducer_info?.toLowerCase().includes(searchQuery.toLowerCase())
     ) {
       return false;
     }
@@ -96,26 +102,44 @@ export default function AdminOrdersPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Mã đơn GM-..., SĐT, tên khách..."
+              placeholder="Mã đơn GM-..., SĐT, tên khách, người giới thiệu..."
               className="w-full pl-9 pr-4 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <Filter className="w-4 h-4 text-gray-500" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-[#F0E5D8] bg-white text-xs font-semibold text-gray-800 outline-none"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="pending">Chờ xác nhận</option>
-              <option value="confirmed">Đã xác nhận</option>
-              <option value="processing">Đang chuẩn bị</option>
-              <option value="shipping">Đang giao</option>
-              <option value="completed">Hoàn thành</option>
-              <option value="cancelled">Đã hủy</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            {/* Introducer / Referral Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#5C4D44] hidden sm:inline">Quen qua:</span>
+              <select
+                value={introducerFilter}
+                onChange={(e) => setIntroducerFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-[#F0E5D8] bg-white text-xs font-semibold text-gray-800 outline-none hover:border-[#FFB98A]"
+              >
+                <option value="all">Tất cả người giới thiệu</option>
+                <option value="MAM-LAN">Mai Lan (MAM-LAN)</option>
+                <option value="MAM-QUANG">Trần Minh Quang (MAM-QUANG)</option>
+                <option value="MAM-ADMIN">BTC Mầm Mơ (MAM-ADMIN)</option>
+                <option value="direct">Trực tiếp (Website)</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-[#F0E5D8] bg-white text-xs font-semibold text-gray-800 outline-none hover:border-[#FFB98A]"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="pending">Chờ xác nhận</option>
+                <option value="confirmed">Đã xác nhận</option>
+                <option value="processing">Đang chuẩn bị</option>
+                <option value="shipping">Đang giao</option>
+                <option value="completed">Hoàn thành</option>
+                <option value="cancelled">Đã hủy</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -129,6 +153,7 @@ export default function AdminOrdersPage() {
                 <th className="py-3.5 px-4">Mã đơn</th>
                 <th className="py-3.5 px-4">Thời gian đặt</th>
                 <th className="py-3.5 px-4">Khách hàng</th>
+                <th className="py-3.5 px-4">Quen qua ai</th>
                 <th className="py-3.5 px-4">Hình thức / Địa chỉ</th>
                 <th className="py-3.5 px-4">Tổng tiền</th>
                 <th className="py-3.5 px-4">Thanh toán</th>
@@ -154,6 +179,27 @@ export default function AdminOrdersPage() {
                     <td className="py-4 px-4">
                       <span className="font-semibold text-gray-900 block">{ord.buyer_name}</span>
                       <span className="text-[11px] text-gray-500">{ord.buyer_phone}</span>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      {ord.introducer_info ? (
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${
+                            ord.introducer_info.includes("LAN")
+                              ? "bg-[#BFE9C3]/50 text-[#16381D] border-[#9ed4a3]"
+                              : ord.introducer_info.includes("QUANG")
+                              ? "bg-[#CFE8FF]/60 text-[#133A63] border-[#b2d9ff]"
+                              : ord.introducer_info.includes("ADMIN")
+                              ? "bg-[#FFE7A8]/70 text-[#542B07] border-[#ebd089]"
+                              : "bg-gray-100 text-gray-700 border-gray-200"
+                          }`}
+                        >
+                          <span>🌱</span>
+                          <span className="truncate max-w-[140px]">{ord.introducer_info}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[#A89B92] italic text-[11px]">Trực tiếp (Website)</span>
+                      )}
                     </td>
 
                     <td className="py-4 px-4 max-w-[180px] truncate">
@@ -214,7 +260,7 @@ export default function AdminOrdersPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={10} className="py-8 text-center text-gray-500 font-medium">
                     Không tìm thấy đơn hàng phù hợp.
                   </td>
                 </tr>
