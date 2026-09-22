@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { Plus, Copy, Check, X, UserPlus, Shield, User } from "lucide-react";
+import { Plus, Copy, Check, X, UserPlus, Shield, User, Trash2, AlertTriangle, Calendar } from "lucide-react";
 
 interface MemberItem {
   memberId: string;
@@ -15,6 +15,7 @@ interface MemberItem {
   totalOrders: number;
   totalRevenue: number;
   status: "active" | "inactive";
+  joinedDate: string; // DD/MM/YYYY
 }
 
 export default function AdminMembersPage() {
@@ -29,6 +30,7 @@ export default function AdminMembersPage() {
       totalOrders: 28,
       totalRevenue: 4850000,
       status: "active",
+      joinedDate: "15/08/2026",
     },
     {
       memberId: "mem-1",
@@ -40,6 +42,7 @@ export default function AdminMembersPage() {
       totalOrders: 15,
       totalRevenue: 2450000,
       status: "active",
+      joinedDate: "20/08/2026",
     },
     {
       memberId: "mem-2",
@@ -51,11 +54,13 @@ export default function AdminMembersPage() {
       totalOrders: 8,
       totalRevenue: 1120000,
       status: "active",
+      joinedDate: "01/09/2026",
     },
   ]);
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
 
   // Form states for new member
   const [newFullName, setNewFullName] = useState("");
@@ -76,6 +81,8 @@ export default function AdminMembersPage() {
     if (!newFullName || !newEmail) return;
 
     const refCode = newReferralCode.trim() || `MAM-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const today = new Date();
+    const joinedDateStr = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
 
     const newMember: MemberItem = {
       memberId: `mem-${Date.now()}`,
@@ -87,6 +94,7 @@ export default function AdminMembersPage() {
       totalOrders: 0,
       totalRevenue: 0,
       status: "active",
+      joinedDate: joinedDateStr,
     };
 
     setMembers([newMember, ...members]);
@@ -98,8 +106,12 @@ export default function AdminMembersPage() {
     setNewPhone("");
     setNewReferralCode("");
     setNewRole("btc_sale");
+  };
 
-    alert(`Đã cấp tài khoản thành công cho ${newFullName}!\nEmail: ${newEmail}\nMật khẩu khởi tạo: ${newPassword}\nMã giới thiệu: ${refCode}`);
+  const handleConfirmRevoke = () => {
+    if (!deletingMember) return;
+    setMembers((prev) => prev.filter((m) => m.memberId !== deletingMember.memberId));
+    setDeletingMember(null);
   };
 
   return (
@@ -120,7 +132,7 @@ export default function AdminMembersPage() {
           className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Cấp tài khoản mới</span>
+          <span>Cấp tài khoản mới</span>
         </button>
       </div>
 
@@ -132,10 +144,11 @@ export default function AdminMembersPage() {
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
                 <th className="py-3.5 px-5">Thành viên</th>
                 <th className="py-3.5 px-4">Vai trò (Phân quyền)</th>
-                <th className="py-3.5 px-4">Mã giới thiệu (Referral)</th>
-                <th className="py-3.5 px-4">Số đơn đã chốt</th>
+                <th className="py-3.5 px-4">Ngày tham gia BTC</th>
+                <th className="py-3.5 px-4">Mã Referral</th>
+                <th className="py-3.5 px-4">Đơn đã chốt</th>
                 <th className="py-3.5 px-4">Doanh số gây quỹ</th>
-                <th className="py-3.5 px-5 text-right">Link giới thiệu</th>
+                <th className="py-3.5 px-5 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -160,6 +173,13 @@ export default function AdminMembersPage() {
                     )}
                   </td>
 
+                  <td className="py-4 px-4 text-[#7E7068] font-medium whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#A89B92]" />
+                      <span>{m.joinedDate}</span>
+                    </span>
+                  </td>
+
                   <td className="py-4 px-4 font-mono font-extrabold text-[#2D6338] text-sm">
                     {m.referralCode}
                   </td>
@@ -173,22 +193,34 @@ export default function AdminMembersPage() {
                   </td>
 
                   <td className="py-4 px-5 text-right">
-                    <button
-                      onClick={() => handleCopy(m.referralCode)}
-                      className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      {copiedCode === m.referralCode ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-[#2D6338]" />
-                          <span className="text-[#2D6338]">Đã copy link!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-[#7E7068]" />
-                          <span>Copy Link</span>
-                        </>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleCopy(m.referralCode)}
+                        className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        {copiedCode === m.referralCode ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-[#2D6338]" />
+                            <span className="text-[#2D6338]">Đã copy</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-[#7E7068]" />
+                            <span>Copy Link</span>
+                          </>
+                        )}
+                      </button>
+
+                      {m.memberId !== "mem-0" && (
+                        <button
+                          onClick={() => setDeletingMember(m)}
+                          className="p-1.5 rounded-xl border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
+                          title="Thu hồi quyền thành viên"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -311,6 +343,41 @@ export default function AdminMembersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: XÁC NHẬN THU HỒI TÀI KHOẢN */}
+      {deletingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#FED7D7] shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                Xác nhận thu hồi quyền thành viên?
+              </h3>
+              <p className="text-xs text-[#7E7068] leading-relaxed">
+                Bạn có chắc chắn muốn hủy quyền của <strong>{deletingMember.fullName}</strong> ({deletingMember.email})? Mã giới thiệu <code>{deletingMember.referralCode}</code> sẽ không còn ghi nhận doanh số mới.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2.5 pt-2">
+              <button
+                onClick={() => setDeletingMember(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleConfirmRevoke}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+              >
+                Xác nhận thu hồi
+              </button>
+            </div>
           </div>
         </div>
       )}

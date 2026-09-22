@@ -11,6 +11,8 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, options, placeholder, id, ...props }, ref) => {
     const selectId = id || label?.toLowerCase().replace(/\s+/g, "-");
+    const cleanLabel = label?.replace(/\s*\*+\s*$/, "");
+    const isRequired = props.required || label?.includes("*");
 
     return (
       <div className="w-full">
@@ -19,8 +21,8 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             htmlFor={selectId}
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            {label}
-            {props.required && <span className="text-danger ml-0.5">*</span>}
+            {cleanLabel}
+            {isRequired && <span className="text-danger ml-0.5">*</span>}
           </label>
         )}
         <select

@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -14,6 +14,10 @@ function OrderSuccessContent() {
   const paymentMethod = searchParams.get("payment") || "banking";
   const amount = Number(searchParams.get("amount") || "145000");
 
+  const [hasConfirmedPayment, setHasConfirmedPayment] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [proofImage, setProofImage] = useState<string | null>(null);
+
   const bankAccount = {
     bankName: "Ngân hàng MB Bank (Quân Đội)",
     accountNumber: "03456789999",
@@ -22,6 +26,21 @@ function OrderSuccessContent() {
   };
 
   const vietQrUrl = `https://img.vietqr.io/image/MB-${bankAccount.accountNumber}-compact.png?amount=${amount}&addInfo=${orderCode}&accountName=${encodeURIComponent(bankAccount.accountHolder)}`;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setProofImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfirmPaymentSubmit = () => {
+    setHasConfirmedPayment(true);
+    setIsConfirmModalOpen(false);
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 text-center">
@@ -104,6 +123,29 @@ function OrderSuccessContent() {
                 </span>
               </div>
             </div>
+
+            {/* Customer Payment Confirmation CTA */}
+            <div className="pt-4 border-t border-gray-100">
+              {hasConfirmedPayment ? (
+                <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] flex items-center justify-center gap-2 font-bold animate-in fade-in">
+                  <span className="text-base">✅</span>
+                  <span>Đã ghi nhận bạn chuyển khoản thành công! Ban Tổ Chức đang đối soát giao dịch và chuẩn bị đơn hàng cho bạn.</span>
+                </div>
+              ) : (
+                <div className="space-y-2 text-center">
+                  <p className="text-xs text-[#7E7068]">
+                    Sau khi quét mã hoặc chuyển tiền xong trên App ngân hàng, bạn vui lòng bấm nút bên dưới để BTC tiến hành xác nhận ngay:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmModalOpen(true)}
+                    className="w-full sm:w-auto px-6 py-3 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-sm border border-[#9ed4a3] transition-all active:scale-95 cursor-pointer inline-flex items-center justify-center gap-2"
+                  >
+                    <span>✓ Tôi đã chuyển khoản xong — Xác nhận thanh toán</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-900">
@@ -128,6 +170,69 @@ function OrderSuccessContent() {
           </Button>
         </Link>
       </div>
+
+      {/* MODAL: XÁC NHẬN ĐÃ CHUYỂN KHOẢN */}
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">💳</span>
+                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                  Xác nhận đã thanh toán VietQR
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-[#7E7068] leading-relaxed">
+              Bạn xác nhận đã chuyển khoản <strong>{amount.toLocaleString("vi-VN")}đ</strong> cho đơn hàng <strong>{orderCode}</strong>?
+            </p>
+
+            {/* Proof image upload input */}
+            <div className="space-y-1.5 text-xs">
+              <label className="font-bold text-[#342A24] block">
+                Ảnh biên lai chuyển khoản (Tùy chọn):
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#BFE9C3] file:text-[#16381D] hover:file:bg-[#aee0b3] cursor-pointer"
+              />
+              {proofImage && (
+                <div className="mt-2 relative w-24 h-24 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={proofImage} alt="Biên lai" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#F0E5D8]">
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                Chưa, kiểm tra lại
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPaymentSubmit}
+                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+              >
+                Đã chuyển khoản xong ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

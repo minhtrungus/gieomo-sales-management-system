@@ -14,7 +14,7 @@ export default function AdminPaymentsPage() {
       paymentMethod: "banking",
       transactionCode: "MB-8891231",
       status: "paid",
-      createdAt: "2026-09-21 14:30",
+      createdAt: "14:30 21/09/2026",
     },
     {
       paymentId: "pay-2",
@@ -23,70 +23,83 @@ export default function AdminPaymentsPage() {
       paymentMethod: "banking",
       transactionCode: "MB-8891235",
       status: "pending",
-      createdAt: "2026-09-22 09:15",
+      createdAt: "09:15 22/09/2026",
+    },
+    {
+      paymentId: "pay-3",
+      orderCode: "GM-260904",
+      amount: 145000,
+      paymentMethod: "banking",
+      transactionCode: "MB-8891240",
+      status: "pending",
+      createdAt: "15:20 22/09/2026",
     },
   ]);
 
-  const handleApprove = (id: string) => {
+  const [approvingPayment, setApprovingPayment] = useState<(typeof payments)[0] | null>(null);
+
+  const handleConfirmApprove = () => {
+    if (!approvingPayment) return;
     setPayments((prev) =>
-      prev.map((p) => (p.paymentId === id ? { ...p, status: "paid" } : p))
+      prev.map((p) => (p.paymentId === approvingPayment.paymentId ? { ...p, status: "paid" } : p))
     );
+    setApprovingPayment(null);
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading font-extrabold text-2xl text-emerald-950">
-          Xác nhận thanh toán
+        <h1 className="font-heading font-extrabold text-2xl text-[#231B16]">
+          Xác nhận thanh toán VietQR
         </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Danh sách giao dịch ngân hàng VietQR cần BTC xác nhận khớp lệnh.
+        <p className="text-xs text-[#7E7068] mt-0.5">
+          Danh sách giao dịch ngân hàng VietQR cần BTC xác nhận khớp lệnh đối soát tài khoản.
         </p>
       </div>
 
-      <div className="bg-white rounded-3xl border border-gray-200/80 shadow-2xs overflow-hidden">
+      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase">
-                <th className="py-3 px-4">Mã đơn</th>
-                <th className="py-3 px-4">Mã giao dịch VietQR</th>
-                <th className="py-3 px-4">Số tiền</th>
-                <th className="py-3 px-4">Thời gian</th>
-                <th className="py-3 px-4">Trạng thái</th>
-                <th className="py-3 px-4 text-right">Duyệt thanh toán</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-4">Mã đơn</th>
+                <th className="py-3.5 px-4">Mã giao dịch VietQR</th>
+                <th className="py-3.5 px-4">Số tiền</th>
+                <th className="py-3.5 px-4">Thời gian giao dịch</th>
+                <th className="py-3.5 px-4">Trạng thái</th>
+                <th className="py-3.5 px-4 text-right">Duyệt thanh toán</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#F0E5D8]">
               {payments.map((p) => (
-                <tr key={p.paymentId} className="hover:bg-emerald-50/30 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-bold text-emerald-950">
+                <tr key={p.paymentId} className="hover:bg-[#FFFDF9] transition-colors">
+                  <td className="py-3.5 px-4 font-mono font-bold text-[#1B3622]">
                     {p.orderCode}
                   </td>
-                  <td className="py-3.5 px-4 font-mono text-gray-600">
+                  <td className="py-3.5 px-4 font-mono text-[#5C4D44]">
                     {p.transactionCode}
                   </td>
-                  <td className="py-3.5 px-4 font-extrabold text-emerald-950">
+                  <td className="py-3.5 px-4 font-extrabold text-[#1B3622]">
                     <MoneyDisplay amount={p.amount} />
                   </td>
-                  <td className="py-3.5 px-4 text-gray-500">
+                  <td className="py-3.5 px-4 text-[#7E7068] font-medium">
                     {p.createdAt}
                   </td>
                   <td className="py-3.5 px-4">
                     <Badge variant={p.status === "paid" ? "success" : "warning"}>
-                      {p.status === "paid" ? "Đã xác nhận" : "Chờ xác nhận"}
+                      {p.status === "paid" ? "Đã xác nhận" : "Chờ đối soát"}
                     </Badge>
                   </td>
                   <td className="py-3.5 px-4 text-right">
                     {p.status === "pending" ? (
                       <button
-                        onClick={() => handleApprove(p.paymentId)}
-                        className="px-3 py-1.5 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
+                        onClick={() => setApprovingPayment(p)}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer inline-flex items-center gap-1.5 ml-auto"
                       >
                         <Check className="w-3.5 h-3.5" /> Duyệt
                       </button>
                     ) : (
-                      <span className="text-[11px] text-emerald-700 font-bold">✓ Đã duyệt</span>
+                      <span className="text-[11px] text-[#2D6338] font-bold">✓ Đã duyệt</span>
                     )}
                   </td>
                 </tr>
@@ -95,6 +108,41 @@ export default function AdminPaymentsPage() {
           </table>
         </div>
       </div>
+
+      {/* MODAL: XÁC NHẬN DUYỆT THANH TOÁN */}
+      {approvingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#BFE9C3] text-[#16381D] flex items-center justify-center mx-auto">
+              <Check className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                Xác nhận duyệt thanh toán VietQR?
+              </h3>
+              <p className="text-xs text-[#7E7068] leading-relaxed">
+                Khớp lệnh thanh toán cho đơn <strong>{approvingPayment.orderCode}</strong> với số tiền <strong className="text-[#1B3622]">{approvingPayment.amount.toLocaleString("vi-VN")}đ</strong> (Mã GD: {approvingPayment.transactionCode})?
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2.5 pt-2">
+              <button
+                onClick={() => setApprovingPayment(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleConfirmApprove}
+                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+              >
+                Xác nhận đã nhận tiền ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

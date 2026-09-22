@@ -83,7 +83,7 @@ export default function AdminVouchersPage() {
           className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Thêm Voucher mới</span>
+          <span>Tạo Voucher mới</span>
         </button>
       </div>
 

@@ -81,16 +81,23 @@ export default function CombosPage() {
                   {/* Included Items */}
                   {combo.items && (
                     <div className="pt-2">
-                      <span className="text-[10px] font-bold text-[#A89B92] uppercase tracking-wider block mb-1">
-                        Bao gồm các món:
+                      <span className="text-[10px] font-bold text-[#A89B92] uppercase tracking-wider block mb-1.5">
+                        Bao gồm {combo.items.length} món quà ghép:
                       </span>
-                      <ul className="text-xs text-[#5C4D44] space-y-1 list-disc list-inside">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#5C4D44]">
                         {combo.items.map((it, idx) => (
-                          <li key={idx}>
-                            {it.product.name} (x{it.quantity})
-                          </li>
+                          <span key={idx} className="inline-flex items-center gap-1.5">
+                            <span className="px-2.5 py-1 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] font-bold text-[#342A24] text-xs">
+                              {it.product.name} <span className="text-[#2D6338] font-black">×{it.quantity}</span>
+                            </span>
+                            {idx < combo.items!.length - 1 && (
+                              <span className="w-5 h-5 rounded-full bg-[#FFE7A8] text-[#542B07] font-black flex items-center justify-center text-xs shadow-2xs border border-[#ebd089]">
+                                +
+                              </span>
+                            )}
+                          </span>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
                 </div>

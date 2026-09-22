@@ -8,7 +8,8 @@ export const checkoutSchema = z.object({
     .max(100, "Tên quá dài"),
   customer_phone: z
     .string()
-    .regex(/^(0[3-9])\d{8}$/, "Số điện thoại không hợp lệ"),
+    .transform((val) => val.replace(/\s+|-|\./g, "").replace(/^\+84/, "0"))
+    .pipe(z.string().regex(/^(0[3-9])\d{8}$/, "Số điện thoại phải gồm 10 số (bắt đầu bằng 03, 05, 07, 08, 09)")),
   customer_email: z
     .string()
     .email("Email không hợp lệ")
@@ -20,12 +21,13 @@ export const checkoutSchema = z.object({
     .max(100, "Tên quá dài"),
   receiver_phone: z
     .string()
-    .regex(/^(0[3-9])\d{8}$/, "Số điện thoại người nhận không hợp lệ"),
+    .transform((val) => val.replace(/\s+|-|\./g, "").replace(/^\+84/, "0"))
+    .pipe(z.string().regex(/^(0[3-9])\d{8}$/, "Số điện thoại người nhận phải gồm 10 số")),
   delivery_type: z.enum(["home_delivery", "pickup_point", "self_pickup"], {
     message: "Vui lòng chọn hình thức nhận hàng",
   }),
   shipping_address: z.string().optional(),
-  pickup_point_id: z.string().uuid().optional(),
+  pickup_point_id: z.string().optional(),
   customer_note: z.string().max(500, "Ghi chú quá dài").optional(),
   voucher_code: z.string().max(50).optional(),
   payment_method: z.enum(["cod", "banking", "momo"], {

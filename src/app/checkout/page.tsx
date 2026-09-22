@@ -43,6 +43,8 @@ export default function CheckoutPage() {
   const discountAmount = formData.voucher_code.toUpperCase() === "GIEOMO10" ? Math.round(subtotal * 0.1) : 0;
   const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
 
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
   const handleInputChange = (field: string, val: string) => {
     setFormData((prev) => ({ ...prev, [field]: val }));
     if (errors[field]) {
@@ -50,11 +52,10 @@ export default function CheckoutPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleValidateForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
 
-    setIsSubmitting(true);
     setErrors({});
 
     const payload: CheckoutInput = {
@@ -76,14 +77,43 @@ export default function CheckoutPage() {
     if (!validation.success) {
       const formattedErrors: Record<string, string> = {};
       validation.error.issues.forEach((issue) => {
-        if (issue.path[0]) {
-          formattedErrors[issue.path[0].toString()] = issue.message;
+        const path = issue.path[0]?.toString();
+        if (path === "customer_name") formattedErrors["buyer_name"] = issue.message;
+        else if (path === "customer_phone") formattedErrors["buyer_phone"] = issue.message;
+        else if (path === "customer_email") formattedErrors["buyer_email"] = issue.message;
+        else if (path === "receiver_name") formattedErrors["recipient_name"] = issue.message;
+        else if (path === "receiver_phone") formattedErrors["recipient_phone"] = issue.message;
+        else if (path === "shipping_address") {
+          if (!formData.address_detail.trim()) formattedErrors["address_detail"] = "Vui lòng nhập số nhà, tên đường";
+          if (!formData.district.trim()) formattedErrors["district"] = "Vui lòng nhập quận / huyện";
+        } else if (path === "pickup_point_id") {
+          formattedErrors["pickup_point_id"] = issue.message;
+        } else if (path) {
+          formattedErrors[path] = issue.message;
         }
       });
       setErrors(formattedErrors);
-      setIsSubmitting(false);
       return;
     }
+
+    // Extra check for delivery address detail
+    if (deliveryType === "home_delivery") {
+      const addrErrors: Record<string, string> = {};
+      if (!formData.address_detail.trim()) addrErrors["address_detail"] = "Vui lòng nhập địa chỉ chi tiết (số nhà, đường)";
+      if (!formData.district.trim()) addrErrors["district"] = "Vui lòng nhập quận / huyện";
+      if (Object.keys(addrErrors).length > 0) {
+        setErrors(addrErrors);
+        return;
+      }
+    }
+
+    // Validated! Open confirmation modal
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleFinalSubmit = () => {
+    setIsSubmitting(true);
+    setIsConfirmModalOpen(false);
 
     // Generate Order Code
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -92,7 +122,7 @@ export default function CheckoutPage() {
     setTimeout(() => {
       clearCart();
       router.push(`/order/success?code=${randomCode}&payment=${paymentMethod}&amount=${finalAmount}`);
-    }, 1000);
+    }, 800);
   };
 
   if (items.length === 0) {
@@ -123,7 +153,7 @@ export default function CheckoutPage() {
           Thanh toán đơn hàng gây quỹ
         </h1>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <form onSubmit={handleValidateForm} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Form Controls - Left 7 Cols */}
           <div className="lg:col-span-7 space-y-6">
             {/* Customer Info Box */}
@@ -394,6 +424,20 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {/* Validation Errors Summary Banner */}
+              {Object.keys(errors).length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-1.5 animate-in fade-in">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>⚠️</span> Vui lòng bổ sung các thông tin còn thiếu:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-red-600 font-medium">
+                    {Object.values(errors).filter(Boolean).map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Submit CTA Button */}
               <Button
                 type="submit"
@@ -411,6 +455,80 @@ export default function CheckoutPage() {
             </div>
           </div>
         </form>
+
+        {/* MODAL: XÁC NHẬN ĐẶT HÀNG */}
+        {isConfirmModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+            <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">📦</span>
+                  <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+                    Xác nhận đặt đơn hàng
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmModalOpen(false)}
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-[#5C4D44] bg-[#FFF8EE] p-4 rounded-2xl border border-[#F0E5D8]">
+                <div className="flex justify-between">
+                  <span className="text-[#7E7068]">Người nhận:</span>
+                  <span className="font-bold text-[#342A24]">
+                    {differentRecipient ? formData.recipient_name : formData.buyer_name} ({differentRecipient ? formData.recipient_phone : formData.buyer_phone})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#7E7068]">Hình thức nhận:</span>
+                  <span className="font-semibold text-[#342A24]">
+                    {deliveryType === "home_delivery" ? "Giao tận nơi" : deliveryType === "pickup_point" ? "Điểm hẹn Mầm Mơ" : "Tự đến lấy"}
+                  </span>
+                </div>
+                {deliveryType === "home_delivery" && (
+                  <div className="flex justify-between">
+                    <span className="text-[#7E7068]">Địa chỉ:</span>
+                    <span className="font-semibold text-[#342A24] text-right max-w-[200px] truncate">
+                      {formData.address_detail}, {formData.district}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-[#7E7068]">Thanh toán:</span>
+                  <span className="font-bold text-[#2D6338]">
+                    {paymentMethod === "banking" ? "Chuyển khoản VietQR" : "Tiền mặt khi nhận (COD)"}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-[#F0E5D8] flex justify-between items-center text-sm">
+                  <span className="font-bold text-[#231B16]">Tổng thanh toán:</span>
+                  <MoneyDisplay amount={finalAmount} className="text-xl font-extrabold text-[#1B3622]" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  Kiểm tra lại
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFinalSubmit}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+                >
+                  {isSubmitting ? "Đang xử lý..." : "Hoàn tất đặt đơn ➔"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       <Footer />

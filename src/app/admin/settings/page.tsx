@@ -69,9 +69,18 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const [isConfirmSaveOpen, setIsConfirmSaveOpen] = useState(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+
+  const handleSaveClick = (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Đã lưu cấu hình nhận diện thương hiệu, Favicon, QR thanh toán & thông tin hệ thống thành công!");
+    setIsConfirmSaveOpen(true);
+  };
+
+  const handleConfirmSave = () => {
+    setIsConfirmSaveOpen(false);
+    setSaveSuccessMessage("Đã lưu thành công cấu hình nhận diện thương hiệu, Favicon, QR thanh toán & thông tin hệ thống!");
+    setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
   return (
@@ -85,7 +94,7 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSaveClick} className="space-y-6">
         {/* ========================================================
             SECTION 1: FAVICON & AVATAR UPLOAD (CHO DESIGNER)
             ======================================================== */}
@@ -386,10 +395,70 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* Success Banner */}
+        {saveSuccessMessage && (
+          <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] font-bold flex items-center gap-2 animate-in fade-in">
+            <span>✅</span>
+            <span>{saveSuccessMessage}</span>
+          </div>
+        )}
+
         <Button type="submit" variant="primary" size="lg">
           Lưu tất cả thay đổi cấu hình ➔
         </Button>
       </form>
+
+      {/* MODAL: XÁC NHẬN LƯU CẤU HÌNH HỆ THỐNG */}
+      {isConfirmSaveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚙️</span>
+                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                  Xác nhận lưu cấu hình hệ thống?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfirmSaveOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-[#5C4D44] bg-[#FFF8EE] p-4 rounded-2xl border border-[#F0E5D8]">
+              <p className="font-semibold text-[#231B16]">
+                Các cấu hình sau sẽ được áp dụng ngay lập tức trên toàn hệ thống:
+              </p>
+              <ul className="space-y-1 list-disc list-inside text-[#7E7068]">
+                <li>Mã QR thanh toán VietQR & Tài khoản <strong>{bankHolder} ({bankNumber})</strong></li>
+                <li>Thương hiệu: <strong>{siteName}</strong> • Hotline: <strong>{contactPhone}</strong></li>
+                <li>Phí giao hàng: <strong>{Number(flatShippingFee).toLocaleString("vi-VN")}đ</strong> (Freeship từ {Number(freeShippingThreshold).toLocaleString("vi-VN")}đ)</li>
+                <li>Giao diện Favicon, Avatar và Bộ màu Palette đã chọn</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConfirmSaveOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+              >
+                Xác nhận lưu thay đổi ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
