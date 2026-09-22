@@ -57,11 +57,17 @@ export function getStoredOrders(): Order[] {
   try {
     const raw = localStorage.getItem("gieomo_orders");
     let orders: Order[] = raw ? JSON.parse(raw) : [...MOCK_ORDERS];
-    const targetOrder = MOCK_ORDERS.find((o) => o.order_code === "GM-369817");
-    if (targetOrder && !orders.some((o) => o.order_code === "GM-369817")) {
-      orders = [targetOrder, ...orders];
-      localStorage.setItem("gieomo_orders", JSON.stringify(orders));
-    } else if (!raw) {
+
+    // Ensure all seed orders (GM-369817, Mai Lan's 15 orders, etc.) are present
+    let hasAdded = false;
+    for (const mockOrd of MOCK_ORDERS) {
+      if (!orders.some((o) => o.order_code === mockOrd.order_code)) {
+        orders.push(mockOrd);
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded || !raw) {
       localStorage.setItem("gieomo_orders", JSON.stringify(orders));
     }
     return orders;

@@ -189,19 +189,66 @@ export default function CartPage() {
                     />
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-bold text-xs transition-colors"
+                      className="px-4 py-2 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-bold text-xs transition-colors cursor-pointer"
                     >
                       Áp dụng
                     </button>
                   </div>
+
+                  {/* Suggestion Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-gray-500 font-medium">Mã gợi ý:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVoucherCode("GIEOMO10");
+                        setAppliedVoucher({
+                          code: "GIEOMO10",
+                          discountAmount: Math.round(subtotal * 0.1),
+                        });
+                        setVoucherError(null);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-soft-green/40 hover:bg-soft-green text-emerald-900 text-[10.5px] font-bold border border-emerald-200 transition-colors cursor-pointer"
+                    >
+                      🏷️ GIEOMO10 (-10%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVoucherCode("WELCOME20K");
+                        if (subtotal < 150000) {
+                          setVoucherError("Mã WELCOME20K yêu cầu đơn tối thiểu 150.000đ");
+                          return;
+                        }
+                        setAppliedVoucher({
+                          code: "WELCOME20K",
+                          discountAmount: 20000,
+                        });
+                        setVoucherError(null);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-warm-orange/30 hover:bg-warm-orange text-orange-950 text-[10.5px] font-bold border border-orange-200 transition-colors cursor-pointer"
+                    >
+                      🏷️ WELCOME20K (-20k)
+                    </button>
+                  </div>
+
                   {voucherError && (
                     <p className="text-xs text-red-600 font-medium">{voucherError}</p>
                   )}
                   {appliedVoucher && (
-                    <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                      <span>✓</span> Đã áp dụng mã &quot;{appliedVoucher.code}&quot; (-
-                      <MoneyDisplay amount={appliedVoucher.discountAmount} />)
-                    </p>
+                    <div className="text-xs text-emerald-700 font-semibold flex items-center justify-between bg-emerald-50 p-2 rounded-xl border border-emerald-100">
+                      <span>✓ Đã áp mã &quot;{appliedVoucher.code}&quot; (-<MoneyDisplay amount={appliedVoucher.discountAmount} />)</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAppliedVoucher(null);
+                          setVoucherCode("");
+                        }}
+                        className="text-gray-400 hover:text-red-500 text-xs ml-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   )}
                 </form>
 
@@ -244,7 +291,10 @@ export default function CartPage() {
                 </div>
 
                 {/* Checkout CTA */}
-                <Link href="/checkout" className="block w-full">
+                <Link
+                  href={appliedVoucher ? `/checkout?voucher=${appliedVoucher.code}` : "/checkout"}
+                  className="block w-full"
+                >
                   <Button variant="primary" fullWidth size="lg">
                     Tiến hành thanh toán ➔
                   </Button>

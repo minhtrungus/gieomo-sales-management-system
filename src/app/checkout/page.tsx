@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -14,8 +14,9 @@ import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
 import { saveNewOrder } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { items, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
 
@@ -40,11 +41,54 @@ export default function CheckoutPage() {
     introducer_info: "",
   });
 
+  const [voucherApplied, setVoucherApplied] = useState<string | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    const vParam = searchParams.get("voucher");
+    if (vParam) {
+      const code = vParam.toUpperCase();
+      setFormData((prev) => ({ ...prev, voucher_code: code }));
+      setVoucherApplied(code);
+    }
+  }, [searchParams]);
+
   const shippingFee = deliveryType === "self_pickup" ? 0 : subtotal >= 200000 ? 0 : 25000;
-  const discountAmount = formData.voucher_code.toUpperCase() === "GIEOMO10" ? Math.round(subtotal * 0.1) : 0;
+
+  const calculateDiscount = () => {
+    const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
+    if (code === "GIEOMO10") {
+      return Math.round(subtotal * 0.1);
+    }
+    if (code === "WELCOME20K") {
+      return subtotal >= 150000 ? 20000 : 0;
+    }
+    return 0;
+  };
+
+  const discountAmount = calculateDiscount();
   const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+
+  const handleApplyVoucher = () => {
+    setVoucherError(null);
+    const code = formData.voucher_code.trim().toUpperCase();
+    if (!code) {
+      setVoucherError("Vui lòng nhập mã giảm giá");
+      return;
+    }
+    if (code === "GIEOMO10") {
+      setVoucherApplied("GIEOMO10");
+    } else if (code === "WELCOME20K") {
+      if (subtotal < 150000) {
+        setVoucherError("Mã WELCOME20K yêu cầu đơn từ 150.000đ trở lên");
+        return;
+      }
+      setVoucherApplied("WELCOME20K");
+    } else {
+      setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn");
+    }
+  };
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
@@ -152,6 +196,16 @@ export default function CheckoutPage() {
     };
 
     saveNewOrder(newOrderRecord);
+
+    // Save to local customer history
+    try {
+      const myRaw = localStorage.getItem("gieomo_my_order_codes");
+      const myCodes = myRaw ? JSON.parse(myRaw) : [];
+      localStorage.setItem("gieomo_my_order_codes", JSON.stringify([randomCode, ...myCodes.filter((c: string) => c !== randomCode)]));
+      localStorage.setItem("gieomo_customer_profile", JSON.stringify({ name: formData.buyer_name, phone: formData.buyer_phone }));
+    } catch {
+      // ignore
+    }
 
     // Simulate order submission API call
     setTimeout(() => {
@@ -436,6 +490,83 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
+              {/* Voucher Code Box */}
+              <div className="pt-3 border-t border-gray-100 space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                  Mã giảm giá (Voucher):
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.voucher_code}
+                    onChange={(e) => {
+                      handleInputChange("voucher_code", e.target.value.toUpperCase());
+                      setVoucherError(null);
+                    }}
+                    placeholder="GIEOMO10 hoặc WELCOME20K"
+                    className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold outline-none focus:border-soft-green uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyVoucher}
+                    className="px-3.5 py-2 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Áp dụng
+                  </button>
+                </div>
+
+                {/* Quick Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-gray-500 font-medium">Gợi ý:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleInputChange("voucher_code", "GIEOMO10");
+                      setVoucherApplied("GIEOMO10");
+                      setVoucherError(null);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-soft-green/40 hover:bg-soft-green text-emerald-900 text-[10.5px] font-bold border border-emerald-200 transition-colors cursor-pointer"
+                  >
+                    🏷️ GIEOMO10 (-10%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (subtotal < 150000) {
+                        setVoucherError("Mã WELCOME20K yêu cầu đơn từ 150.000đ trở lên");
+                        return;
+                      }
+                      handleInputChange("voucher_code", "WELCOME20K");
+                      setVoucherApplied("WELCOME20K");
+                      setVoucherError(null);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-warm-orange/30 hover:bg-warm-orange text-orange-950 text-[10.5px] font-bold border border-orange-200 transition-colors cursor-pointer"
+                  >
+                    🏷️ WELCOME20K (-20k)
+                  </button>
+                </div>
+
+                {voucherError && (
+                  <p className="text-[11px] text-red-600 font-medium">{voucherError}</p>
+                )}
+
+                {voucherApplied && discountAmount > 0 && (
+                  <div className="text-xs text-emerald-700 font-semibold flex items-center justify-between bg-emerald-50 p-2 rounded-xl border border-emerald-100">
+                    <span>✓ Đã áp mã &quot;{voucherApplied}&quot; (-<MoneyDisplay amount={discountAmount} />)</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVoucherApplied(null);
+                        handleInputChange("voucher_code", "");
+                      }}
+                      className="text-gray-400 hover:text-red-500 text-xs ml-2 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Financial Calculation */}
               <div className="space-y-3 pt-3 border-t border-gray-100 text-xs">
                 <div className="flex justify-between text-gray-600">
@@ -581,5 +712,19 @@ export default function CheckoutPage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-cream/60 flex items-center justify-center p-8 text-center text-sm font-bold text-emerald-950">
+          Đang chuẩn bị trang thanh toán...
+        </div>
+      }
+    >
+      <CheckoutContent />
+    </Suspense>
   );
 }

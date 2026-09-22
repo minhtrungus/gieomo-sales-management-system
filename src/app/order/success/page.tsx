@@ -2,21 +2,36 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
+import { getStoredOrders } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
+import { Copy, Check, ExternalLink, Download } from "lucide-react";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
-  const orderCode = searchParams.get("code") || "GM-260901";
+  const orderCode = searchParams.get("code") || "GM-369817";
   const paymentMethod = searchParams.get("payment") || "banking";
-  const amount = Number(searchParams.get("amount") || "145000");
+  const urlAmount = Number(searchParams.get("amount") || "110000");
 
+  const [order, setOrder] = useState<Order | null>(null);
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [hasConfirmedPayment, setHasConfirmedPayment] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [proofImage, setProofImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const orders = getStoredOrders();
+    const found = orders.find((o) => o.order_code === orderCode);
+    if (found) {
+      setOrder(found);
+    }
+  }, [orderCode]);
+
+  const finalAmount = order ? order.final_amount : urlAmount;
 
   const bankAccount = {
     bankName: "Ngân hàng MB Bank (Quân Đội)",
@@ -25,7 +40,14 @@ function OrderSuccessContent() {
     transferMemo: orderCode,
   };
 
-  const vietQrUrl = `https://img.vietqr.io/image/MB-${bankAccount.accountNumber}-compact.png?amount=${amount}&addInfo=${orderCode}&accountName=${encodeURIComponent(bankAccount.accountHolder)}`;
+  // VietQR Napas247 Dynamic QR Code with exact amount and order memo
+  const vietQrUrl = `https://img.vietqr.io/image/MB-${bankAccount.accountNumber}-compact2.png?amount=${finalAmount}&addInfo=${orderCode}&accountName=${encodeURIComponent(bankAccount.accountHolder)}`;
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedItem(label);
+    setTimeout(() => setCopiedItem(null), 2000);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,7 +65,7 @@ function OrderSuccessContent() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 text-center">
+    <div className="max-w-2xl mx-auto space-y-6 text-center">
       {/* Celebration Icon */}
       <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
         🎉
@@ -59,17 +81,85 @@ function OrderSuccessContent() {
       </div>
 
       {/* Summary Box */}
-      <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-4">
+      <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-gray-100 gap-2">
           <div>
             <span className="text-xs text-gray-500 font-medium block">Mã đơn hàng của bạn:</span>
-            <span className="font-heading font-extrabold text-xl text-emerald-950 tracking-wider">
+            <span className="font-heading font-extrabold text-2xl text-emerald-950 tracking-wider font-mono">
               {orderCode}
             </span>
           </div>
           <div className="text-left sm:text-right">
-            <span className="text-xs text-gray-500 font-medium block">Tổng tiền:</span>
-            <MoneyDisplay amount={amount} className="text-xl font-extrabold text-emerald-950" />
+            <span className="text-xs text-gray-500 font-medium block">Tổng tiền thanh toán:</span>
+            <MoneyDisplay amount={finalAmount} className="text-2xl font-extrabold text-emerald-950" />
+          </div>
+        </div>
+
+        {/* Customer & Shipping Information Display */}
+        <div className="p-4 rounded-2xl bg-[#FFFDF9] border border-[#F0E5D8] space-y-3">
+          <h3 className="font-heading font-bold text-sm text-[#231B16] flex items-center gap-2 pb-2 border-b border-[#F0E5D8]">
+            <span>📦</span> Thông tin nhận hàng & Người đặt:
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-gray-500 block">Họ tên người nhận:</span>
+              <span className="font-bold text-gray-900 text-sm">
+                {order?.recipient_name || order?.buyer_name || "Khách hàng"}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-gray-500 block">Số điện thoại:</span>
+              <span className="font-bold text-[#16381D] text-sm font-mono">
+                {order?.recipient_phone || order?.buyer_phone || "Đang cập nhật"}
+              </span>
+            </div>
+
+            <div className="sm:col-span-2 space-y-1 pt-1 border-t border-gray-100">
+              <span className="text-gray-500 block">Địa chỉ nhận hàng:</span>
+              <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-[#F0E5D8]">
+                <span className="font-semibold text-gray-800 text-xs">
+                  {order?.delivery_type === "home_delivery"
+                    ? `${order.address_detail}, ${order.district}, ${order.province}`
+                    : order?.delivery_type === "pickup_point"
+                    ? `Nhận tại điểm hẹn: ${order.address_detail}`
+                    : "Tự đến lấy tại văn phòng BTC Mầm Mơ"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopy(
+                      `${order?.recipient_name || order?.buyer_name} - ${order?.recipient_phone || order?.buyer_phone} - ${order?.address_detail}, ${order?.district}, ${order?.province}`,
+                      "address"
+                    )
+                  }
+                  className="shrink-0 px-2 py-1 rounded-lg bg-gray-50 hover:bg-[#BFE9C3] text-gray-700 hover:text-[#16381D] border border-gray-200 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Sao chép địa chỉ"
+                >
+                  {copiedItem === "address" ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedItem === "address" ? "Đã chép" : "Chép"}</span>
+                </button>
+              </div>
+            </div>
+
+            {order?.introducer_info && (
+              <div className="sm:col-span-2 pt-1">
+                <span className="text-gray-500 block">Người quen / Nguồn giới thiệu:</span>
+                <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-[#BFE9C3] text-[#16381D] font-bold text-[11px]">
+                  🌱 {order.introducer_info}
+                </span>
+              </div>
+            )}
+
+            {order?.customer_note && (
+              <div className="sm:col-span-2 pt-1">
+                <span className="text-gray-500 block">Ghi chú cho Mầm Mơ:</span>
+                <p className="italic text-gray-700 text-xs bg-white p-2 rounded-xl border border-gray-100 mt-1">
+                  &ldquo;{order.customer_note}&rdquo;
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -80,7 +170,7 @@ function OrderSuccessContent() {
               <span className="font-bold block text-sm text-amber-950">
                 📌 Hướng dẫn chuyển khoản ngân hàng:
               </span>
-              <p>Vui lòng chuyển khoản theo thông tin bên dưới hoặc quét mã QR tự động để hoàn tất đơn hàng.</p>
+              <p>Mã QR bên dưới đã <strong>tự động điền đúng chính xác số tiền {finalAmount.toLocaleString("vi-VN")}đ</strong> và nội dung chuyển khoản <strong>{orderCode}</strong>. Quý khách chỉ cần mở App ngân hàng quét mã.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center pt-2">
@@ -90,36 +180,85 @@ function OrderSuccessContent() {
                   <span className="text-gray-500 block">Ngân hàng:</span>
                   <span className="font-bold text-gray-900 text-sm">{bankAccount.bankName}</span>
                 </div>
+
                 <div>
                   <span className="text-gray-500 block">Số tài khoản:</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mt-0.5">
                     <span className="font-mono font-extrabold text-emerald-900 text-base">
                       {bankAccount.accountNumber}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
+                      className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {copiedItem === "stk" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedItem === "stk" ? "Đã chép" : "Chép"}</span>
+                    </button>
                   </div>
                 </div>
+
                 <div>
                   <span className="text-gray-500 block">Chủ tài khoản:</span>
                   <span className="font-bold text-gray-900">{bankAccount.accountHolder}</span>
                 </div>
+
+                <div>
+                  <span className="text-gray-500 block">Số tiền cần chuyển:</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-extrabold text-emerald-950 text-base">
+                      {finalAmount.toLocaleString("vi-VN")}đ
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(String(finalAmount), "amount")}
+                      className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {copiedItem === "amount" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedItem === "amount" ? "Đã chép" : "Chép"}</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <span className="text-gray-500 block">Nội dung chuyển khoản (Bắt buộc):</span>
-                  <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 inline-block mt-0.5">
-                    {bankAccount.transferMemo}
-                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200 inline-block">
+                      {bankAccount.transferMemo}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
+                      className="px-2 py-0.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {copiedItem === "memo" ? <Check className="w-3 h-3 text-red-700" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedItem === "memo" ? "Đã chép" : "Chép"}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* VietQR Code */}
-              <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-gray-50 border border-gray-200 text-center">
+              <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#F0E5D8] text-center shadow-xs">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={vietQrUrl}
-                  alt="VietQR Chuyển khoản"
-                  className="w-44 h-44 object-contain rounded-xl shadow-xs"
+                  alt="VietQR Chuyển khoản đúng số tiền"
+                  className="w-48 h-auto object-contain rounded-xl shadow-xs"
                 />
-                <span className="text-[11px] font-medium text-gray-500 mt-2">
-                  Quét mã VietQR bằng ứng dụng Ngân hàng
+                <div className="pt-2 flex items-center gap-2">
+                  <a
+                    href={vietQrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-emerald-800 hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>Mở ảnh QR to</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <span className="text-[10px] text-gray-500 mt-1">
+                  Quét bằng App Ngân hàng bất kỳ (MB, VCB, Momo, Techcombank...)
                 </span>
               </div>
             </div>
@@ -192,7 +331,7 @@ function OrderSuccessContent() {
             </div>
 
             <p className="text-xs text-[#7E7068] leading-relaxed">
-              Bạn xác nhận đã chuyển khoản <strong>{amount.toLocaleString("vi-VN")}đ</strong> cho đơn hàng <strong>{orderCode}</strong>?
+              Bạn xác nhận đã chuyển khoản <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> cho đơn hàng <strong>{orderCode}</strong>?
             </p>
 
             {/* Proof image upload input */}

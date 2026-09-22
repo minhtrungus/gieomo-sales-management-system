@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Plus, Copy, Check, X, UserPlus, Shield, User, Trash2, AlertTriangle, Calendar, Eye, ExternalLink, ShoppingBag } from "lucide-react";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
+import { getStoredOrders } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 
 interface MemberItem {
@@ -22,7 +24,16 @@ interface MemberItem {
 }
 
 export default function AdminMembersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
   const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
+
+  useEffect(() => {
+    setOrders(getStoredOrders());
+    const handleUpdate = () => setOrders(getStoredOrders());
+    window.addEventListener("gieomo_orders_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+  }, []);
+
   const [members, setMembers] = useState<MemberItem[]>([
     {
       memberId: "mem-0",
@@ -158,117 +169,128 @@ export default function AdminMembersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
-              {members.map((m, idx) => (
-                <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
-                  <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
-                    {idx + 1}
-                  </td>
+              {members.map((m, idx) => {
+                const mOrders = (orders.length > 0 ? orders : MOCK_ORDERS).filter(
+                  (o) =>
+                    o.created_by_member_id === m.memberId ||
+                    o.referral_code === m.referralCode ||
+                    (o.introducer_info && o.introducer_info.includes(m.referralCode))
+                );
+                const displayOrdersCount = mOrders.length > 0 ? mOrders.length : m.totalOrders;
+                const displayRevenue = mOrders.length > 0 ? mOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) : m.totalRevenue;
 
-                  <td className="py-2.5 px-3">
-                    <span
-                      onClick={() => setViewingOrdersMember(m)}
-                      className="font-bold text-[#342A24] hover:text-[#2D6338] hover:underline cursor-pointer block text-xs"
-                      title="Nhấn để xem chi tiết đơn hàng giới thiệu"
-                    >
-                      {m.fullName}
-                    </span>
-                    <span className="text-[10px] text-[#7E7068] block">{m.email} • {m.phone}</span>
-                  </td>
+                return (
+                  <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
+                    <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
+                      {idx + 1}
+                    </td>
 
-                  <td className="py-2.5 px-2.5 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                        m.status === "active"
-                          ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3]"
-                          : "bg-gray-100 text-gray-500 border-gray-300"
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
-                      <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
-                    </span>
-                  </td>
-
-                  <td className="py-2.5 px-2.5 font-semibold whitespace-nowrap">
-                    {m.role === "admin" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[10px] font-extrabold border border-[#ebd089]">
-                        <Shield className="w-2.5 h-2.5 text-[#E2884E]" />
-                        <span>Quản trị viên (Admin)</span>
+                    <td className="py-2.5 px-3">
+                      <span
+                        onClick={() => setViewingOrdersMember(m)}
+                        className="font-bold text-[#342A24] hover:text-[#2D6338] hover:underline cursor-pointer block text-xs"
+                        title="Nhấn để xem chi tiết đơn hàng giới thiệu"
+                      >
+                        {m.fullName}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[10px] font-bold border border-[#b2d9ff]">
-                        <User className="w-2.5 h-2.5" />
-                        <span>Thành viên (BTC Sale)</span>
+                      <span className="text-[10px] text-[#7E7068] block">{m.email} • {m.phone}</span>
+                    </td>
+
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                          m.status === "active"
+                            ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3]"
+                            : "bg-gray-100 text-gray-500 border-gray-300"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
+                        <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
                       </span>
-                    )}
-                  </td>
+                    </td>
 
-                  <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
-                    <span className="inline-flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-[#A89B92]" />
-                      <span>{m.joinedDate}</span>
-                    </span>
-                  </td>
+                    <td className="py-2.5 px-2.5 font-semibold whitespace-nowrap">
+                      {m.role === "admin" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[10px] font-extrabold border border-[#ebd089]">
+                          <Shield className="w-2.5 h-2.5 text-[#E2884E]" />
+                          <span>Quản trị viên (Admin)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[10px] font-bold border border-[#b2d9ff]">
+                          <User className="w-2.5 h-2.5" />
+                          <span>Thành viên (BTC Sale)</span>
+                        </span>
+                      )}
+                    </td>
 
-                  <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">
-                    {m.referralCode}
-                  </td>
+                    <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-[#A89B92]" />
+                        <span>{m.joinedDate}</span>
+                      </span>
+                    </td>
 
-                  <td className="py-2.5 px-2.5 font-bold text-[#342A24] whitespace-nowrap">
-                    <button
-                      onClick={() => setViewingOrdersMember(m)}
-                      className="px-2.5 py-1 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-[10.5px] inline-flex items-center gap-1 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
-                      title="Nhấn để xem danh sách đơn hàng chi tiết"
-                    >
-                      <span>{m.totalOrders} đơn</span>
-                      <Eye className="w-3 h-3 text-[#2D6338] group-hover:scale-110 transition-transform" />
-                    </button>
-                  </td>
+                    <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">
+                      {m.referralCode}
+                    </td>
 
-                  <td className="py-2.5 px-2.5 whitespace-nowrap">
-                    <MoneyDisplay amount={m.totalRevenue} className="font-extrabold text-[#1B3622] text-xs" />
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-2.5 px-2.5 font-bold text-[#342A24] whitespace-nowrap">
                       <button
                         onClick={() => setViewingOrdersMember(m)}
-                        className="px-2 py-1 rounded-lg border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Xem các đơn hàng đã giới thiệu"
+                        className="px-2.5 py-1 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-[10.5px] inline-flex items-center gap-1 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
+                        title="Nhấn để xem danh sách đơn hàng chi tiết"
                       >
-                        <Eye className="w-3 h-3 text-[#2D6338]" />
-                        <span className="hidden sm:inline">Xem đơn</span>
+                        <span>{displayOrdersCount} đơn</span>
+                        <Eye className="w-3 h-3 text-[#2D6338] group-hover:scale-110 transition-transform" />
                       </button>
+                    </td>
 
-                      <button
-                        onClick={() => handleCopy(m.referralCode)}
-                        className="px-2.5 py-1 rounded-lg border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        {copiedCode === m.referralCode ? (
-                          <>
-                            <Check className="w-3 h-3 text-[#2D6338]" />
-                            <span className="text-[#2D6338]">Đã chép</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 text-[#7E7068]" />
-                            <span>Link</span>
-                          </>
-                        )}
-                      </button>
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <MoneyDisplay amount={displayRevenue} className="font-extrabold text-[#1B3622] text-xs" />
+                    </td>
 
-                      {m.memberId !== "mem-0" && (
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => setDeletingMember(m)}
-                          className="p-1 rounded-lg border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
-                          title="Thu hồi quyền thành viên"
+                          onClick={() => setViewingOrdersMember(m)}
+                          className="px-2 py-1 rounded-lg border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Xem các đơn hàng đã giới thiệu"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Eye className="w-3 h-3 text-[#2D6338]" />
+                          <span className="hidden sm:inline">Xem đơn</span>
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+
+                        <button
+                          onClick={() => handleCopy(m.referralCode)}
+                          className="px-2.5 py-1 rounded-lg border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          {copiedCode === m.referralCode ? (
+                            <>
+                              <Check className="w-3 h-3 text-[#2D6338]" />
+                              <span className="text-[#2D6338]">Đã chép</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 text-[#7E7068]" />
+                              <span>Link</span>
+                            </>
+                          )}
+                        </button>
+
+                        {m.memberId !== "mem-0" && (
+                          <button
+                            onClick={() => setDeletingMember(m)}
+                            className="p-1 rounded-lg border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
+                            title="Thu hồi quyền thành viên"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -460,115 +482,125 @@ export default function AdminMembersPage() {
               </button>
             </div>
 
-            {/* Top Summary Stats */}
-            <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#FFFDF9] border-b border-[#F0E5D8]">
-              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                <span className="text-[11px] font-bold text-[#7E7068] block">Tổng đơn đã chốt</span>
-                <span className="text-xl font-extrabold text-[#231B16] mt-0.5 block">
-                  {viewingOrdersMember.totalOrders} đơn
-                </span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                <span className="text-[11px] font-bold text-[#7E7068] block">Doanh số gây quỹ mang lại</span>
-                <MoneyDisplay amount={viewingOrdersMember.totalRevenue} className="text-xl font-extrabold text-[#2D6338] mt-0.5 block" />
-              </div>
-              <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                <span className="text-[11px] font-bold text-[#7E7068] block">Tình trạng ghi nhận</span>
-                <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
-                </span>
-              </div>
-            </div>
+            {/* Modal Body */}
+            {(() => {
+              const allSourceOrders = orders.length > 0 ? orders : MOCK_ORDERS;
+              const memberOrders = allSourceOrders.filter(
+                (o) =>
+                  o.created_by_member_id === viewingOrdersMember.memberId ||
+                  o.referral_code === viewingOrdersMember.referralCode ||
+                  (o.introducer_info && o.introducer_info.includes(viewingOrdersMember.referralCode))
+              );
+              const modalOrdersCount = memberOrders.length > 0 ? memberOrders.length : viewingOrdersMember.totalOrders;
+              const modalRevenue = memberOrders.length > 0 
+                ? memberOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) 
+                : viewingOrdersMember.totalRevenue;
 
-            {/* Orders Table */}
-            <div className="flex-1 overflow-y-auto p-5">
-              {(() => {
-                const memberOrders = MOCK_ORDERS.filter(
-                  (o) =>
-                    o.created_by_member_id === viewingOrdersMember.memberId ||
-                    o.referral_code === viewingOrdersMember.referralCode ||
-                    (o.introducer_info && o.introducer_info.includes(viewingOrdersMember.referralCode))
-                );
-
-                if (memberOrders.length === 0) {
-                  return (
-                    <div className="py-12 text-center space-y-2">
-                      <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto" />
-                      <p className="font-bold text-sm text-[#231B16]">Chưa có đơn hàng mẫu nào</p>
-                      <p className="text-xs text-[#7E7068]">
-                        Các đơn hàng tiếp theo được đặt với mã {viewingOrdersMember.referralCode} sẽ tự động hiển thị tại đây.
-                      </p>
+              return (
+                <>
+                  {/* Top Summary Stats */}
+                  <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#FFFDF9] border-b border-[#F0E5D8]">
+                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                      <span className="text-[11px] font-bold text-[#7E7068] block">Tổng đơn đã chốt</span>
+                      <span className="text-xl font-extrabold text-[#231B16] mt-0.5 block">
+                        {modalOrdersCount} đơn
+                      </span>
                     </div>
-                  );
-                }
-
-                return (
-                  <div className="border border-[#F0E5D8] rounded-2xl overflow-hidden shadow-2xs">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase">
-                          <th className="py-3 px-3.5">Mã đơn</th>
-                          <th className="py-3 px-3.5">Thời gian đặt</th>
-                          <th className="py-3 px-3.5">Khách hàng</th>
-                          <th className="py-3 px-3.5">Địa chỉ nhận</th>
-                          <th className="py-3 px-3.5">Tổng tiền</th>
-                          <th className="py-3 px-3.5">Thanh toán</th>
-                          <th className="py-3 px-3.5">Trạng thái</th>
-                          <th className="py-3 px-3.5 text-right">Chi tiết</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#F0E5D8]">
-                        {memberOrders.map((ord) => (
-                          <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
-                            <td className="py-3 px-3.5 font-mono font-bold text-[#1B3622]">
-                              {ord.order_code}
-                            </td>
-                            <td className="py-3 px-3.5 text-[#7E7068] whitespace-nowrap">
-                              {new Date(ord.created_at).toLocaleDateString("vi-VN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                day: "2-digit",
-                                month: "2-digit",
-                              })}
-                            </td>
-                            <td className="py-3 px-3.5">
-                              <span className="font-bold text-[#231B16] block">{ord.buyer_name}</span>
-                              <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
-                            </td>
-                            <td className="py-3 px-3.5 text-[#7E7068] max-w-[150px] truncate">
-                              {ord.address_detail}, {ord.district}
-                            </td>
-                            <td className="py-3 px-3.5">
-                              <MoneyDisplay amount={ord.final_amount} className="font-extrabold text-[#1B3622]" />
-                            </td>
-                            <td className="py-3 px-3.5">
-                              <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
-                                {PAYMENT_STATUS_LABELS[ord.payment_status]}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-3.5">
-                              <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
-                                {ORDER_STATUS_LABELS[ord.order_status]}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-3.5 text-right">
-                              <Link
-                                href={`/admin/orders/${ord.order_id}`}
-                                className="px-2.5 py-1 rounded-lg bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[11px] font-bold border border-[#F0E5D8] inline-flex items-center gap-1 transition-colors"
-                              >
-                                <span>Xem</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                      <span className="text-[11px] font-bold text-[#7E7068] block">Doanh số gây quỹ mang lại</span>
+                      <MoneyDisplay amount={modalRevenue} className="text-xl font-extrabold text-[#2D6338] mt-0.5 block" />
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
+                      <span className="text-[11px] font-bold text-[#7E7068] block">Tình trạng ghi nhận</span>
+                      <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
+                      </span>
+                    </div>
                   </div>
-                );
-              })()}
-            </div>
+
+                  {/* Orders Table */}
+                  <div className="flex-1 overflow-y-auto p-5">
+                    {memberOrders.length === 0 ? (
+                      <div className="py-12 text-center space-y-2">
+                        <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto" />
+                        <p className="font-bold text-sm text-[#231B16]">Chưa có đơn hàng mẫu nào</p>
+                        <p className="text-xs text-[#7E7068]">
+                          Các đơn hàng tiếp theo được đặt với mã {viewingOrdersMember.referralCode} sẽ tự động hiển thị tại đây.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="border border-[#F0E5D8] rounded-2xl overflow-hidden shadow-2xs">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase">
+                              <th className="py-3 px-3 text-center w-12">STT</th>
+                              <th className="py-3 px-3.5">Mã đơn</th>
+                              <th className="py-3 px-3.5">Thời gian đặt</th>
+                              <th className="py-3 px-3.5">Khách hàng</th>
+                              <th className="py-3 px-3.5">Địa chỉ nhận</th>
+                              <th className="py-3 px-3.5">Tổng tiền</th>
+                              <th className="py-3 px-3.5">Thanh toán</th>
+                              <th className="py-3 px-3.5">Trạng thái</th>
+                              <th className="py-3 px-3.5 text-right">Chi tiết</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F0E5D8]">
+                            {memberOrders.map((ord, idx) => (
+                              <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
+                                <td className="py-3 px-3 text-center font-bold text-[#7E7068] text-[11px]">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-3 px-3.5 font-mono font-bold text-[#1B3622]">
+                                  {ord.order_code}
+                                </td>
+                                <td className="py-3 px-3.5 text-[#7E7068] whitespace-nowrap">
+                                  {new Date(ord.created_at).toLocaleDateString("vi-VN", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                  })}
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <span className="font-bold text-[#231B16] block">{ord.buyer_name}</span>
+                                  <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
+                                </td>
+                                <td className="py-3 px-3.5 text-[#7E7068] max-w-[160px] truncate" title={`${ord.address_detail}, ${ord.district}, ${ord.province}`}>
+                                  {ord.address_detail}, {ord.district}
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <MoneyDisplay amount={ord.final_amount} className="font-extrabold text-[#1B3622]" />
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
+                                    {PAYMENT_STATUS_LABELS[ord.payment_status]}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                                    {ORDER_STATUS_LABELS[ord.order_status]}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-3.5 text-right">
+                                  <Link
+                                    href={`/admin/orders/${ord.order_id}`}
+                                    className="px-2.5 py-1 rounded-lg bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[11px] font-bold border border-[#F0E5D8] inline-flex items-center gap-1 transition-colors"
+                                  >
+                                    <span>Xem</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Footer */}
             <div className="p-4 bg-[#FFF8EE] border-t border-[#F0E5D8] flex items-center justify-between">
