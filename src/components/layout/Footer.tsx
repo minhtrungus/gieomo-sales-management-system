@@ -1,19 +1,19 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, Sparkles, Mail, Phone, MapPin } from "lucide-react";
+import { Sparkles, Mail, Phone, MapPin } from "lucide-react";
 
 export function Footer() {
   return (
-    <footer className="w-full bg-[#1C281F] text-[#EBE3D8] border-t border-[#2F4234] mt-auto relative overflow-hidden">
+    <footer className="w-full bg-[#1C281F] text-white border-t border-[#2F4234] mt-auto relative overflow-hidden">
       {/* Decorative Pastel Stitch Line */}
-      <div className="w-full border-t-2 border-dashed border-[#FFB98A]/40" />
+      <div className="w-full border-t-2 border-dashed border-[#FFB98A]/50" />
 
       <div className="container mx-auto px-4 sm:px-6 py-12 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           {/* Brand Info with Mascot Logo */}
           <div className="md:col-span-1 space-y-4">
             <Link href="/" className="flex items-center gap-3 group">
-              <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-[#BFE9C3] shadow-xs shrink-0 bg-white">
+              <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#BFE9C3] shadow-xs shrink-0 bg-white">
                 <Image
                   src="/images/logo_gieo mơ.jpg"
                   alt="Gieo Mơ"
@@ -22,20 +22,20 @@ export function Footer() {
                 />
               </div>
               <div className="flex flex-col">
-                <span className="font-heading font-extrabold text-xl text-white tracking-tight">
+                <span className="font-heading font-extrabold text-2xl text-white tracking-tight">
                   Gieo Mơ
                 </span>
-                <span className="text-[10px] text-[#BFE9C3] font-medium tracking-wide">
+                <span className="text-[11px] text-[#BFE9C3] font-bold tracking-wide">
                   Tạp hoá gây quỹ Mầm Mơ
                 </span>
               </div>
             </Link>
 
-            <p className="text-xs text-[#C8BEB2] leading-relaxed">
+            <p className="text-xs text-white/90 leading-relaxed font-normal">
               Thế giới may vá nhỏ xinh của Mầm Mơ. Mỗi chiếc túi, chiếc kẹp handmade được tạo ra với tình thương và ước mơ gieo mầm tươi sáng cho trẻ em vùng cao.
             </p>
 
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#293A2E] border border-[#3E5544] text-[11px] text-[#FFE7A8] font-medium">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#293A2E] border border-[#3E5544] text-xs text-[#FFE7A8] font-bold shadow-2xs">
               <Sparkles className="w-3.5 h-3.5 text-[#FFB98A]" />
               <span>&quot;Little Pieces, Bigger Dreams&quot;</span>
             </div>
@@ -47,25 +47,25 @@ export function Footer() {
               <span className="w-2 h-2 rounded-full bg-[#BFE9C3]" />
               Khám phá Gieo Mơ
             </h3>
-            <ul className="space-y-2.5 text-xs text-[#C8BEB2]">
+            <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/" className="hover:text-[#BFE9C3] transition-colors">
-                  Trang chủ
+                <Link href="/" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                  <span>Trang chủ</span>
                 </Link>
               </li>
               <li>
-                <Link href="/products" className="hover:text-[#BFE9C3] transition-colors">
-                  Tất cả sản phẩm handmade
+                <Link href="/products" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                  <span>Tất cả sản phẩm handmade</span>
                 </Link>
               </li>
               <li>
-                <Link href="/combos" className="hover:text-[#BFE9C3] transition-colors">
-                  Set Combo quà tặng tiết kiệm
+                <Link href="/combos" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                  <span>Set Combo quà tặng tiết kiệm</span>
                 </Link>
               </li>
               <li>
-                <Link href="/track" className="hover:text-[#BFE9C3] transition-colors">
-                  Tra cứu hành trình đơn hàng
+                <Link href="/track" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                  <span>Tra cứu hành trình đơn hàng</span>
                 </Link>
               </li>
             </ul>
@@ -77,25 +77,25 @@ export function Footer() {
               <span className="w-2 h-2 rounded-full bg-[#FFE7A8]" />
               Hỗ trợ & Chính sách
             </h3>
-            <ul className="space-y-2.5 text-xs text-[#C8BEB2]">
+            <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/faq" className="hover:text-[#FFE7A8] transition-colors">
-                  Hỏi đáp thường gặp (FAQ)
+                <Link href="/faq" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                  <span>Hỏi đáp thường gặp (FAQ)</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/delivery" className="hover:text-[#FFE7A8] transition-colors">
-                  Chính sách giao hàng (Freeship từ 200k)
+                <Link href="/policy/delivery" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                  <span>Chính sách giao hàng (Freeship từ 200k)</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/payment" className="hover:text-[#FFE7A8] transition-colors">
-                  Hướng dẫn thanh toán VietQR & COD
+                <Link href="/policy/payment" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                  <span>Hướng dẫn thanh toán VietQR & COD</span>
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="hover:text-[#FFE7A8] transition-colors">
-                  Liên hệ Ban Tổ Chức Mầm Mơ
+                <Link href="/contact" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                  <span>Liên hệ Ban Tổ Chức Mầm Mơ</span>
                 </Link>
               </li>
             </ul>
@@ -107,32 +107,32 @@ export function Footer() {
               <span className="w-2 h-2 rounded-full bg-[#FFD1E1]" />
               Kết nối với Mầm
             </h3>
-            <div className="space-y-3 text-xs text-[#C8BEB2]">
+            <div className="space-y-3.5 text-xs text-white/90 font-medium">
               <p className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span>gieomo@mammo.vn</span>
+                <span className="text-white">gieomo@mammo.vn</span>
               </p>
               <p className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span>0123 456 789</span>
+                <span className="text-white font-bold">0123 456 789</span>
               </p>
               <p className="flex items-center gap-2.5">
                 <MapPin className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span>TP. Hồ Chí Minh, Việt Nam</span>
+                <span className="text-white">TP. Hồ Chí Minh, Việt Nam</span>
               </p>
             </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-[#2A3C2F] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#A39688]">
+        <div className="pt-8 border-t border-[#2F4234] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/80 font-normal">
           <p>© 2026 Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
           <div className="flex items-center gap-4">
-            <Link href="/policy/privacy" className="hover:text-white transition-colors">
+            <Link href="/policy/privacy" className="text-white/90 hover:text-white transition-colors underline-offset-2 hover:underline">
               Chính sách bảo mật
             </Link>
             <span>•</span>
-            <Link href="/admin/login" className="hover:text-[#BFE9C3] transition-colors font-medium">
+            <Link href="/admin/login" className="text-[#BFE9C3] hover:text-white font-bold transition-colors">
               Quản trị (Admin Portal)
             </Link>
           </div>
