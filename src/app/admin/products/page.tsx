@@ -207,16 +207,16 @@ export default function AdminProductsPage() {
       {/* Products Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-3 text-center w-12">STT</th>
-                <th className="py-3.5 px-5">Sản phẩm</th>
-                <th className="py-3.5 px-4">Danh mục</th>
-                <th className="py-3.5 px-4">Giá bán / Giá vốn</th>
-                <th className="py-3.5 px-4">Tổng tồn kho</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-5 text-right">Thao tác</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-3">Sản phẩm</th>
+                <th className="py-2.5 px-2.5">Danh mục</th>
+                <th className="py-2.5 px-2.5">Giá bán / Giá vốn</th>
+                <th className="py-2.5 px-2.5">Tổng tồn kho</th>
+                <th className="py-2.5 px-2.5">Trạng thái</th>
+                <th className="py-2.5 px-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -224,12 +224,12 @@ export default function AdminProductsPage() {
                 const totalStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) ?? 10;
                 return (
                   <tr key={p.product_id} className="hover:bg-[#FFFDF9] transition-colors">
-                    <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                    <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                       {idx + 1}
                     </td>
 
-                    <td className="py-3.5 px-5 flex items-center gap-3">
-                      <div className="relative w-12 h-12 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center text-lg shadow-2xs">
+                    <td className="py-2.5 px-3 flex items-center gap-2.5">
+                      <div className="relative w-9 h-9 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center text-sm shadow-2xs">
                         {p.images?.[0] ? (
                           <Image src={p.images[0]} alt="" fill className="object-cover" />
                         ) : (
@@ -237,50 +237,50 @@ export default function AdminProductsPage() {
                         )}
                       </div>
                       <div>
-                        <span className="font-bold text-[#342A24] block text-sm">{p.name}</span>
-                        <span className="text-[11px] text-[#A89B92] font-mono">/{p.slug}</span>
+                        <span className="font-bold text-[#342A24] block text-xs">{p.name}</span>
+                        <span className="text-[10px] text-[#A89B92] font-mono">/{p.slug}</span>
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 font-bold text-[#5C4D44]">
+                    <td className="py-2.5 px-2.5 font-bold text-[#5C4D44] whitespace-nowrap">
                       {p.category?.name ?? "Chưa phân loại"}
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      <MoneyDisplay amount={p.price} className="font-extrabold text-[#1B3622] block text-sm" />
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <MoneyDisplay amount={p.price} className="font-extrabold text-[#1B3622] block text-xs" />
                       {p.cost_price && (
-                        <span className="text-[10px] text-[#A89B92] block">
-                          Giá vốn: <MoneyDisplay amount={p.cost_price} />
+                        <span className="text-[9.5px] text-[#A89B92] block">
+                          Vốn: <MoneyDisplay amount={p.cost_price} />
                         </span>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      <span className={`font-bold px-2 py-0.5 rounded-full inline-block ${
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <span className={`font-bold px-2 py-0.5 rounded-full inline-block text-[10.5px] ${
                         totalStock <= 5
                           ? "bg-red-50 text-red-700 border border-red-200"
                           : totalStock <= 10
                           ? "bg-amber-50 text-amber-700 border border-amber-200"
                           : "text-[#342A24]"
                       }`}>
-                        {totalStock} sản phẩm
+                        {totalStock} món
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4">
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <button
                         onClick={() => handleToggleStatus(p.product_id)}
                         className="cursor-pointer"
                         title="Bấm để đổi trạng thái"
                       >
-                        <Badge variant={p.status === "active" ? "brand" : "default"}>
+                        <Badge variant={p.status === "active" ? "brand" : "default"} className="text-[10px] px-2 py-0.5">
                           {p.status === "active" ? "Đang bán" : "Nháp"}
                         </Badge>
                       </button>
                     </td>
 
-                    <td className="py-3.5 px-5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
                         <Link
                           href={`/products/${p.slug}`}
                           target="_blank"

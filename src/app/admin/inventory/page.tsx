@@ -188,16 +188,16 @@ export default function AdminInventoryPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
-                <th className="py-3 px-3 text-center w-12">STT</th>
-                <th className="py-3 px-5">Sản phẩm</th>
-                <th className="py-3 px-4">Phân loại</th>
-                <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4">Tồn kho hiện tại</th>
-                <th className="py-3 px-4">Trạng thái kho</th>
-                <th className="py-3 px-5 text-right">Điều chỉnh nhanh</th>
+              <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-3">Sản phẩm</th>
+                <th className="py-2.5 px-2.5">Phân loại</th>
+                <th className="py-2.5 px-2.5">SKU</th>
+                <th className="py-2.5 px-2.5">Tồn kho hiện tại</th>
+                <th className="py-2.5 px-2.5">Trạng thái kho</th>
+                <th className="py-2.5 px-3 text-right">Điều chỉnh nhanh</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -205,39 +205,39 @@ export default function AdminInventoryPage() {
                 const isLowStock = row.stock <= 10;
                 return (
                   <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
-                    <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                    <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                       {idx + 1}
                     </td>
-                    <td className="py-3.5 px-5 font-bold text-[#231B16]">
+                    <td className="py-2.5 px-3 font-bold text-[#231B16] text-xs">
                       {row.productName}
                     </td>
 
-                    <td className="py-3.5 px-4 font-semibold text-[#2D6338]">
+                    <td className="py-2.5 px-2.5 font-semibold text-[#2D6338] text-[10.5px]">
                       {row.variantName}
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono text-[#7E7068]">
+                    <td className="py-2.5 px-2.5 font-mono text-[#7E7068] text-[10.5px]">
                       {row.sku}
                     </td>
 
-                    <td className="py-3.5 px-4 font-extrabold text-sm text-[#1B3622]">
+                    <td className="py-2.5 px-2.5 font-extrabold text-xs text-[#1B3622]">
                       {row.stock} món
                     </td>
 
-                    <td className="py-3.5 px-4">
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
                       {isLowStock ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFE7A8] text-[#542B07] text-[11px] font-bold border border-[#ebd089]">
-                          <AlertTriangle className="w-3 h-3 text-[#E2884E]" /> Sắp hết hàng
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[10px] font-bold border border-[#ebd089]">
+                          <AlertTriangle className="w-2.5 h-2.5 text-[#E2884E]" /> Sắp hết
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-[11px] font-bold border border-[#9ed4a3]">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#BFE9C3] text-[#16381D] text-[10px] font-bold border border-[#9ed4a3]">
                           ✓ Đủ hàng
                         </span>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleStockUpdate(row.productId, row.variantId, -1)}
                           className="w-7 h-7 rounded-lg border border-[#F0E5D8] bg-white hover:bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
@@ -281,51 +281,51 @@ export default function AdminInventoryPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
-                <th className="py-3 px-3 text-center w-12">STT</th>
-                <th className="py-3 px-5">Mã phiếu</th>
-                <th className="py-3 px-4">Thời gian duyệt</th>
-                <th className="py-3 px-4">Sản phẩm & Phân loại</th>
-                <th className="py-3 px-4">Số lượng nhập</th>
-                <th className="py-3 px-4">Biến động kho</th>
-                <th className="py-3 px-4">Người duyệt (BTC)</th>
-                <th className="py-3 px-5">Nguồn hàng / Ghi chú</th>
-                <th className="py-3 px-5 text-right">Trạng thái</th>
+              <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-3">Mã phiếu</th>
+                <th className="py-2.5 px-2.5">Thời gian duyệt</th>
+                <th className="py-2.5 px-2.5">Sản phẩm & Phân loại</th>
+                <th className="py-2.5 px-2.5">Số lượng</th>
+                <th className="py-2.5 px-2.5">Biến động</th>
+                <th className="py-2.5 px-2.5">Người duyệt</th>
+                <th className="py-2.5 px-2.5">Nguồn / Ghi chú</th>
+                <th className="py-2.5 px-3 text-right">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {inflowLogs.map((log, idx) => (
                 <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
-                  <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                  <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                     {idx + 1}
                   </td>
-                  <td className="py-3.5 px-5 font-mono font-bold text-[#1B3622]">
+                  <td className="py-2.5 px-3 font-mono font-bold text-[#1B3622] text-xs whitespace-nowrap">
                     {log.receiptCode}
                   </td>
-                  <td className="py-3.5 px-4 text-[#7E7068] font-medium whitespace-nowrap">
+                  <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
                     {log.createdAt}
                   </td>
-                  <td className="py-3.5 px-4">
-                    <span className="font-bold text-[#342A24] block">{log.productName}</span>
-                    <span className="text-[11px] text-[#2D6338] block font-semibold">{log.variantName}</span>
+                  <td className="py-2.5 px-2.5">
+                    <span className="font-bold text-[#342A24] block text-xs">{log.productName}</span>
+                    <span className="text-[10px] text-[#2D6338] block font-semibold">{log.variantName}</span>
                   </td>
-                  <td className="py-3.5 px-4 font-extrabold text-sm text-[#2D6338]">
+                  <td className="py-2.5 px-2.5 font-extrabold text-xs text-[#2D6338] whitespace-nowrap">
                     +{log.quantityAdded} chiếc
                   </td>
-                  <td className="py-3.5 px-4 font-medium text-[#7E7068]">
+                  <td className="py-2.5 px-2.5 font-medium text-[#7E7068] whitespace-nowrap text-[10.5px]">
                     {log.stockBefore} ➔ <strong className="text-[#1B3622]">{log.stockAfter} món</strong>
                   </td>
-                  <td className="py-3.5 px-4 font-bold text-[#342A24]">
+                  <td className="py-2.5 px-2.5 font-bold text-[#342A24] whitespace-nowrap text-xs">
                     {log.approvedBy}
                   </td>
-                  <td className="py-3.5 px-5 text-[#5C4D44] max-w-[200px] truncate">
+                  <td className="py-2.5 px-2.5 text-[#5C4D44] max-w-[160px] truncate text-[10.5px]">
                     {log.sourceNote}
                   </td>
-                  <td className="py-3.5 px-5 text-right">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-[11px] font-extrabold border border-[#A5D6A7]">
-                      <CheckCircle2 className="w-3 h-3" /> Đã nhập kho
+                  <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-[10px] font-extrabold border border-[#A5D6A7]">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> Đã nhập
                     </span>
                   </td>
                 </tr>

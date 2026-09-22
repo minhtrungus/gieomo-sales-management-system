@@ -143,115 +143,115 @@ export default function AdminMembersPage() {
       {/* Members Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-3 text-center w-12">STT</th>
-                <th className="py-3.5 px-5">Thành viên</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4">Vai trò (Phân quyền)</th>
-                <th className="py-3.5 px-4">Ngày tham gia BTC</th>
-                <th className="py-3.5 px-4">Mã Referral</th>
-                <th className="py-3.5 px-4">Đơn đã chốt</th>
-                <th className="py-3.5 px-4">Doanh số gây quỹ</th>
-                <th className="py-3.5 px-5 text-right">Thao tác</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-3">Thành viên</th>
+                <th className="py-2.5 px-2.5">Trạng thái</th>
+                <th className="py-2.5 px-2.5">Vai trò (Phân quyền)</th>
+                <th className="py-2.5 px-2.5">Ngày tham gia</th>
+                <th className="py-2.5 px-2.5">Mã Referral</th>
+                <th className="py-2.5 px-2.5">Đơn đã chốt</th>
+                <th className="py-2.5 px-2.5">Doanh số gây quỹ</th>
+                <th className="py-2.5 px-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {members.map((m, idx) => (
                 <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
-                  <td className="py-4 px-3 text-center text-[#7E7068] font-bold text-xs">
+                  <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                     {idx + 1}
                   </td>
 
-                  <td className="py-4 px-5">
+                  <td className="py-2.5 px-3">
                     <span
                       onClick={() => setViewingOrdersMember(m)}
-                      className="font-bold text-[#342A24] hover:text-[#2D6338] hover:underline cursor-pointer block text-sm"
+                      className="font-bold text-[#342A24] hover:text-[#2D6338] hover:underline cursor-pointer block text-xs"
                       title="Nhấn để xem chi tiết đơn hàng giới thiệu"
                     >
                       {m.fullName}
                     </span>
-                    <span className="text-[11px] text-[#7E7068] block">{m.email} • {m.phone}</span>
+                    <span className="text-[10px] text-[#7E7068] block">{m.email} • {m.phone}</span>
                   </td>
 
-                  <td className="py-4 px-4 whitespace-nowrap">
+                  <td className="py-2.5 px-2.5 whitespace-nowrap">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
                         m.status === "active"
                           ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3]"
                           : "bg-gray-100 text-gray-500 border-gray-300"
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
                       <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
                     </span>
                   </td>
 
-                  <td className="py-4 px-4 font-semibold">
+                  <td className="py-2.5 px-2.5 font-semibold whitespace-nowrap">
                     {m.role === "admin" ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[11px] font-extrabold border border-[#ebd089]">
-                        <Shield className="w-3 h-3 text-[#E2884E]" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[10px] font-extrabold border border-[#ebd089]">
+                        <Shield className="w-2.5 h-2.5 text-[#E2884E]" />
                         <span>Quản trị viên (Admin)</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[11px] font-bold border border-[#b2d9ff]">
-                        <User className="w-3 h-3" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[10px] font-bold border border-[#b2d9ff]">
+                        <User className="w-2.5 h-2.5" />
                         <span>Thành viên (BTC Sale)</span>
                       </span>
                     )}
                   </td>
 
-                  <td className="py-4 px-4 text-[#7E7068] font-medium whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-[#A89B92]" />
+                  <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-[#A89B92]" />
                       <span>{m.joinedDate}</span>
                     </span>
                   </td>
 
-                  <td className="py-4 px-4 font-mono font-extrabold text-[#2D6338] text-sm">
+                  <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">
                     {m.referralCode}
                   </td>
 
-                  <td className="py-4 px-4 font-bold text-[#342A24]">
+                  <td className="py-2.5 px-2.5 font-bold text-[#342A24] whitespace-nowrap">
                     <button
                       onClick={() => setViewingOrdersMember(m)}
-                      className="px-3 py-1.5 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-xs inline-flex items-center gap-1.5 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
+                      className="px-2.5 py-1 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-[10.5px] inline-flex items-center gap-1 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
                       title="Nhấn để xem danh sách đơn hàng chi tiết"
                     >
                       <span>{m.totalOrders} đơn</span>
-                      <Eye className="w-3.5 h-3.5 text-[#2D6338] group-hover:scale-110 transition-transform" />
+                      <Eye className="w-3 h-3 text-[#2D6338] group-hover:scale-110 transition-transform" />
                     </button>
                   </td>
 
-                  <td className="py-4 px-4">
-                    <MoneyDisplay amount={m.totalRevenue} className="font-extrabold text-[#1B3622]" />
+                  <td className="py-2.5 px-2.5 whitespace-nowrap">
+                    <MoneyDisplay amount={m.totalRevenue} className="font-extrabold text-[#1B3622] text-xs" />
                   </td>
 
-                  <td className="py-4 px-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => setViewingOrdersMember(m)}
-                        className="px-2.5 py-1.5 rounded-xl border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        className="px-2 py-1 rounded-lg border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
                         title="Xem các đơn hàng đã giới thiệu"
                       >
-                        <Eye className="w-3.5 h-3.5 text-[#2D6338]" />
+                        <Eye className="w-3 h-3 text-[#2D6338]" />
                         <span className="hidden sm:inline">Xem đơn</span>
                       </button>
 
                       <button
                         onClick={() => handleCopy(m.referralCode)}
-                        className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         {copiedCode === m.referralCode ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-[#2D6338]" />
-                            <span className="text-[#2D6338]">Đã copy</span>
+                            <Check className="w-3 h-3 text-[#2D6338]" />
+                            <span className="text-[#2D6338]">Đã chép</span>
                           </>
                         ) : (
                           <>
-                            <Copy className="w-3.5 h-3.5 text-[#7E7068]" />
-                            <span>Copy Link</span>
+                            <Copy className="w-3 h-3 text-[#7E7068]" />
+                            <span>Link</span>
                           </>
                         )}
                       </button>
@@ -259,10 +259,10 @@ export default function AdminMembersPage() {
                       {m.memberId !== "mem-0" && (
                         <button
                           onClick={() => setDeletingMember(m)}
-                          className="p-1.5 rounded-xl border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
+                          className="p-1 rounded-lg border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
                           title="Thu hồi quyền thành viên"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       )}
                     </div>

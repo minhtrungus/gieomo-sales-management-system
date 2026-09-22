@@ -7,13 +7,29 @@ import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
 import type { OrderStatus } from "@/types/database";
-import { Search, Plus, Filter, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState(MOCK_ORDERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
+  const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
+
+  const handleCopyAddress = (e: React.MouseEvent, ord: (typeof MOCK_ORDERS)[0]) => {
+    e.stopPropagation();
+    const addressParts = [
+      ord.recipient_name ? `Người nhận: ${ord.recipient_name}` : (ord.buyer_name ? `Người nhận: ${ord.buyer_name}` : null),
+      ord.recipient_phone ? `SĐT: ${ord.recipient_phone}` : (ord.buyer_phone ? `SĐT: ${ord.buyer_phone}` : null),
+      ord.address_detail,
+      ord.district,
+      ord.province,
+    ].filter(Boolean);
+    const fullText = addressParts.join(" - ");
+    navigator.clipboard.writeText(fullText);
+    setCopiedAddressId(ord.order_id);
+    setTimeout(() => setCopiedAddressId(null), 2000);
+  };
 
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     orderId: string;
@@ -45,7 +61,7 @@ export default function AdminOrdersPage() {
       if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) return false;
     }
     if (
-      searchQuery.trim() !== "" &&
+      searchQuery &&
       !ord.order_code.toLowerCase().includes(searchQuery.toLowerCase()) &&
       !ord.buyer_name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
       !ord.buyer_phone?.includes(searchQuery) &&
@@ -56,140 +72,137 @@ export default function AdminOrdersPage() {
     return true;
   });
 
-  const formatDateTime = (dateStr?: string | null) => {
-    if (!dateStr) return "-";
-    try {
-      const d = new Date(dateStr);
-      const hours = String(d.getHours()).padStart(2, "0");
-      const minutes = String(d.getMinutes()).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${hours}:${minutes} ${day}/${month}/${year}`;
-    } catch {
-      return dateStr;
-    }
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso);
+    const time = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    const date = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return `${time} ${date}`;
   };
 
   return (
     <div className="space-y-6">
-      {/* Page Title & CTA */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-heading font-extrabold text-2xl text-[#231B16]">
-            Quản lý đơn hàng
+            Danh sách đơn hàng
           </h1>
           <p className="text-xs text-[#7E7068] mt-0.5">
-            Danh sách tất cả đơn hàng gây quỹ từ website và thành viên chốt đơn.
+            Quản lý toàn bộ {orders.length} đơn hàng, trạng thái thanh toán và người giới thiệu.
           </p>
         </div>
 
         <Link
           href="/admin/orders/create"
-          className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
+          className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95"
         >
           <Plus className="w-4 h-4" />
-          <span>Nhập đơn hộ</span>
+          <span>Tạo đơn tại quầy / Bán trực tiếp</span>
         </Link>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Mã đơn GM-..., SĐT, tên khách, người giới thiệu..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
-            />
+      {/* Filter & Search Bar */}
+      <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#A89B92]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+            className="w-full pl-9 pr-4 py-2 rounded-2xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Lọc theo Quen qua ai */}
+          <div className="flex items-center gap-1 bg-[#FFFDF9] border border-[#F0E5D8] rounded-2xl px-3 py-1.5 text-xs">
+            <span className="text-[#7E7068] font-bold whitespace-nowrap">Quen qua:</span>
+            <select
+              value={introducerFilter}
+              onChange={(e) => setIntroducerFilter(e.target.value)}
+              className="bg-transparent font-extrabold text-[#1B3622] outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả nguồn đơn</option>
+              <option value="LAN">Mai Lan (MAM-LAN)</option>
+              <option value="QUANG">Minh Quang (MAM-QUANG)</option>
+              <option value="ADMIN">BTC Mầm Mơ (MAM-ADMIN)</option>
+              <option value="direct">Trực tiếp qua Web</option>
+            </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-            {/* Introducer / Referral Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[#5C4D44] hidden sm:inline">Quen qua:</span>
-              <select
-                value={introducerFilter}
-                onChange={(e) => setIntroducerFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-[#F0E5D8] bg-white text-xs font-semibold text-gray-800 outline-none hover:border-[#FFB98A]"
-              >
-                <option value="all">Tất cả người giới thiệu</option>
-                <option value="MAM-LAN">Mai Lan (MAM-LAN)</option>
-                <option value="MAM-QUANG">Trần Minh Quang (MAM-QUANG)</option>
-                <option value="MAM-ADMIN">BTC Mầm Mơ (MAM-ADMIN)</option>
-                <option value="direct">Trực tiếp (Website)</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-4 h-4 text-gray-500" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-[#F0E5D8] bg-white text-xs font-semibold text-gray-800 outline-none hover:border-[#FFB98A]"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="pending">Chờ xác nhận</option>
-                <option value="confirmed">Đã xác nhận</option>
-                <option value="processing">Đang chuẩn bị</option>
-                <option value="shipping">Đang giao</option>
-                <option value="completed">Hoàn thành</option>
-                <option value="cancelled">Đã hủy</option>
-              </select>
-            </div>
+          {/* Lọc theo Trạng thái */}
+          <div className="flex items-center gap-1.5 bg-[#FFFDF9] border border-[#F0E5D8] rounded-2xl px-3 py-1.5 text-xs">
+            <Filter className="w-3.5 h-3.5 text-[#A89B92]" />
+            <span className="text-[#7E7068] font-medium whitespace-nowrap">Trạng thái:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-transparent font-bold text-[#342A24] outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả ({orders.length})</option>
+              <option value="pending">Chờ xác nhận</option>
+              <option value="confirmed">Đã xác nhận</option>
+              <option value="processing">Đang chuẩn bị</option>
+              <option value="shipping">Đang giao</option>
+              <option value="completed">Hoàn thành</option>
+              <option value="cancelled">Đã hủy</option>
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Orders Table */}
+      {/* Orders Table - Scaled for high information density */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-3 text-center w-12">STT</th>
-                <th className="py-3.5 px-4">Mã đơn</th>
-                <th className="py-3.5 px-4">Thời gian đặt</th>
-                <th className="py-3.5 px-4">Khách hàng</th>
-                <th className="py-3.5 px-4">Quen qua ai</th>
-                <th className="py-3.5 px-4">Hình thức / Địa chỉ</th>
-                <th className="py-3.5 px-4">Tổng tiền</th>
-                <th className="py-3.5 px-4">Thanh toán</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4">Thời gian giao</th>
-                <th className="py-3.5 px-4 text-right">Đổi trạng thái</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-2.5">Mã đơn</th>
+                <th className="py-2.5 px-2.5">Thời gian đặt</th>
+                <th className="py-2.5 px-2.5">Khách hàng</th>
+                <th className="py-2.5 px-2.5">Quen qua ai</th>
+                <th className="py-2.5 px-2.5">
+                  <span className="flex items-center gap-1">
+                    <span>Địa điểm nhận</span>
+                    <span className="text-[9px] font-normal normal-case text-emerald-700 bg-emerald-100 px-1 rounded">(Bấm để chép)</span>
+                  </span>
+                </th>
+                <th className="py-2.5 px-2.5">Tổng tiền</th>
+                <th className="py-2.5 px-2.5">Thanh toán</th>
+                <th className="py-2.5 px-2.5">Trạng thái</th>
+                <th className="py-2.5 px-2.5">Thời gian giao</th>
+                <th className="py-2.5 px-2.5 text-right">Đổi trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {filteredOrders.length > 0 ? (
                 filteredOrders.map((ord, idx) => (
                   <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
-                    <td className="py-4 px-3 text-center text-[#7E7068] font-bold text-xs">
+                    <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                       {idx + 1}
                     </td>
 
-                    <td className="py-4 px-4 font-mono font-bold text-[#1B3622]">
+                    <td className="py-2.5 px-2.5 font-mono font-bold text-[#1B3622] whitespace-nowrap">
                       <Link href={`/admin/orders/${ord.order_id}`} className="hover:underline">
                         {ord.order_code}
                       </Link>
                     </td>
 
-                    <td className="py-4 px-4 text-[#7E7068] font-medium whitespace-nowrap">
+                    <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
                       {formatDateTime(ord.created_at)}
                     </td>
 
-                    <td className="py-4 px-4">
-                      <span className="font-semibold text-gray-900 block">{ord.buyer_name}</span>
-                      <span className="text-[11px] text-gray-500">{ord.buyer_phone}</span>
+                    <td className="py-2.5 px-2.5">
+                      <span className="font-semibold text-gray-900 block text-xs">{ord.buyer_name}</span>
+                      <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
                     </td>
 
-                    <td className="py-4 px-4">
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
                       {ord.introducer_info ? (
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
                             ord.introducer_info.includes("LAN")
                               ? "bg-[#BFE9C3]/50 text-[#16381D] border-[#9ed4a3]"
                               : ord.introducer_info.includes("QUANG")
@@ -200,47 +213,64 @@ export default function AdminOrdersPage() {
                           }`}
                         >
                           <span>🌱</span>
-                          <span className="truncate max-w-[140px]">{ord.introducer_info}</span>
+                          <span className="truncate max-w-[120px]">{ord.introducer_info}</span>
                         </span>
                       ) : (
-                        <span className="text-[#A89B92] italic text-[11px]">Trực tiếp (Website)</span>
+                        <span className="text-[#A89B92] italic text-[10px]">Trực tiếp (Website)</span>
                       )}
                     </td>
 
-                    <td className="py-4 px-4 max-w-[180px] truncate">
-                      <span className="font-medium text-gray-800 block">
-                        {ord.delivery_type === "home_delivery" ? "Giao tận nơi" : "Nhận tại điểm"}
-                      </span>
-                      <span className="text-[11px] text-gray-500 truncate block">
-                        {ord.address_detail}, {ord.district}
-                      </span>
+                    <td className="py-2.5 px-2.5 max-w-[170px]">
+                      <div
+                        onClick={(e) => handleCopyAddress(e, ord)}
+                        className="group/addr cursor-pointer p-1 -m-1 rounded-lg hover:bg-[#FFF8EE] border border-transparent hover:border-[#ebd089] transition-all"
+                        title="Nhấn để sao chép thông tin người nhận & địa chỉ giao hàng"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-gray-800 text-[10px] block">
+                            {ord.delivery_type === "home_delivery" ? "🏠 Giao tận nơi" : "📍 Điểm nhận"}
+                          </span>
+                          {copiedAddressId === ord.order_id ? (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-[#16381D] bg-[#BFE9C3] px-1 py-0.2 rounded border border-[#9ed4a3]">
+                              <Check className="w-2.5 h-2.5" /> Đã chép
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] text-[#7E7068] group-hover/addr:text-[#2D6338] bg-gray-50 group-hover/addr:bg-emerald-50 px-1 py-0.2 rounded border border-gray-200 group-hover/addr:border-emerald-200 transition-colors">
+                              <Copy className="w-2.5 h-2.5" /> Chép
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10.5px] text-gray-600 truncate block mt-0.5" title={`${ord.address_detail}, ${ord.district}, ${ord.province}`}>
+                          {ord.address_detail}, {ord.district}
+                        </span>
+                      </div>
                     </td>
 
-                    <td className="py-4 px-4">
-                      <MoneyDisplay amount={ord.final_amount} className="font-bold text-[#1B3622]" />
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <MoneyDisplay amount={ord.final_amount} className="font-bold text-[#1B3622] text-xs" />
                     </td>
 
-                    <td className="py-4 px-4">
-                      <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <Badge variant={ord.payment_status === "paid" ? "success" : "warning"} className="text-[10px] px-2 py-0.5">
                         {PAYMENT_STATUS_LABELS[ord.payment_status]}
                       </Badge>
                     </td>
 
-                    <td className="py-4 px-4">
-                      <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <Badge variant={ord.order_status === "completed" ? "success" : "warning"} className="text-[10px] px-2 py-0.5">
                         {ORDER_STATUS_LABELS[ord.order_status]}
                       </Badge>
                     </td>
 
-                    <td className="py-4 px-4 text-[#7E7068] font-medium whitespace-nowrap">
+                    <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
                       {ord.completed_at ? (
                         formatDateTime(ord.completed_at)
                       ) : (
-                        <span className="text-[#A89B92] italic">Chưa hoàn thành</span>
+                        <span className="text-[#A89B92] italic text-[10px]">Chưa xong</span>
                       )}
                     </td>
 
-                    <td className="py-4 px-4 text-right">
+                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                       <select
                         value={ord.order_status}
                         onChange={(e) =>
@@ -251,7 +281,7 @@ export default function AdminOrdersPage() {
                             buyerName: ord.buyer_name || "Khách hàng",
                           })
                         }
-                        className="px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs bg-white font-semibold outline-none cursor-pointer hover:border-[#FFB98A]"
+                        className="px-2 py-1 rounded-xl border border-[#F0E5D8] text-[10.5px] bg-white font-semibold outline-none cursor-pointer hover:border-[#FFB98A]"
                       >
                         <option value="pending">Chờ xác nhận</option>
                         <option value="confirmed">Đã xác nhận</option>
@@ -265,7 +295,7 @@ export default function AdminOrdersPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={11} className="py-8 text-center text-gray-500 font-medium">
                     Không tìm thấy đơn hàng phù hợp.
                   </td>
                 </tr>

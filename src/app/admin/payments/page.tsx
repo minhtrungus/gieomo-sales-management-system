@@ -59,51 +59,51 @@ export default function AdminPaymentsPage() {
 
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-3 text-center w-12">STT</th>
-                <th className="py-3.5 px-4">Mã đơn</th>
-                <th className="py-3.5 px-4">Mã giao dịch VietQR</th>
-                <th className="py-3.5 px-4">Số tiền</th>
-                <th className="py-3.5 px-4">Thời gian giao dịch</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4 text-right">Duyệt thanh toán</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
+                <th className="py-2.5 px-3">Mã đơn</th>
+                <th className="py-2.5 px-3">Mã GD VietQR</th>
+                <th className="py-2.5 px-3">Số tiền</th>
+                <th className="py-2.5 px-3">Thời gian GD</th>
+                <th className="py-2.5 px-3">Trạng thái</th>
+                <th className="py-2.5 px-3 text-right">Duyệt thanh toán</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {payments.map((p, idx) => (
                 <tr key={p.paymentId} className="hover:bg-[#FFFDF9] transition-colors">
-                  <td className="py-3.5 px-3 text-center text-[#7E7068] font-bold text-xs">
+                  <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
                     {idx + 1}
                   </td>
-                  <td className="py-3.5 px-4 font-mono font-bold text-[#1B3622]">
+                  <td className="py-2.5 px-3 font-mono font-bold text-[#1B3622] text-xs">
                     {p.orderCode}
                   </td>
-                  <td className="py-3.5 px-4 font-mono text-[#5C4D44]">
+                  <td className="py-2.5 px-3 font-mono text-[#5C4D44] text-[10.5px]">
                     {p.transactionCode}
                   </td>
-                  <td className="py-3.5 px-4 font-extrabold text-[#1B3622]">
+                  <td className="py-2.5 px-3 font-extrabold text-[#1B3622] text-xs">
                     <MoneyDisplay amount={p.amount} />
                   </td>
-                  <td className="py-3.5 px-4 text-[#7E7068] font-medium">
+                  <td className="py-2.5 px-3 text-[#7E7068] font-medium text-[10.5px]">
                     {p.createdAt}
                   </td>
-                  <td className="py-3.5 px-4">
-                    <Badge variant={p.status === "paid" ? "success" : "warning"}>
+                  <td className="py-2.5 px-3">
+                    <Badge variant={p.status === "paid" ? "success" : "warning"} className="text-[10px] px-2 py-0.5">
                       {p.status === "paid" ? "Đã xác nhận" : "Chờ đối soát"}
                     </Badge>
                   </td>
-                  <td className="py-3.5 px-4 text-right">
+                  <td className="py-2.5 px-3 text-right">
                     {p.status === "pending" ? (
                       <button
                         onClick={() => setApprovingPayment(p)}
-                        className="px-3.5 py-1.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer inline-flex items-center gap-1.5 ml-auto"
+                        className="px-2.5 py-1 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-[11px] transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer inline-flex items-center gap-1 ml-auto"
                       >
-                        <Check className="w-3.5 h-3.5" /> Duyệt
+                        <Check className="w-3 h-3" /> Duyệt
                       </button>
                     ) : (
-                      <span className="text-[11px] text-[#2D6338] font-bold">✓ Đã duyệt</span>
+                      <span className="text-[10px] text-[#2D6338] font-bold">✓ Đã duyệt</span>
                     )}
                   </td>
                 </tr>

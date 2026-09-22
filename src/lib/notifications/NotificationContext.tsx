@@ -184,11 +184,18 @@ function generateInitialNotifications(): NotificationItem[] {
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [autoPushEnabled, setAutoPushEnabled] = useState<boolean>(true);
+  const [autoPushEnabled, setAutoPushEnabledState] = useState<boolean>(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  // Load seeds on mount
+  // Load seeds and autoPushEnabled preference on mount
   useEffect(() => {
+    const savedAutoPush = localStorage.getItem("gieomo_admin_auto_push");
+    if (savedAutoPush !== null) {
+      setAutoPushEnabledState(savedAutoPush === "true");
+    } else {
+      setAutoPushEnabledState(false);
+    }
+
     const saved = localStorage.getItem("gieomo_admin_notifications");
     if (saved) {
       try {
@@ -200,6 +207,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
     const initial = generateInitialNotifications();
     setNotifications(initial);
+  }, []);
+
+  const setAutoPushEnabled = useCallback((val: boolean) => {
+    setAutoPushEnabledState(val);
+    localStorage.setItem("gieomo_admin_auto_push", val ? "true" : "false");
   }, []);
 
   // Save to localStorage

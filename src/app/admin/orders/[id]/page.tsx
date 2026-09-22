@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
-import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -16,6 +16,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [orderStatus, setOrderStatus] = useState<OrderStatus>(order.order_status);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order.payment_status);
   const [internalNote, setInternalNote] = useState(order.internal_note || "");
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -68,8 +69,32 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               </div>
 
               <div>
-                <span className="text-gray-500 block">Người nhận hàng:</span>
-                <span className="font-bold text-gray-900 block text-sm">{order.recipient_name}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 block">Người nhận hàng:</span>
+                  <button
+                    onClick={() => {
+                      const fullAddr = `${order.recipient_name ? `${order.recipient_name} - ` : ""}${order.recipient_phone ? `${order.recipient_phone} - ` : ""}${order.address_detail || ""}, ${order.district || ""}, ${order.province || ""}`;
+                      navigator.clipboard.writeText(fullAddr);
+                      setCopiedAddress(true);
+                      setTimeout(() => setCopiedAddress(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200/80 px-2 py-0.5 rounded-lg border border-emerald-300 transition-colors cursor-pointer"
+                    title="Sao chép tên, số điện thoại và địa chỉ giao hàng"
+                  >
+                    {copiedAddress ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-700" />
+                        <span>Đã sao chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-emerald-700" />
+                        <span>Sao chép địa chỉ</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <span className="font-bold text-gray-900 block text-sm mt-0.5">{order.recipient_name}</span>
                 <span className="text-gray-600 block">{order.recipient_phone}</span>
                 <span className="text-gray-500 block mt-1">
                   {order.address_detail}, {order.district}, {order.province}
