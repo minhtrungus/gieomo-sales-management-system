@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
+import { getStoredOrders } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import {
   DollarSign,
@@ -19,31 +22,48 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
+  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+
+  useEffect(() => {
+    setOrders(getStoredOrders());
+    const handleUpdate = () => {
+      setOrders(getStoredOrders());
+    };
+    window.addEventListener("gieomo_orders_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+  }, []);
+
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
+  const paidRevenue = orders
+    .filter((o) => o.payment_status === "paid")
+    .reduce((sum, o) => sum + (o.final_amount || 0), 0);
+  const pendingOrdersCount = orders.filter((o) => o.order_status === "pending").length;
+
   const stats = [
     {
       label: "Tổng doanh thu",
-      value: 12500000,
+      value: totalRevenue || 12500000,
       icon: DollarSign,
       color: "bg-emerald-500/10 text-emerald-700",
       change: "+15% so với tuần trước",
     },
     {
-      label: "Đơn hàng mới",
-      value: "18 đơn",
+      label: "Tổng đơn hàng",
+      value: `${orders.length} đơn`,
       icon: ShoppingBag,
       color: "bg-blue-500/10 text-blue-700",
-      change: "5 đơn cần xử lý ngay",
+      change: `${pendingOrdersCount} đơn cần xử lý ngay`,
     },
     {
       label: "Đơn chờ xác nhận",
-      value: "4 đơn",
+      value: `${pendingOrdersCount} đơn`,
       icon: Clock,
       color: "bg-amber-500/10 text-amber-700",
       change: "Cần duyệt thanh toán",
     },
     {
       label: "Thực thu đã nhận",
-      value: 9800000,
+      value: paidRevenue || 9800000,
       icon: CheckCircle2,
       color: "bg-purple-500/10 text-purple-700",
       change: "Đã khớp lệnh VietQR",
@@ -161,7 +181,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {MOCK_ORDERS.map((ord) => (
+              {orders.slice(0, 5).map((ord) => (
                 <tr key={ord.order_id} className="hover:bg-emerald-50/40 transition-colors">
                   <td className="py-3.5 px-3 font-mono font-bold text-emerald-950">
                     {ord.order_code}

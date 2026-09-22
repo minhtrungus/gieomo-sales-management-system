@@ -1,45 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Check, X } from "lucide-react";
+import { getStoredPayments, approveStoredPayment, type PaymentRecord } from "@/lib/data/orderStore";
 
 export default function AdminPaymentsPage() {
-  const [payments, setPayments] = useState([
-    {
-      paymentId: "pay-1",
-      orderCode: "GM-260901",
-      amount: 145000,
-      paymentMethod: "banking",
-      transactionCode: "MB-8891231",
-      status: "paid",
-      createdAt: "14:30 21/09/2026",
-    },
-    {
-      paymentId: "pay-2",
-      orderCode: "GM-260902",
-      amount: 85000,
-      paymentMethod: "banking",
-      transactionCode: "MB-8891235",
-      status: "pending",
-      createdAt: "09:15 22/09/2026",
-    },
-    {
-      paymentId: "pay-3",
-      orderCode: "GM-260904",
-      amount: 145000,
-      paymentMethod: "banking",
-      transactionCode: "MB-8891240",
-      status: "pending",
-      createdAt: "15:20 22/09/2026",
-    },
-  ]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
 
-  const [approvingPayment, setApprovingPayment] = useState<(typeof payments)[0] | null>(null);
+  useEffect(() => {
+    setPayments(getStoredPayments());
+    const handleUpdate = () => {
+      setPayments(getStoredPayments());
+    };
+    window.addEventListener("gieomo_orders_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+  }, []);
+
+  const [approvingPayment, setApprovingPayment] = useState<PaymentRecord | null>(null);
 
   const handleConfirmApprove = () => {
     if (!approvingPayment) return;
+    approveStoredPayment(approvingPayment.paymentId);
     setPayments((prev) =>
       prev.map((p) => (p.paymentId === approvingPayment.paymentId ? { ...p, status: "paid" } : p))
     );

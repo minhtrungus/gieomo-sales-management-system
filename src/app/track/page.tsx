@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CUSTOMER_TIMELINE_STEPS, ORDER_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
+import { getStoredOrders } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 
 function TrackContent() {
@@ -28,10 +29,16 @@ function TrackContent() {
     setHasSearched(true);
 
     const queryCode = orderCode.trim().toUpperCase();
+    const orders = getStoredOrders();
 
-    // Look up in mock data or sample order
-    if (queryCode === "GM-260901" || queryCode.startsWith("GM-")) {
-      setFoundOrder(MOCK_ORDERS[0]);
+    const matched = orders.find(
+      (o) =>
+        (queryCode && o.order_code.toUpperCase() === queryCode) ||
+        (phoneNumber.trim() && (o.buyer_phone === phoneNumber.trim() || o.recipient_phone === phoneNumber.trim()))
+    );
+
+    if (matched) {
+      setFoundOrder(matched);
     } else {
       setFoundOrder(null);
       setErrorMsg("Không tìm thấy đơn hàng với thông tin trên. Vui lòng kiểm tra lại mã đơn hoặc số điện thoại.");

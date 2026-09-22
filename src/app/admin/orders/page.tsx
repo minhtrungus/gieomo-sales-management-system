@@ -1,22 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
-import type { OrderStatus } from "@/types/database";
+import { getStoredOrders, updateStoredOrderStatus } from "@/lib/data/orderStore";
+import type { Order, OrderStatus } from "@/types/database";
 import { Search, Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState(MOCK_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
 
-  const handleCopyAddress = (e: React.MouseEvent, ord: (typeof MOCK_ORDERS)[0]) => {
+  useEffect(() => {
+    setOrders(getStoredOrders());
+    const handleUpdate = () => {
+      setOrders(getStoredOrders());
+    };
+    window.addEventListener("gieomo_orders_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+  }, []);
+
+  const handleCopyAddress = (e: React.MouseEvent, ord: Order) => {
     e.stopPropagation();
     const addressParts = [
       ord.recipient_name ? `Người nhận: ${ord.recipient_name}` : (ord.buyer_name ? `Người nhận: ${ord.buyer_name}` : null),
@@ -40,6 +50,7 @@ export default function AdminOrdersPage() {
 
   const handleConfirmStatusChange = () => {
     if (!pendingStatusChange) return;
+    updateStoredOrderStatus(pendingStatusChange.orderId, pendingStatusChange.newStatus);
     setOrders((prev) =>
       prev.map((o) =>
         o.order_id === pendingStatusChange.orderId

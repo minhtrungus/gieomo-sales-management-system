@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
+import { saveNewOrder } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -118,12 +120,44 @@ export default function CheckoutPage() {
 
     // Generate Order Code
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+    const newOrderId = `ord-${Date.now()}`;
+
+    const newOrderRecord: Order = {
+      order_id: newOrderId,
+      order_code: randomCode,
+      buyer_name: formData.buyer_name,
+      buyer_phone: formData.buyer_phone,
+      buyer_email: formData.buyer_email || "",
+      recipient_name: differentRecipient ? formData.recipient_name : formData.buyer_name,
+      recipient_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
+      delivery_type: deliveryType,
+      address_detail: deliveryType === "home_delivery" ? formData.address_detail : "Điểm hẹn nhận hàng",
+      district: deliveryType === "home_delivery" ? formData.district : "TP. Hồ Chí Minh",
+      province: formData.province || "TP. Hồ Chí Minh",
+      payment_method: paymentMethod,
+      payment_status: "pending",
+      order_status: "pending",
+      delivery_status: "not_ready",
+      subtotal: subtotal,
+      discount_amount: discountAmount,
+      shipping_fee: shippingFee,
+      final_amount: finalAmount,
+      total_cost: Math.round(finalAmount * 0.4),
+      introducer_info: formData.introducer_info ? formData.introducer_info : "Trực tiếp (Website)",
+      referral_code: formData.introducer_info ? formData.introducer_info.toUpperCase() : null,
+      customer_note: formData.note || "",
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    saveNewOrder(newOrderRecord);
 
     // Simulate order submission API call
     setTimeout(() => {
       clearCart();
       router.push(`/order/success?code=${randomCode}&payment=${paymentMethod}&amount=${finalAmount}`);
-    }, 800);
+    }, 600);
   };
 
   if (items.length === 0) {

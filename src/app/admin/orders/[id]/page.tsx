@@ -1,22 +1,51 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
+import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus } from "@/lib/data/orderStore";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
-  const order = MOCK_ORDERS.find((o) => o.order_id === resolvedParams.id) || MOCK_ORDERS[0];
+  const [order, setOrder] = useState(() => {
+    const stored = getStoredOrders();
+    return (
+      stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
+      MOCK_ORDERS.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
+      MOCK_ORDERS[0]
+    );
+  });
 
   const [orderStatus, setOrderStatus] = useState<OrderStatus>(order.order_status);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order.payment_status);
   const [internalNote, setInternalNote] = useState(order.internal_note || "");
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [isSavedNotice, setIsSavedNotice] = useState(false);
+
+  useEffect(() => {
+    const stored = getStoredOrders();
+    const found =
+      stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
+      MOCK_ORDERS.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id);
+    if (found) {
+      setOrder(found);
+      setOrderStatus(found.order_status);
+      setPaymentStatus(found.payment_status);
+      setInternalNote(found.internal_note || "");
+    }
+  }, [resolvedParams.id]);
+
+  const handleSaveChanges = () => {
+    updateStoredOrderStatus(order.order_id, orderStatus);
+    updateStoredPaymentStatus(order.order_id, paymentStatus);
+    setIsSavedNotice(true);
+    setTimeout(() => setIsSavedNotice(false), 2500);
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -42,12 +71,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <button
-          onClick={() => {
-            alert("Đã lưu cập nhật đơn hàng thành công!");
-          }}
-          className="px-4 py-2 rounded-xl bg-soft-green text-emerald-950 font-bold text-xs hover:bg-emerald-300 transition-colors shadow-xs"
+          onClick={handleSaveChanges}
+          className="px-4 py-2 rounded-xl bg-soft-green text-emerald-950 font-bold text-xs hover:bg-emerald-300 transition-colors shadow-xs flex items-center gap-1.5"
         >
-          Lưu thay đổi
+          {isSavedNotice ? <Check className="w-4 h-4 text-emerald-700" /> : null}
+          {isSavedNotice ? "Đã lưu!" : "Lưu thay đổi"}
         </button>
       </div>
 

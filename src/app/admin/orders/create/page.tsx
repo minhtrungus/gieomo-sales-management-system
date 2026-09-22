@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { saveNewOrder } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 export default function AdminCreateOrderPage() {
@@ -69,6 +71,36 @@ export default function AdminCreateOrderPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+    const newOrderId = `ord-${Date.now()}`;
+    const newOrder: Order = {
+      order_id: newOrderId,
+      order_code: randomCode,
+      buyer_name: customerName || "Khách mua tại quầy",
+      buyer_phone: customerPhone || "0900000000",
+      buyer_email: "",
+      recipient_name: customerName || "Khách mua tại quầy",
+      recipient_phone: customerPhone || "0900000000",
+      delivery_type: deliveryType as any,
+      address_detail: addressDetail || "Tại điểm hẹn",
+      district: district || "Quận 1",
+      province: province,
+      payment_method: paymentMethod as any,
+      payment_status: paymentMethod === "banking" ? "pending" : "pending",
+      order_status: "pending",
+      delivery_status: "not_ready",
+      subtotal,
+      discount_amount: 0,
+      shipping_fee: shippingFee,
+      final_amount: finalAmount,
+      total_cost: Math.round(finalAmount * 0.4),
+      introducer_info: memberId ? `Thành viên (${memberId})` : "Ban tổ chức nhập đơn",
+      created_by_member_id: memberId || null,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      updated_at: new Date().toISOString(),
+    };
+    saveNewOrder(newOrder);
     router.push("/admin/orders");
   };
 
