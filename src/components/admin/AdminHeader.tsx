@@ -1,70 +1,41 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Menu, Bell, Search, ExternalLink, Check, Trash2, ShoppingBag, CreditCard, AlertTriangle, UserCheck, X } from "lucide-react";
+import {
+  Menu,
+  Bell,
+  ExternalLink,
+  Check,
+  ShoppingBag,
+  CreditCard,
+  AlertTriangle,
+  UserCheck,
+  X,
+  Inbox,
+  ChevronRight,
+} from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { useRouter, usePathname } from "next/navigation";
+import { useNotifications, NotificationItem } from "@/lib/notifications/NotificationContext";
 
 interface AdminHeaderProps {
   onOpenSidebar: () => void;
   title?: string;
 }
 
-interface NotificationItem {
-  id: string;
-  type: "order" | "payment" | "stock" | "member";
-  title: string;
-  desc: string;
-  time: string;
-  read: boolean;
-  link: string;
-}
-
 export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: "notif-1",
-      type: "order",
-      title: "Đơn hàng mới #GM-1004",
-      desc: "Khách hàng Trần Thu Hà vừa đặt 2 sản phẩm (245.000đ)",
-      time: "5 phút trước",
-      read: false,
-      link: "/admin/orders",
-    },
-    {
-      id: "notif-2",
-      type: "payment",
-      title: "Chờ xác nhận VietQR",
-      desc: "Giao dịch 245.000đ nội dung GM1004 đang chờ đối soát",
-      time: "12 phút trước",
-      read: false,
-      link: "/admin/payments",
-    },
-    {
-      id: "notif-3",
-      type: "stock",
-      title: "Cảnh báo tồn kho thấp",
-      desc: "Kẹp tóc Nút Áo (GM-KEPTOC-01) chỉ còn 3 sản phẩm trong kho",
-      time: "1 giờ trước",
-      read: false,
-      link: "/admin/inventory",
-    },
-    {
-      id: "notif-4",
-      type: "member",
-      title: "Thành viên chốt đơn",
-      desc: "Tình nguyện viên Mai Lan vừa chốt đơn qua mã MAM-LAN",
-      time: "2 giờ trước",
-      read: true,
-      link: "/admin/members",
-    },
-  ]);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    deleteNotifications,
+  } = useNotifications();
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -77,19 +48,41 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const getRouteInfo = (path: string) => {
+    if (path.includes("/admin/notifications"))
+      return { title: "Hộp thư thông báo", breadcrumb: "Hộp thư hệ thống (Gmail View)" };
+    if (path.includes("/admin/orders/create"))
+      return { title: "Tạo đơn hàng hộ", breadcrumb: "Đơn hàng / Tạo đơn" };
+    if (path.includes("/admin/orders"))
+      return { title: "Quản lý đơn hàng", breadcrumb: "Đơn hàng & Vận chuyển" };
+    if (path.includes("/admin/products/new"))
+      return { title: "Thêm sản phẩm mới", breadcrumb: "Sản phẩm / Tạo mới" };
+    if (path.includes("/admin/products"))
+      return { title: "Kho sản phẩm", breadcrumb: "Sản phẩm & Danh mục" };
+    if (path.includes("/admin/combos"))
+      return { title: "Quản lý Set Combo", breadcrumb: "Sản phẩm / Set Combo" };
+    if (path.includes("/admin/inventory"))
+      return { title: "Kiểm kho & Nhập hàng", breadcrumb: "Kho hàng / Nhập xuất" };
+    if (path.includes("/admin/customers"))
+      return { title: "Danh sách khách hàng", breadcrumb: "Khách hàng & Liên hệ" };
+    if (path.includes("/admin/payments"))
+      return { title: "Xác nhận thanh toán", breadcrumb: "Tài chính / Đối soát VietQR" };
+    if (path.includes("/admin/vouchers"))
+      return { title: "Mã giảm giá", breadcrumb: "Khuyến mãi / Voucher" };
+    if (path.includes("/admin/members"))
+      return { title: "Thành viên & Referral", breadcrumb: "Ban Tổ Chức / Tiếp thị" };
+    if (path.includes("/admin/reports"))
+      return { title: "Báo cáo doanh thu", breadcrumb: "Thống kê / Gây quỹ" };
+    if (path.includes("/admin/settings"))
+      return { title: "Cài đặt hệ thống", breadcrumb: "Cấu hình & Thương hiệu" };
+    return { title: "Tổng quan (Dashboard)", breadcrumb: "Bảng điều khiển trung tâm" };
   };
 
-  const clearNotification = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
+  const routeInfo = getRouteInfo(pathname);
+  const displayTitle = title || routeInfo.title;
 
   const handleNotificationClick = (item: NotificationItem) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
-    );
+    markAsRead([item.id]);
     setNotificationsOpen(false);
     router.push(item.link);
   };
@@ -104,12 +97,27 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
         return <AlertTriangle className="w-4 h-4 text-[#DD6B20]" />;
       case "member":
         return <UserCheck className="w-4 h-4 text-[#3182CE]" />;
+      default:
+        return <Bell className="w-4 h-4 text-[#2D6338]" />;
     }
   };
 
+  const formatShortTime = (isoString: string) => {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return "Vừa xong";
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    return new Date(isoString).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+  };
+
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white border-b border-[#F0E5D8] px-4 sm:px-6 flex items-center justify-between">
-      {/* Left side */}
+    <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-[#F0E5D8] px-4 sm:px-6 flex items-center justify-between shadow-2xs">
+      {/* Left side: Mobile Menu + Dynamic Breadcrumbs & Page Title */}
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenSidebar}
@@ -119,32 +127,30 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
           <Menu className="w-5 h-5" />
         </button>
 
-        <h1 className="font-heading font-extrabold text-lg text-[#231B16] truncate">
-          {title || "Quản trị Gieo Mơ"}
-        </h1>
+        <div>
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-[#A89B92] leading-none mb-1">
+            <span>Admin Gieo Mơ</span>
+            <ChevronRight className="w-3 h-3 text-[#D1C6BD]" />
+            <span className="text-[#7E7068] font-semibold">{routeInfo.breadcrumb}</span>
+          </div>
+          <h1 className="font-heading font-extrabold text-base sm:text-lg text-[#231B16] leading-none tracking-tight">
+            {displayTitle}
+          </h1>
+        </div>
       </div>
 
-      {/* Right side */}
-      <div className="flex items-center gap-3">
+      {/* Right side: Clean Action Cluster (View Storefront + Notification Bell + Admin Profile) */}
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* Quick View Public Storefront Link */}
         <Link
           href="/"
           target="_blank"
-          className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#FFF8EE] text-[#16381D] text-xs font-bold hover:bg-[#BFE9C3]/50 transition-colors border border-[#F0E5D8]"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF8EE] text-[#16381D] text-xs font-bold hover:bg-[#BFE9C3]/50 transition-colors border border-[#F0E5D8]"
+          title="Mở trang bán hàng công khai trong tab mới"
         >
-          <span>Trang bán hàng</span>
+          <span className="hidden sm:inline">Trang bán hàng</span>
           <ExternalLink className="w-3.5 h-3.5 text-[#2D6338]" />
         </Link>
-
-        {/* Search */}
-        <div className="relative hidden md:block w-48 lg:w-64">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A89B92]" />
-          <input
-            type="text"
-            placeholder="Tìm đơn hàng, sản phẩm..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-[#F0E5D8] focus:border-[#FFB98A] outline-none bg-[#FFFDF9]"
-          />
-        </div>
 
         {/* Notifications Dropdown Container */}
         <div className="relative" ref={dropdownRef}>
@@ -180,7 +186,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
 
                 {unreadCount > 0 && (
                   <button
-                    onClick={markAllAsRead}
+                    onClick={() => markAsRead(notifications.filter((n) => !n.read).map((n) => n.id))}
                     className="text-[11px] font-bold text-[#2D6338] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -189,10 +195,10 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
                 )}
               </div>
 
-              {/* Notification List */}
+              {/* Notification List Preview (Top 5 items) */}
               <div className="max-h-80 overflow-y-auto divide-y divide-[#F0E5D8] scrollbar-none">
                 {notifications.length > 0 ? (
-                  notifications.map((item) => (
+                  notifications.slice(0, 5).map((item) => (
                     <div
                       key={item.id}
                       onClick={() => handleNotificationClick(item)}
@@ -204,12 +210,18 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
                         {getIcon(item.type)}
                       </div>
 
-                      <div className="flex-1 space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold ${!item.read ? "text-[#231B16]" : "text-[#5C4D44]"}`}>
+                      <div className="flex-1 min-w-0 space-y-0.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <span
+                            className={`text-xs font-bold truncate ${
+                              !item.read ? "text-[#231B16]" : "text-[#5C4D44]"
+                            }`}
+                          >
                             {item.title}
                           </span>
-                          <span className="text-[10px] text-[#A89B92]">{item.time}</span>
+                          <span className="text-[10px] text-[#A89B92] shrink-0">
+                            {formatShortTime(item.created_at)}
+                          </span>
                         </div>
                         <p className="text-[11px] text-[#7E7068] leading-relaxed line-clamp-2">
                           {item.desc}
@@ -217,7 +229,10 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
                       </div>
 
                       <button
-                        onClick={(e) => clearNotification(item.id, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNotifications([item.id]);
+                        }}
                         className="text-[#A89B92] hover:text-red-500 p-1 rounded-lg transition-colors shrink-0"
                         title="Xóa thông báo"
                       >
@@ -232,18 +247,40 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
                 )}
               </div>
 
-              {/* Footer */}
-              <div className="p-2.5 bg-[#FFF8EE] border-t border-[#F0E5D8] text-center">
+              {/* Footer: Direct Link to Gmail-style Notifications Page */}
+              <div className="p-3 bg-[#FFF8EE] border-t border-[#F0E5D8] flex items-center justify-center">
                 <Link
-                  href="/admin/orders"
+                  href="/admin/notifications"
                   onClick={() => setNotificationsOpen(false)}
-                  className="text-xs font-bold text-[#2D6338] hover:underline"
+                  className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#2D6338] hover:text-[#1E4525] hover:underline"
                 >
-                  Xem tất cả đơn hàng & giao dịch ➔
+                  <Inbox className="w-4 h-4" />
+                  <span>Mở toàn bộ hộp thư thông báo (50/trang kiểu Gmail) ➔</span>
                 </Link>
               </div>
             </div>
           )}
+        </div>
+
+        {/* Admin Profile Pill */}
+        <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-[#F0E5D8]">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#BFE9C3] shadow-2xs bg-white shrink-0">
+            <Image
+              src="/images/logo_gieo mơ.jpg"
+              alt="Admin BTC"
+              fill
+              className="object-cover"
+            />
+          </div>
+          <div className="hidden md:block text-left leading-tight">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#231B16]">Admin Mầm Mơ</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Online" />
+            </div>
+            <span className="text-[10px] text-[#2D6338] font-bold bg-[#BFE9C3]/40 px-1.5 py-0.2 rounded-md">
+              Ban Tổ Chức
+            </span>
+          </div>
         </div>
       </div>
     </header>

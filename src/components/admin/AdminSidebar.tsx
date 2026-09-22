@@ -17,7 +17,9 @@ import {
   LogOut,
   X,
   Warehouse,
+  Bell,
 } from "lucide-react";
+import { useNotifications } from "@/lib/notifications/NotificationContext";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -26,9 +28,11 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
+  const { unreadCount } = useNotifications();
 
   const menuItems = [
     { href: "/admin/dashboard", label: "Tổng quan (Dashboard)", icon: LayoutDashboard },
+    { href: "/admin/notifications", label: "Hộp thư thông báo", icon: Bell, badge: unreadCount },
     { href: "/admin/orders", label: "Quản lý đơn hàng", icon: ShoppingBag },
     { href: "/admin/orders/create", label: "Nhập đơn hộ", icon: Package },
     { href: "/admin/products", label: "Sản phẩm", icon: Boxes },
@@ -102,8 +106,19 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     : "text-[#C8BEB2] hover:bg-[#203728] hover:text-white"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-[#16381D]" : "text-[#BFE9C3]"}`} />
-                <span>{item.label}</span>
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-[#16381D]" : "text-[#BFE9C3]"}`} />
+                <span className="truncate">{item.label}</span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span
+                    className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      isActive
+                        ? "bg-[#16381D] text-[#BFE9C3]"
+                        : "bg-[#FFB98A] text-[#4A2603]"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
