@@ -43,7 +43,7 @@ export function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-heading font-bold text-white text-sm mb-4 flex items-center gap-2">
+            <h3 className="font-heading font-bold text-white !text-white text-sm mb-4 flex items-center gap-2" style={{ color: '#FFFFFF' }}>
               <span className="w-2 h-2 rounded-full bg-[#BFE9C3]" />
               Khám phá Gieo Mơ
             </h3>
@@ -73,7 +73,7 @@ export function Footer() {
 
           {/* Support & Policies */}
           <div>
-            <h3 className="font-heading font-bold text-white text-sm mb-4 flex items-center gap-2">
+            <h3 className="font-heading font-bold text-white !text-white text-sm mb-4 flex items-center gap-2" style={{ color: '#FFFFFF' }}>
               <span className="w-2 h-2 rounded-full bg-[#FFE7A8]" />
               Hỗ trợ & Chính sách
             </h3>
@@ -103,7 +103,7 @@ export function Footer() {
 
           {/* Contact Details */}
           <div>
-            <h3 className="font-heading font-bold text-white text-sm mb-4 flex items-center gap-2">
+            <h3 className="font-heading font-bold text-white !text-white text-sm mb-4 flex items-center gap-2" style={{ color: '#FFFFFF' }}>
               <span className="w-2 h-2 rounded-full bg-[#FFD1E1]" />
               Kết nối với Mầm
             </h3>

@@ -74,12 +74,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Heading font with warm chocolate tone */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  color: var(--color-title);
-  line-height: 1.25;
+@layer base {
+  /* Default heading font with warm chocolate tone */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--color-title);
+    line-height: 1.25;
+  }
+}
+
+/* Ensure footer headings are always crisp white */
+footer h1, footer h2, footer h3, footer h4, footer h5, footer h6 {
+  color: #FFFFFF !important;
 }
 
 /* ===========================
