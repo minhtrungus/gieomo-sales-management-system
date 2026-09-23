@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
-import { saveNewOrder } from "@/lib/data/orderStore";
-import type { Order } from "@/types/database";
+import { saveNewOrder, getStoredPickupPoints } from "@/lib/data/orderStore";
+import type { Order, PickupPoint } from "@/types/database";
 
 function CheckoutContent() {
   const router = useRouter();
@@ -22,7 +22,8 @@ function CheckoutContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [differentRecipient, setDifferentRecipient] = useState(false);
-  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "pickup_point" | "self_pickup">("home_delivery");
+  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "pickup_point" | "member_delivery" | "self_pickup">("home_delivery");
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"banking" | "cod">("banking");
 
   // Form Fields
@@ -54,7 +55,15 @@ function CheckoutContent() {
     }
   }, [searchParams]);
 
-  const shippingFee = deliveryType === "self_pickup" ? 0 : subtotal >= 200000 ? 0 : 25000;
+  useEffect(() => {
+    const pts = getStoredPickupPoints().filter((p) => p.status === "active");
+    setPickupPoints(pts);
+    if (pts.length > 0 && !formData.pickup_point_id) {
+      setFormData((prev) => ({ ...prev, pickup_point_id: pts[0].pickup_point_id }));
+    }
+  }, []);
+
+  const shippingFee = deliveryType !== "home_delivery" ? 0 : subtotal >= 200000 ? 0 : 25000;
 
   const calculateDiscount = () => {
     const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
@@ -154,6 +163,11 @@ function CheckoutContent() {
       }
     }
 
+    if (deliveryType === "member_delivery" && !formData.introducer_info.trim()) {
+      setErrors({ introducer_info: "Vui lòng nhập tên hoặc mã thành viên Mầm Mơ bạn quen để nhận hàng" });
+      return;
+    }
+
     // Validated! Open confirmation modal
     setIsConfirmModalOpen(true);
   };
@@ -175,7 +189,14 @@ function CheckoutContent() {
       recipient_name: differentRecipient ? formData.recipient_name : formData.buyer_name,
       recipient_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
       delivery_type: deliveryType,
-      address_detail: deliveryType === "home_delivery" ? formData.address_detail : "Điểm hẹn nhận hàng",
+      address_detail:
+        deliveryType === "home_delivery"
+          ? formData.address_detail
+          : deliveryType === "pickup_point"
+          ? (pickupPoints.find((p) => p.pickup_point_id === formData.pickup_point_id)?.name || "Điểm hẹn nhận hàng")
+          : deliveryType === "member_delivery"
+          ? `Giao qua tay thành viên: ${formData.introducer_info}`
+          : "Tự đến lấy tại văn phòng BTC",
       district: deliveryType === "home_delivery" ? formData.district : "TP. Hồ Chí Minh",
       province: formData.province || "TP. Hồ Chí Minh",
       payment_method: paymentMethod,
@@ -197,12 +218,36 @@ function CheckoutContent() {
 
     saveNewOrder(newOrderRecord);
 
-    // Save to local customer history
+    // Save to local customer history and update customers store
     try {
       const myRaw = localStorage.getItem("gieomo_my_order_codes");
       const myCodes = myRaw ? JSON.parse(myRaw) : [];
       localStorage.setItem("gieomo_my_order_codes", JSON.stringify([randomCode, ...myCodes.filter((c: string) => c !== randomCode)]));
       localStorage.setItem("gieomo_customer_profile", JSON.stringify({ name: formData.buyer_name, phone: formData.buyer_phone }));
+
+      // Auto-sync customer record
+      const custRaw = localStorage.getItem("gieomo_customers");
+      const custList = custRaw ? JSON.parse(custRaw) : [];
+      const cleanPhone = formData.buyer_phone.replace(/\s+/g, "");
+      const existingIdx = custList.findIndex((c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone);
+      if (existingIdx >= 0) {
+        custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 1) + 1;
+        custList[existingIdx].totalSpent = (custList[existingIdx].totalSpent || 0) + finalAmount;
+        if (formData.buyer_name) custList[existingIdx].fullName = formData.buyer_name;
+        if (formData.buyer_email) custList[existingIdx].email = formData.buyer_email;
+      } else {
+        custList.unshift({
+          customerId: `cust-${Date.now()}`,
+          fullName: formData.buyer_name,
+          phone: formData.buyer_phone,
+          email: formData.buyer_email || "",
+          address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.district}, ${formData.province}` : "Nhận tại điểm Mầm Mơ",
+          totalOrders: 1,
+          totalSpent: finalAmount,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      localStorage.setItem("gieomo_customers", JSON.stringify(custList));
     } catch {
       // ignore
     }
@@ -326,24 +371,25 @@ function CheckoutContent() {
                 <span>2.</span> Hình thức nhận hàng
               </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {[
-                  { id: "home_delivery", label: "Giao tận nơi", desc: "Nội thành 25k / Miễn phí >200k" },
-                  { id: "pickup_point", label: "Nhận tại điểm", desc: "Điểm hẹn Mầm Mơ" },
-                  { id: "self_pickup", label: "Tự đến lấy", desc: "Tại văn phòng BTC" },
+                  { id: "home_delivery", label: "Giao tận nơi", desc: "Nội thành 25k (Freeship >200k)" },
+                  { id: "pickup_point", label: "Điểm tập kết", desc: "Điểm hẹn Mầm Mơ (0đ)" },
+                  { id: "member_delivery", label: "Qua người quen", desc: "Thành viên giao tay (0đ)" },
+                  { id: "self_pickup", label: "Tự đến lấy", desc: "Tại văn phòng BTC (0đ)" },
                 ].map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     onClick={() => setDeliveryType(option.id as any)}
-                    className={`p-3.5 rounded-2xl text-left border transition-all ${
+                    className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
                       deliveryType === option.id
                         ? "bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
                         : "bg-white border-gray-200 hover:border-emerald-200"
                     }`}
                   >
                     <span className="block text-xs font-bold text-emerald-950">{option.label}</span>
-                    <span className="block text-[11px] text-gray-500 mt-0.5">{option.desc}</span>
+                    <span className="block text-[10.5px] text-gray-500 mt-0.5 leading-tight">{option.desc}</span>
                   </button>
                 ))}
               </div>
@@ -381,18 +427,89 @@ function CheckoutContent() {
               )}
 
               {deliveryType === "pickup_point" && (
-                <div className="pt-2">
+                <div className="pt-2 space-y-3">
                   <Select
                     label="Chọn điểm hẹn nhận hàng *"
                     value={formData.pickup_point_id}
                     onChange={(e) => handleInputChange("pickup_point_id", e.target.value)}
-                    options={[
-                      { value: "pp-1", label: "Cổng trường ĐH Kinh Tế - TP.HCM (Quận 10)" },
-                      { value: "pp-2", label: "Cơ sở Mầm Mơ Quận 3 (T2-T6: 8h-17h)" },
-                    ]}
+                    options={pickupPoints.map((p) => ({
+                      value: p.pickup_point_id,
+                      label: `${p.name} — ${p.address}`,
+                    }))}
                   />
+
+                  {/* Rich details for selected pickup point */}
+                  {(() => {
+                    const selectedPt = pickupPoints.find((p) => p.pickup_point_id === formData.pickup_point_id);
+                    if (!selectedPt) return null;
+                    return (
+                      <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2 text-xs animate-in fade-in">
+                        <div className="flex items-center justify-between font-bold text-[#231B16]">
+                          <span>📍 {selectedPt.name}</span>
+                          <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                            Miễn phí nhận
+                          </span>
+                        </div>
+                        <p className="text-[#5C4D44] leading-relaxed">
+                          <strong>Địa chỉ:</strong> {selectedPt.address}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[#342A24]">
+                          {selectedPt.contact_name && (
+                            <p><strong>Người trực:</strong> {selectedPt.contact_name}</p>
+                          )}
+                          {selectedPt.contact_phone && (
+                            <p><strong>Hotline:</strong> <a href={`tel:${selectedPt.contact_phone}`} className="text-[#2D6338] font-bold underline">{selectedPt.contact_phone}</a></p>
+                          )}
+                        </div>
+                        {selectedPt.opening_hours && (
+                          <p className="text-[#7E7068]"><strong>Khung giờ trực:</strong> {selectedPt.opening_hours}</p>
+                        )}
+                        {selectedPt.location_guide && (
+                          <div className="p-2.5 rounded-xl bg-white border border-[#E5DACD] text-[11px] text-[#542B07]">
+                            💡 <strong>Vị trí bàn trực:</strong> {selectedPt.location_guide}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
+
+              {deliveryType === "member_delivery" && (
+                <div className="p-4 rounded-2xl bg-[#EAF7ED] border border-[#BFE9C3] text-xs space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-bold text-[#16381D]">
+                    <span>🌱</span>
+                    <span>Hình thức: Giao qua người quen trong Mầm Mơ (Miễn phí vận chuyển)</span>
+                  </div>
+                  <p className="text-[#386341] leading-relaxed">
+                    Bạn quen một bạn thành viên trong CLB Mầm Mơ? Hãy nhập <strong>Tên hoặc Mã thành viên</strong> của bạn ấy bên dưới. Ban Hậu cần sẽ chuyển gói quà cho bạn ấy để trao tận tay bạn nhé!
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Introducer / Member referral input box */}
+            <div className={`bg-white rounded-3xl p-6 border shadow-xs space-y-3 transition-all ${
+              deliveryType === "member_delivery" ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-emerald-100"
+            }`}>
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading font-bold text-base text-emerald-950 flex items-center gap-2">
+                  <span>🌱</span>
+                  Bạn quen ai trong Mầm Mơ? {deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
+                </h2>
+                <span className="text-[11px] text-gray-400">
+                  {deliveryType === "member_delivery" ? "Bắt buộc điền" : "Không bắt buộc"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Nếu bạn được thành viên Mầm Mơ giới thiệu hoặc chọn giao qua tay người quen, hãy nhập Tên hoặc Mã thành viên ở đây nhé:
+              </p>
+              <Input
+                placeholder="Ví dụ: Mai Lan hoặc MM-LAN (Nhập tên hoặc mã thành viên)..."
+                value={formData.introducer_info}
+                onChange={(e) => handleInputChange("introducer_info", e.target.value)}
+                error={errors.introducer_info}
+              />
             </div>
 
             {/* Payment Method Box */}

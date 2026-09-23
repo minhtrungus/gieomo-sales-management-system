@@ -6,7 +6,7 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
-import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus } from "@/lib/data/orderStore";
+import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus, updateStoredOrderNotes } from "@/lib/data/orderStore";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check } from "lucide-react";
 
@@ -43,6 +43,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const handleSaveChanges = () => {
     updateStoredOrderStatus(order.order_id, orderStatus);
     updateStoredPaymentStatus(order.order_id, paymentStatus);
+    updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
     setIsSavedNotice(true);
     setTimeout(() => setIsSavedNotice(false), 2500);
   };
@@ -122,9 +123,28 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     )}
                   </button>
                 </div>
-                <span className="font-bold text-gray-900 block text-sm mt-0.5">{order.recipient_name}</span>
-                <span className="text-gray-600 block">{order.recipient_phone}</span>
-                <span className="text-gray-500 block mt-1">
+
+                {order.recipient_name && order.buyer_name && order.recipient_name !== order.buyer_name ? (
+                  <div className="space-y-1.5 mt-1">
+                    <div className="p-2 rounded-xl bg-gray-50 border border-gray-100">
+                      <span className="text-[11px] text-gray-500 block">Người đặt mua:</span>
+                      <span className="font-bold text-gray-900 block text-xs">{order.buyer_name}</span>
+                      <span className="text-gray-600 block text-xs">{order.buyer_phone}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-emerald-50/70 border border-emerald-200/70">
+                      <span className="text-[11px] text-emerald-800 font-bold block">Người nhận hàng (Đặt hộ):</span>
+                      <span className="font-bold text-emerald-950 block text-xs">{order.recipient_name}</span>
+                      <span className="text-emerald-800 block text-xs">{order.recipient_phone}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-0.5">
+                    <span className="font-bold text-gray-900 block text-sm">{order.recipient_name || order.buyer_name}</span>
+                    <span className="text-gray-600 block text-xs">{order.recipient_phone || order.buyer_phone}</span>
+                  </div>
+                )}
+
+                <span className="text-gray-500 block mt-1 text-xs">
                   {order.address_detail}, {order.district}, {order.province}
                 </span>
               </div>
@@ -184,12 +204,30 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
               {order.customer_note && (
                 <div className="sm:col-span-2 pt-2 border-t border-gray-100">
-                  <span className="text-gray-500 block mb-1">Lời nhắn / Ghi chú của khách hàng:</span>
+                  <span className="text-gray-500 font-bold block mb-1">💬 Ghi chú từ khách hàng (Read-only):</span>
                   <p className="text-gray-800 italic bg-amber-50/70 p-3 rounded-2xl border border-amber-200/60 text-xs">
                     &ldquo;{order.customer_note}&rdquo;
                   </p>
                 </div>
               )}
+
+              {/* Internal Note (#22) */}
+              <div className="sm:col-span-2 pt-2 border-t border-gray-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700 font-bold block text-xs flex items-center gap-1.5">
+                    <span>🔒</span>
+                    Ghi chú nội bộ Ban Tổ Chức (Chỉ admin thấy):
+                  </span>
+                  <span className="text-[10px] text-gray-400">Không hiển thị cho khách tra cứu</span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={internalNote}
+                  onChange={(e) => setInternalNote(e.target.value)}
+                  placeholder="Ghi chú điều phối: Đã xác nhận qua Zalo, khách hẹn nhận sau 17h..."
+                  className="w-full p-3 rounded-xl border border-gray-200 text-xs outline-none focus:border-[#BFE9C3] bg-[#FFF8EE]/40 resize-none"
+                />
+              </div>
             </div>
           </div>
 

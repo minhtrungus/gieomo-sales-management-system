@@ -1,8 +1,24 @@
+"use client";
+
+import { useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Sparkles, Mail, Phone, MapPin } from "lucide-react";
 
 export function Footer() {
+  const pathname = usePathname();
+
+  const handleFooterLinkClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      if (pathname === href) {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    },
+    [pathname]
+  );
+
   return (
     <footer className="w-full bg-[#1C281F] text-white border-t border-[#2F4234] mt-auto relative overflow-hidden">
       {/* Decorative Pastel Stitch Line */}
@@ -49,22 +65,22 @@ export function Footer() {
             </h3>
             <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/" onClick={(e) => handleFooterLinkClick(e, "/")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
                   <span>Trang chủ</span>
                 </Link>
               </li>
               <li>
-                <Link href="/products" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/products" onClick={(e) => handleFooterLinkClick(e, "/products")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
                   <span>Tất cả sản phẩm handmade</span>
                 </Link>
               </li>
               <li>
-                <Link href="/combos" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/combos" onClick={(e) => handleFooterLinkClick(e, "/combos")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
                   <span>Set Combo quà tặng tiết kiệm</span>
                 </Link>
               </li>
               <li>
-                <Link href="/track" className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/track" onClick={(e) => handleFooterLinkClick(e, "/track")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
                   <span>Tra cứu hành trình đơn hàng</span>
                 </Link>
               </li>
@@ -79,22 +95,22 @@ export function Footer() {
             </h3>
             <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/faq" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/faq" onClick={(e) => handleFooterLinkClick(e, "/faq")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
                   <span>Hỏi đáp thường gặp (FAQ)</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/delivery" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/policy/delivery" onClick={(e) => handleFooterLinkClick(e, "/policy/delivery")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
                   <span>Chính sách giao hàng (Freeship từ 200k)</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/payment" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/policy/payment" onClick={(e) => handleFooterLinkClick(e, "/policy/payment")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
                   <span>Hướng dẫn thanh toán VietQR & COD</span>
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/contact" onClick={(e) => handleFooterLinkClick(e, "/contact")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
                   <span>Liên hệ Ban Tổ Chức Mầm Mơ</span>
                 </Link>
               </li>
@@ -126,14 +142,14 @@ export function Footer() {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-[#2F4234] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/80 font-normal">
-          <p>© 2026 Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
+          <p>© {new Date().getFullYear()} Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
           <div className="flex items-center gap-4">
             <Link href="/policy/privacy" className="text-white/90 hover:text-white transition-colors underline-offset-2 hover:underline">
               Chính sách bảo mật
             </Link>
             <span>•</span>
-            <Link href="/admin/login" className="text-[#BFE9C3] hover:text-white font-bold transition-colors">
-              Quản trị (Admin Portal)
+            <Link href="/admin/login" className="text-white/30 hover:text-white/60 transition-colors text-[11px]">
+              Quản trị
             </Link>
           </div>
         </div>

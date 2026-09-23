@@ -23,6 +23,13 @@ function removeVietnameseTones(str: string): string {
     .trim();
 }
 
+function maskPhone(phone?: string | null): string {
+  if (!phone) return "";
+  const clean = phone.trim();
+  if (clean.length < 7) return clean;
+  return clean.slice(0, 4) + "***" + clean.slice(-3);
+}
+
 function TrackContent() {
   const searchParams = useSearchParams();
   const initialCode = searchParams.get("code") || "";
@@ -71,40 +78,31 @@ function TrackContent() {
 
     const query = rawQuery.trim();
     if (!query) {
-      setErrorMsg("Vui lòng nhập Số điện thoại, Họ tên hoặc Mã đơn hàng.");
+      setErrorMsg("Vui lòng nhập Mã đơn hàng của bạn (Ví dụ: GM-369817).");
       setMatchedOrders([]);
       setSelectedOrder(null);
       return;
     }
 
     const orders = ordersList || getStoredOrders();
-    const cleanPhone = query.replace(/\D/g, "");
-    const normalizedText = removeVietnameseTones(query);
     const upperQuery = query.toUpperCase();
 
+    // ONLY search by order_code for customer privacy
     const results = orders.filter((o) => {
-      // 1. Match order code
-      if (o.order_code.toUpperCase().includes(upperQuery)) return true;
-      // 2. Match phone
-      if (cleanPhone && (o.buyer_phone?.includes(cleanPhone) || o.recipient_phone?.includes(cleanPhone))) return true;
-      // 3. Match name (accent-insensitive & case-insensitive)
-      if (o.buyer_name && removeVietnameseTones(o.buyer_name).includes(normalizedText)) return true;
-      if (o.recipient_name && removeVietnameseTones(o.recipient_name).includes(normalizedText)) return true;
-      return false;
+      return (
+        o.order_code.toUpperCase() === upperQuery ||
+        o.order_code.toUpperCase().replace(/[^A-Z0-9]/g, "") === upperQuery.replace(/[^A-Z0-9]/g, "")
+      );
     });
 
     if (results.length > 0) {
       setMatchedOrders(results);
-      if (results.length === 1) {
-        setSelectedOrder(results[0]);
-      } else {
-        setSelectedOrder(null); // Show list overview first
-      }
+      setSelectedOrder(results[0]);
     } else {
       setMatchedOrders([]);
       setSelectedOrder(null);
       setErrorMsg(
-        `Không tìm thấy đơn hàng nào khớp với "${query}". Vui lòng kiểm tra lại số điện thoại, họ tên hoặc mã đơn.`
+        `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817) được cấp khi bạn đặt hàng.`
       );
     }
   };
@@ -116,7 +114,7 @@ function TrackContent() {
 
   const handleSelectDeviceHistory = () => {
     if (deviceOrders.length > 0) {
-      setSearchQuery(savedProfile?.phone || savedProfile?.name || deviceOrders[0].order_code);
+      setSearchQuery(deviceOrders[0].order_code);
       setMatchedOrders(deviceOrders);
       setHasSearched(true);
       setErrorMsg(null);
@@ -137,13 +135,13 @@ function TrackContent() {
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold">
-          📍 Hỗ trợ khách hàng
+          📍 Tra cứu bảo mật
         </div>
         <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
-          Tra cứu tiến độ &amp; Lịch sử đơn hàng
+          Tra cứu tiến độ &amp; Đơn hàng
         </h1>
-        <p className="text-gray-600 text-xs sm:text-sm">
-          Nhập <strong>Số điện thoại</strong>, <strong>Họ tên người đặt</strong> hoặc <strong>Mã đơn hàng (GM-...)</strong> để kiểm tra xem bạn đã đặt bao nhiêu đơn và tiến độ giao hàng nhé!
+        <p className="text-gray-600 text-xs sm:text-sm max-w-xl mx-auto">
+          Nhập <strong>Mã đơn hàng (GM-...)</strong> được gửi cho bạn khi đặt hàng để theo dõi tiến độ xử lý và vận chuyển một cách an toàn, bảo mật.
         </p>
       </div>
 
@@ -154,7 +152,7 @@ function TrackContent() {
             <span className="text-3xl">🌱</span>
             <div className="text-xs">
               <span className="font-bold text-[#16381D] text-sm block">
-                Chào {savedProfile?.name || "bạn"}! Trình duyệt ghi nhận bạn đã đặt {deviceOrders.length} đơn hàng trên thiết bị này.
+                Chào {savedProfile?.name || "bạn"}! Trình duyệt ghi nhận bạn đã có {deviceOrders.length} đơn hàng trên thiết bị này.
               </span>
               <span className="text-[#386341]">
                 Tổng số tiền gây quỹ ủng hộ: <strong>{deviceOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0).toLocaleString("vi-VN")}đ</strong>
@@ -166,62 +164,58 @@ function TrackContent() {
             onClick={handleSelectDeviceHistory}
             className="px-4 py-2 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs transition-colors shrink-0 shadow-2xs border border-[#9ed4a3] cursor-pointer"
           >
-            Xem {deviceOrders.length} đơn của tôi ➔
+            Xem {deviceOrders.length} đơn của bạn ➔
           </button>
         </div>
       )}
 
-      {/* Smart Search Form */}
+      {/* Search Form - Secure: Order Code Only */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-xs space-y-4">
         <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <Input
-              label="Tìm kiếm theo SĐT, Tên hoặc Mã đơn hàng:"
-              placeholder="Ví dụ: 0901234567, Nguyễn Văn A, hoặc GM-369817..."
+              label="Nhập chính xác Mã đơn hàng:"
+              placeholder="Ví dụ: GM-369817 hoặc GM-260901..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <div className="flex items-end">
             <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto h-11 px-6">
-              Tra cứu
+              Tra cứu đơn
             </Button>
           </div>
         </form>
 
-        {/* Suggestion tags */}
+        {/* Suggestion tags: Only user's own orders if any, or demo code */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 pt-1">
-          <span>Gợi ý tìm nhanh:</span>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery("GM-369817");
-              performSearch("GM-369817");
-            }}
-            className="px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-emerald-100 text-emerald-950 font-bold text-[11px] transition-colors cursor-pointer"
-          >
-            GM-369817
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery("Nguyễn Văn A");
-              performSearch("Nguyễn Văn A");
-            }}
-            className="px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-emerald-100 text-emerald-950 font-bold text-[11px] transition-colors cursor-pointer"
-          >
-            Nguyễn Văn A
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery("Lê Thị Thảo");
-              performSearch("Lê Thị Thảo");
-            }}
-            className="px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-emerald-100 text-emerald-950 font-bold text-[11px] transition-colors cursor-pointer"
-          >
-            Lê Thị Thảo
-          </button>
+          <span className="text-[11px]">Đơn của bạn trên máy này:</span>
+          {deviceOrders.length > 0 ? (
+            deviceOrders.slice(0, 3).map((ord) => (
+              <button
+                key={ord.order_code}
+                type="button"
+                onClick={() => {
+                  setSearchQuery(ord.order_code);
+                  performSearch(ord.order_code);
+                }}
+                className="px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] transition-colors cursor-pointer border border-emerald-200"
+              >
+                #{ord.order_code}
+              </button>
+            ))
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("GM-369817");
+                performSearch("GM-369817");
+              }}
+              className="px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-emerald-100 text-emerald-950 font-mono font-bold text-[11px] transition-colors cursor-pointer"
+            >
+              Mẫu: GM-369817
+            </button>
+          )}
         </div>
 
         {errorMsg && (
@@ -373,12 +367,27 @@ function TrackContent() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100 text-xs">
             <div className="space-y-2">
               <span className="font-bold text-gray-900 block text-sm">Thông tin nhận hàng:</span>
-              <p className="text-gray-600">
-                <strong>Người nhận:</strong> {selectedOrder.recipient_name || selectedOrder.buyer_name}
-              </p>
-              <p className="text-gray-600">
-                <strong>SĐT:</strong> {selectedOrder.recipient_phone || selectedOrder.buyer_phone}
-              </p>
+              
+              {selectedOrder.recipient_name && selectedOrder.buyer_name && selectedOrder.recipient_name !== selectedOrder.buyer_name ? (
+                <>
+                  <p className="text-gray-600">
+                    <strong>Người đặt mua:</strong> {selectedOrder.buyer_name} {selectedOrder.buyer_phone && `(${maskPhone(selectedOrder.buyer_phone)})`}
+                  </p>
+                  <p className="text-gray-700 bg-emerald-50/60 p-2 rounded-xl border border-emerald-100">
+                    <strong className="text-emerald-950">Người nhận hàng (đặt hộ):</strong> {selectedOrder.recipient_name} {selectedOrder.recipient_phone && `(${maskPhone(selectedOrder.recipient_phone)})`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-600">
+                    <strong>Người nhận:</strong> {selectedOrder.recipient_name || selectedOrder.buyer_name}
+                  </p>
+                  <p className="text-gray-600">
+                    <strong>SĐT:</strong> {maskPhone(selectedOrder.recipient_phone || selectedOrder.buyer_phone)}
+                  </p>
+                </>
+              )}
+
               <p className="text-gray-600">
                 <strong>Địa chỉ:</strong> {selectedOrder.address_detail}, {selectedOrder.district}, {selectedOrder.province}
               </p>

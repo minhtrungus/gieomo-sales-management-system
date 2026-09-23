@@ -47,10 +47,12 @@ gieomo-sales-management-system/
 │   │       ├── inventory/       # Trang Kiểm kho & Cảnh báo tồn kho (/admin/inventory)
 │   │       ├── customers/       # Trang Quản lý thông tin Khách hàng (/admin/customers)
 │   │       ├── payments/        # Trang Duyệt thanh toán VietQR (/admin/payments)
+│   │       ├── pickup-points/   # Trang Quản lý Điểm nhận hàng (/admin/pickup-points)
+│   │       ├── messages/        # Hộp thư tin nhắn liên hệ từ khách (/admin/messages)
 │   │       ├── vouchers/        # Trang Quản lý Mã giảm giá (/admin/vouchers)
 │   │       ├── members/         # Trang Quản lý Thành viên & Referral (/admin/members)
 │   │       ├── reports/         # Trang Báo cáo doanh thu & Lợi nhuận (/admin/reports)
-│   │       └── settings/        # Trang Cài đặt thông tin hệ thống (/admin/settings)
+│   │       └── settings/        # Trang Cài đặt thông tin hệ thống & Đổi mật khẩu (/admin/settings)
 │   │
 │   ├── components/              # Thư viện React Components tái sử dụng
 │   │   ├── ui/                  # Design System UI Elements
@@ -113,26 +115,48 @@ gieomo-sales-management-system/
 
 ## 🛠️ 2. QUY TRÌNH BẢO TRÌ NỘI DUNG & SẢN PHẨM
 
-### A. Thêm hoặc cập nhật Sản phẩm mới
-1. Váo mục **Admin ➔ Sản phẩm ➔ Thêm sản phẩm mới** (`/admin/products/new`).
-2. Nhập thông tin: Tên sản phẩm, Slug (tự động tạo), Giá bán, Giá so sánh, Giá vốn (để hệ thống tính lợi nhuận gây quỹ).
-3. Thêm các **Phân loại (Variants)**: Tên phân loại (VD: Màu hồng, Màu xanh), Mã SKU, Số lượng tồn kho.
-4. Chọn danh mục và bật trạng thái **"Đang bán (Active)"**.
+### A. Thêm hoặc cập nhật Sản phẩm & Tách mô tả tự động (Auto-Parse)
+1. Vào mục **Admin ➔ Sản phẩm ➔ Thêm sản phẩm mới** (`/admin/products/new`).
+2. Nhập thông tin: Tên sản phẩm, Slug (tự động tạo), Giá bán, Giá vốn (để hệ thống tính lợi nhuận gây quỹ).
+3. **Mẹo viết mô tả tự tách nội dung**: Bạn có thể viết mô tả có các đề mục `## Kích thước`, `## Chất liệu`, `## Ý nghĩa`, hệ thống website sẽ tự động tách thành các Tab đẹp mắt cho khách hàng trên trang chi tiết sản phẩm.
 
-### B. Thêm hoặc quản lý Mã giảm giá (Vouchers)
+### B. Thêm hoặc quản lý Mã giảm giá (Vouchers) Công khai & Riêng tư
 1. Vào mục **Admin ➔ Mã giảm giá** (`/admin/vouchers`).
-2. Định nghĩa Mã (Code - e.g. `GIEOMO10`), Loại giảm (Phần trăm `%` hoặc Số tiền cố định `đ`), Giá trị đơn hàng tối thiểu áp dụng.
+2. Thiết lập chế độ hiển thị:
+   - **Công khai**: Hiện nút gợi ý trên trang thanh toán cho khách chọn nhanh.
+   - **Riêng tư**: Chỉ khách hàng có mã và nhập chính xác mới được áp dụng.
 
-### C. Quản lý Đơn hàng & Xác nhận Thanh toán VietQR
-1. Khi khách hàng chuyển khoản ngân hàng qua mã VietQR, giao dịch sẽ được ghi nhận tại mục **Admin ➔ Duyệt thanh toán** (`/admin/payments`).
-2. Ban tổ chức kiểm tra ứng dụng Ngân hàng, nhấn nút **"Duyệt"** để cập nhật trạng thái đơn hàng sang `Đã thanh toán (paid)`.
-3. Cập nhật tiến độ giao hàng tại mục **Admin ➔ Quản lý đơn hàng** (`/admin/orders`) theo các nấc:
-   - `Chờ xác nhận` ➔ `Đã xác nhận` ➔ `Đang chuẩn bị` ➔ `Đang giao` ➔ `Hoàn thành`.
+### C. Quản lý Điểm nhận hàng (Pickup Points)
+1. Vào mục **Admin ➔ Điểm nhận hàng** (`/admin/pickup-points`).
+2. Thêm hoặc cập nhật: Tên điểm nhận, Địa chỉ, Thành viên trực điểm, SĐT Hotline và Hướng dẫn vị trí bàn trực (VD: *Bàn trực sảnh B1 đối diện thang máy, gọi hotline trước 5 phút*).
+3. Khách hàng khi chọn hình thức "Nhận tại điểm tập kết" sẽ thấy chi tiết thông tin này.
+
+### D. Quản lý Tin nhắn liên hệ từ khách
+1. Khách gửi liên hệ từ trang `/contact` sẽ đổ về **Admin ➔ Hộp thư liên hệ** (`/admin/messages`).
+2. Quản trị viên có thể xem nội dung, SĐT khẩn, bấm gọi điện hoặc bấm "Soạn email trả lời".
+
+### E. Tự động duyệt Thanh toán VietQR qua SePay Webhook
+1. Đọc hướng dẫn chi tiết tại [docs/SEPAY_WEBHOOK_GUIDE.md](file:///c:/Users/MT/Workspaces/gieomo-sales-management-system/docs/SEPAY_WEBHOOK_GUIDE.md).
+2. Khi khách chuyển khoản đúng cú pháp `GM-XXXXXX`, SePay sẽ gọi Webhook về `/api/webhook/sepay` và tự động cập nhật đơn sang `Đã thanh toán (paid)` mà không cần duyệt thủ công.
+
+### F. Kết nối gửi Email thông báo qua Resend
+1. Đọc hướng dẫn chi tiết tại [docs/RESEND_EMAIL_GUIDE.md](file:///c:/Users/MT/Workspaces/gieomo-sales-management-system/docs/RESEND_EMAIL_GUIDE.md).
+2. Khi khách gửi liên hệ từ `/contact`, hệ thống tự động bắn email thông báo cho Ban Quản Trị qua dịch vụ Resend.
 
 ---
 
-## 🔒 3. NGUYÊN TẮC BẢO TRÌ AN TOÀN (PRODUCTION SAFETY RULES)
+## 📚 TÀI LIỆU CHUYÊN SÂU ĐÍNH KÈM
+* **Tích hợp SePay Webhook**: [`docs/SEPAY_WEBHOOK_GUIDE.md`](file:///c:/Users/MT/Workspaces/gieomo-sales-management-system/docs/SEPAY_WEBHOOK_GUIDE.md)
+* **Kết nối Resend Email**: [`docs/RESEND_EMAIL_GUIDE.md`](file:///c:/Users/MT/Workspaces/gieomo-sales-management-system/docs/RESEND_EMAIL_GUIDE.md)
+* **Cẩm nang Quản trị & Điều phối 2 Kho**: [`docs/MULTI_WAREHOUSE_GUIDE.md`](file:///c:/Users/MT/Workspaces/gieomo-sales-management-system/docs/MULTI_WAREHOUSE_GUIDE.md)
 
-1. **Không trust dữ liệu từ Frontend**: Giá sản phẩm, số tiền tổng, mã giảm giá và phí ship luôn được tính toán lại phía Server-side để tránh tấn công sửa đổi giá từ client.
-2. **Stock không bao giờ được âm**: Mọi thao tác trừ kho khi khách đặt hàng phải đảm bảo tính Atomic (Nguyên tố) trong Postgres SQL.
-3. **Bảo vệ Secrets Key**: Không bao giờ commit file `.env.local` chứa `SUPABASE_SERVICE_ROLE_KEY` lên Git repository công khai.
+---
+
+## 🔒 3. NGUYÊN TẮC BẢO MẬT & AN TOÀN VẬN HÀNH
+
+1. **Bảo mật tra cứu đơn hàng**: Trang `/track` chỉ cho phép tra cứu bằng **Mã đơn hàng chính xác (GM-...)** hoặc xem lịch sử trên chính thiết bị đó. Đã loại bỏ hoàn toàn tính năng tìm kiếm bằng tên hoặc SĐT để tránh lộ thông tin đơn hàng cho người khác.
+2. **Che số điện thoại (Phone Masking)**: Khi hiển thị thông tin tra cứu đơn, số điện thoại được che 3 số ở giữa (VD: `0901***567`) nhằm bảo vệ tối đa dữ liệu cá nhân.
+3. **Ghi chú nội bộ tách biệt**: `internal_note` của đơn hàng chỉ hiển thị trong trang Admin cho Ban Tổ Chức điều phối, không bao giờ gửi ra trang tra cứu công khai của khách.
+4. **Không trust dữ liệu từ Frontend**: Giá sản phẩm, số tiền tổng, mã giảm giá và phí ship luôn được tính toán lại phía Server-side.
+5. **Stock không bao giờ được âm**: Mọi thao tác trừ kho khi khách đặt hàng phải đảm bảo tính Atomic trong Postgres SQL.
+6. **Bảo vệ Secrets Key**: Không bao giờ commit file `.env.local` chứa `SUPABASE_SERVICE_ROLE_KEY` hoặc `SEPAY_API_KEY` lên Git repository công khai.

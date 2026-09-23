@@ -67,6 +67,10 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
       return { title: "Danh sách khách hàng", breadcrumb: "Khách hàng & Liên hệ" };
     if (path.includes("/admin/payments"))
       return { title: "Xác nhận thanh toán", breadcrumb: "Tài chính / Đối soát VietQR" };
+    if (path.includes("/admin/pickup-points"))
+      return { title: "Quản lý Điểm nhận hàng", breadcrumb: "Vận chuyển / Điểm nhận" };
+    if (path.includes("/admin/messages"))
+      return { title: "Hộp thư liên hệ", breadcrumb: "Khách hàng / Tin nhắn" };
     if (path.includes("/admin/vouchers"))
       return { title: "Mã giảm giá", breadcrumb: "Khuyến mãi / Voucher" };
     if (path.includes("/admin/members"))

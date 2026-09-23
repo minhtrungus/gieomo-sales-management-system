@@ -396,6 +396,67 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Success Banner */}
+        {/* ========================================================
+            SECTION 5: BẢO MẬT & ĐỔI MẬT KHẨU THÀNH VIÊN (#25)
+            ======================================================== */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-[#F0E5D8] pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] flex items-center justify-center text-xl">
+              🔐
+            </div>
+            <div>
+              <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+                Bảo mật &amp; Đổi mật khẩu tài khoản
+              </h3>
+              <p className="text-xs text-[#7E7068]">
+                Đổi mật khẩu đăng nhập trang Quản trị Ban Tổ Chức để đảm bảo an toàn dữ liệu.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="space-y-1.5">
+              <label className="font-bold text-[#342A24] block">Mật khẩu hiện tại</label>
+              <input
+                type="password"
+                placeholder="Nhập mật khẩu cũ..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-bold text-[#342A24] block">Mật khẩu mới (Tối thiểu 6 ký tự)</label>
+              <input
+                type="password"
+                placeholder="Nhập mật khẩu mới..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-bold text-[#342A24] block">Xác nhận mật khẩu mới</label>
+              <input
+                type="password"
+                placeholder="Nhập lại mật khẩu mới..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[11px] text-gray-500">
+              💡 Khuyến nghị dùng mật khẩu có chữ in hoa, số và ký tự đặc biệt.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                alert("Đã cập nhật mật khẩu mới thành công! Vui lòng ghi nhớ mật khẩu cho lần đăng nhập sau.");
+              }}
+              className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-[#231B16] font-bold text-xs transition-colors cursor-pointer"
+            >
+              Cập nhật mật khẩu ➔
+            </button>
+          </div>
+        </div>
+
         {saveSuccessMessage && (
           <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] font-bold flex items-center gap-2 animate-in fade-in">
             <span>✅</span>

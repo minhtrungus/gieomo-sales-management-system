@@ -83,17 +83,17 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
 
         {/* Info */}
-        <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
+        <div className="p-3 sm:p-5 flex-1 flex flex-col justify-between space-y-2 sm:space-y-3">
           <div className="space-y-1.5">
             {product.category && (
               <span className="text-[10px] font-bold text-[#2D6338] uppercase tracking-wider block">
                 {product.category.name}
               </span>
             )}
-            <h3 className="font-heading font-bold text-[#342A24] text-base line-clamp-1 group-hover:text-[#2D6338] transition-colors">
+            <h3 className="font-heading font-bold text-[#342A24] text-sm sm:text-base line-clamp-1 group-hover:text-[#2D6338] transition-colors">
               {product.name}
             </h3>
-            <p className="text-xs text-[#7E7068] line-clamp-2 leading-relaxed">
+            <p className="text-[11px] sm:text-xs text-[#7E7068] line-clamp-2 leading-relaxed hidden sm:block">
               {product.short_description}
             </p>
           </div>
@@ -101,7 +101,7 @@ export function ProductCard({ product }: ProductCardProps) {
           {/* Price & CTA */}
           <div className="pt-3 border-t border-[#F0E5D8] flex items-center justify-between">
             <div>
-              <MoneyDisplay amount={product.price} className="text-base font-extrabold text-[#1B3622]" />
+              <MoneyDisplay amount={product.price} className="text-sm sm:text-base font-extrabold text-[#1B3622]" />
               {product.compare_at_price && (
                 <div className="text-[11px] text-[#A89B92] line-through">
                   <MoneyDisplay amount={product.compare_at_price} />

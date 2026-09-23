@@ -28,7 +28,7 @@ export type DeliveryStatus =
   | "ready_for_pickup"
   | "picked_up";
 
-export type DeliveryType = "home_delivery" | "pickup_point" | "self_pickup";
+export type DeliveryType = "home_delivery" | "pickup_point" | "self_pickup" | "member_delivery";
 
 export type PaymentMethod = "cod" | "banking" | "momo";
 
@@ -194,6 +194,7 @@ export interface Voucher {
   start_date?: string | null;
   end_date?: string | null;
   status: ContentStatus;
+  visibility?: "public" | "private";
   created_at: string;
 }
 
@@ -320,9 +321,10 @@ export interface PickupPoint {
   contact_name: string | null;
   contact_phone: string | null;
   opening_hours: string | null;
+  location_guide?: string | null;
   status: ContentStatus;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface OrderStatusHistory {
@@ -345,6 +347,16 @@ export interface Sponsor {
   description: string | null;
   display_order: number;
   active: boolean;
+}
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  message: string;
+  status: "unread" | "read" | "replied";
+  created_at: string;
 }
 
 export interface SystemConfig {
@@ -429,10 +441,3 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
-
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}

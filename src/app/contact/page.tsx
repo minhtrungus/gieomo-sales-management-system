@@ -3,18 +3,46 @@
 import { useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Mail, Phone, MapPin, Send, CheckCircle } from "lucide-react";
+import { Mail, Phone, MapPin, Send, CheckCircle, Loader2 } from "lucide-react";
+import { saveContactMessage } from "@/lib/data/orderStore";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !message) return;
-    setSubmitted(true);
+    setIsSubmitting(true);
+
+    try {
+      // 1. Save to client/local storage & notification
+      saveContactMessage({
+        name,
+        email,
+        phone: phone.trim() || null,
+        message,
+      });
+
+      // 2. Call backend API to record in DB / send email
+      try {
+        await fetch("/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, phone, message }),
+        });
+      } catch {
+        // Fallback gracefully if API is offline
+      }
+
+      setSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -145,6 +173,20 @@ export default function ContactPage() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-700 block">Số điện thoại</label>
+                    <span className="text-[11px] text-gray-400">Không bắt buộc</span>
+                  </div>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Ví dụ: 0901 234 567 (Để Mầm liên lạc khẩn khi cần)"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-soft-green focus:ring-1 focus:ring-soft-green"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-gray-700 block">Lời nhắn / Câu hỏi *</label>
                   <textarea
                     required
@@ -158,10 +200,20 @@ export default function ContactPage() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
+                  disabled={isSubmitting}
+                  className="w-full py-3 rounded-2xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Gửi tin nhắn cho Mầm ➔</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang gửi lời nhắn...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Gửi tin nhắn cho Mầm ➔</span>
+                    </>
+                  )}
                 </button>
               </form>
             )}

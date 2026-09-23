@@ -20,6 +20,7 @@ export default function AdminVouchersPage() {
   const [discountValue, setDiscountValue] = useState<number>(20000);
   const [minOrderValue, setMinOrderValue] = useState<number>(150000);
   const [usageLimit, setUsageLimit] = useState<number>(50);
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
 
   // Add Voucher
   const handleCreateVoucher = (e: React.FormEvent) => {
@@ -35,6 +36,7 @@ export default function AdminVouchersPage() {
       max_discount_amount: null,
       usage_limit: usageLimit,
       usage_count: 0,
+      visibility: visibility,
       status: "active" as const,
       start_date: new Date().toISOString(),
       end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -97,6 +99,7 @@ export default function AdminVouchersPage() {
                 <th className="py-3.5 px-4">Loại giảm giá</th>
                 <th className="py-3.5 px-4">Đơn tối thiểu</th>
                 <th className="py-3.5 px-4">Lượt sử dụng</th>
+                <th className="py-3.5 px-4">Hiển thị</th>
                 <th className="py-3.5 px-4">Trạng thái</th>
                 <th className="py-3.5 px-5 text-right">Thao tác</th>
               </tr>
@@ -119,6 +122,17 @@ export default function AdminVouchersPage() {
                   </td>
                   <td className="py-3.5 px-4 text-[#342A24] font-semibold">
                     {v.usage_count ?? 12} / {v.usage_limit ?? 100} lượt
+                  </td>
+                  <td className="py-3.5 px-4">
+                    {(v as any).visibility === "private" ? (
+                      <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[10.5px] font-bold border border-gray-200">
+                        🔒 Riêng tư
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] text-[10.5px] font-bold border border-[#BFE9C3]">
+                        🌐 Công khai
+                      </span>
+                    )}
                   </td>
                   <td className="py-3.5 px-4">
                     <Badge variant="brand">Hoạt động</Badge>

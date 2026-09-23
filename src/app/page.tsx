@@ -135,7 +135,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {featuredProducts.map((product) => (
               <ProductCard key={product.product_id} product={product} />
             ))}
@@ -161,7 +161,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               {/* Card 1: Soft Green */}
               <div className="p-6 rounded-3xl bg-[#BFE9C3]/40 border border-[#BFE9C3] shadow-soft space-y-3 transition-transform hover:-translate-y-1">
                 <div className="w-12 h-12 rounded-2xl bg-[#BFE9C3] flex items-center justify-center text-2xl shadow-xs">

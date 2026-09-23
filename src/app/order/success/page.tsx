@@ -166,102 +166,91 @@ function OrderSuccessContent() {
         {/* Payment Instructions if Banking */}
         {paymentMethod === "banking" ? (
           <div className="space-y-4 pt-2">
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
-              <span className="font-bold block text-sm text-amber-950">
-                📌 Hướng dẫn chuyển khoản ngân hàng:
+            {/* QR Code — Primary, Top, Large */}
+            <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-sm">
+              <p className="text-sm font-extrabold text-emerald-950 mb-3">
+                📱 Quét mã QR để chuyển khoản ngay
+              </p>
+              <p className="text-xs text-gray-600 mb-4 max-w-sm">
+                Mã QR đã tự động điền đúng <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> và nội dung <strong>{orderCode}</strong>. Chỉ cần mở App ngân hàng → quét mã.
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={vietQrUrl}
+                alt="VietQR Chuyển khoản đúng số tiền"
+                className="w-56 sm:w-64 h-auto object-contain rounded-xl shadow-sm border border-gray-100"
+              />
+              <div className="pt-3 flex items-center gap-3">
+                <a
+                  href={vietQrUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-emerald-800 hover:underline inline-flex items-center gap-1"
+                >
+                  <span>Mở ảnh QR to hơn</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <a
+                  href={vietQrUrl}
+                  download={`QR-${orderCode}.png`}
+                  className="text-xs font-bold text-gray-600 hover:underline inline-flex items-center gap-1"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Tải ảnh QR</span>
+                </a>
+              </div>
+              <span className="text-[10px] text-gray-400 mt-2">
+                Hỗ trợ mọi App ngân hàng: MB, VCB, Momo, Techcombank, ACB, TPBank...
               </span>
-              <p>Mã QR bên dưới đã <strong>tự động điền đúng chính xác số tiền {finalAmount.toLocaleString("vi-VN")}đ</strong> và nội dung chuyển khoản <strong>{orderCode}</strong>. Quý khách chỉ cần mở App ngân hàng quét mã.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center pt-2">
-              {/* Bank Info */}
-              <div className="space-y-3 text-xs">
-                <div>
+            {/* Collapsible Bank Details — Secondary */}
+            <details className="group rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] overflow-hidden">
+              <summary className="p-4 cursor-pointer flex items-center justify-between text-xs font-bold text-[#5C4D44] hover:bg-[#FFF8EE] transition-colors list-none">
+                <span>🏦 Xem chi tiết thông tin chuyển khoản thủ công</span>
+                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="p-4 pt-0 space-y-3 text-xs border-t border-[#F0E5D8]">
+                <div className="pt-3">
                   <span className="text-gray-500 block">Ngân hàng:</span>
                   <span className="font-bold text-gray-900 text-sm">{bankAccount.bankName}</span>
                 </div>
-
                 <div>
                   <span className="text-gray-500 block">Số tài khoản:</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono font-extrabold text-emerald-900 text-base">
-                      {bankAccount.accountNumber}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
-                      className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                    >
+                    <span className="font-mono font-extrabold text-emerald-900 text-base">{bankAccount.accountNumber}</span>
+                    <button type="button" onClick={() => handleCopy(bankAccount.accountNumber, "stk")} className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
                       {copiedItem === "stk" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedItem === "stk" ? "Đã chép" : "Chép"}</span>
                     </button>
                   </div>
                 </div>
-
                 <div>
                   <span className="text-gray-500 block">Chủ tài khoản:</span>
                   <span className="font-bold text-gray-900">{bankAccount.accountHolder}</span>
                 </div>
-
                 <div>
                   <span className="text-gray-500 block">Số tiền cần chuyển:</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-extrabold text-emerald-950 text-base">
-                      {finalAmount.toLocaleString("vi-VN")}đ
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(String(finalAmount), "amount")}
-                      className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                    >
+                    <span className="font-extrabold text-emerald-950 text-base">{finalAmount.toLocaleString("vi-VN")}đ</span>
+                    <button type="button" onClick={() => handleCopy(String(finalAmount), "amount")} className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
                       {copiedItem === "amount" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedItem === "amount" ? "Đã chép" : "Chép"}</span>
                     </button>
                   </div>
                 </div>
-
                 <div>
                   <span className="text-gray-500 block">Nội dung chuyển khoản (Bắt buộc):</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200 inline-block">
-                      {bankAccount.transferMemo}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
-                      className="px-2 py-0.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                    >
+                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200 inline-block">{bankAccount.transferMemo}</span>
+                    <button type="button" onClick={() => handleCopy(bankAccount.transferMemo, "memo")} className="px-2 py-0.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
                       {copiedItem === "memo" ? <Check className="w-3 h-3 text-red-700" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedItem === "memo" ? "Đã chép" : "Chép"}</span>
                     </button>
                   </div>
                 </div>
               </div>
-
-              {/* VietQR Code */}
-              <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#F0E5D8] text-center shadow-xs">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={vietQrUrl}
-                  alt="VietQR Chuyển khoản đúng số tiền"
-                  className="w-48 h-auto object-contain rounded-xl shadow-xs"
-                />
-                <div className="pt-2 flex items-center gap-2">
-                  <a
-                    href={vietQrUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] font-bold text-emerald-800 hover:underline inline-flex items-center gap-1"
-                  >
-                    <span>Mở ảnh QR to</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-                <span className="text-[10px] text-gray-500 mt-1">
-                  Quét bằng App Ngân hàng bất kỳ (MB, VCB, Momo, Techcombank...)
-                </span>
-              </div>
-            </div>
+            </details>
 
             {/* Customer Payment Confirmation CTA */}
             <div className="pt-4 border-t border-gray-100">

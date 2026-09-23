@@ -1,34 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { Search } from "lucide-react";
+import { Search, Users, Phone, Mail, ShoppingBag } from "lucide-react";
+import { getStoredOrders } from "@/lib/data/orderStore";
+
+interface CustomerRecord {
+  customerId: string;
+  fullName: string;
+  phone: string;
+  email?: string | null;
+  address?: string | null;
+  totalOrders: number;
+  totalSpent: number;
+  createdAt: string;
+}
 
 export default function AdminCustomersPage() {
-  const [customers] = useState([
-    {
-      customerId: "cust-1",
-      fullName: "Nguyễn Văn A",
-      phone: "0901234567",
-      email: "nguyenvana@example.com",
-      address: "123 Nguyễn Huệ, Quận 1, TP.HCM",
-      totalOrders: 3,
-      totalSpent: 420000,
-      createdAt: "2026-09-01",
-    },
-    {
-      customerId: "cust-2",
-      fullName: "Trần Thị C",
-      phone: "0987654321",
-      email: "tranthic@example.com",
-      address: "45 Lê Lợi, Quận 3, TP.HCM",
-      totalOrders: 1,
-      totalSpent: 85000,
-      createdAt: "2026-09-10",
-    },
-  ]);
-
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const loadCustomers = () => {
+    try {
+      const orders = getStoredOrders();
+      const custRaw = typeof window !== "undefined" ? localStorage.getItem("gieomo_customers") : null;
+      const localCusts: CustomerRecord[] = custRaw ? JSON.parse(custRaw) : [];
+
+      // Map phone -> customer record
+      const map = new Map<string, CustomerRecord>();
+
+      // Seed baseline customers
+      map.set("0901234567", {
+        customerId: "cust-1",
+        fullName: "Nguyễn Văn A",
+        phone: "0901234567",
+        email: "nguyenvana@example.com",
+        address: "123 Nguyễn Huệ, Quận 1, TP.HCM",
+        totalOrders: 3,
+        totalSpent: 420000,
+        createdAt: "2026-09-01",
+      });
+
+      map.set("0987654321", {
+        customerId: "cust-2",
+        fullName: "Trần Thị C",
+        phone: "0987654321",
+        email: "tranthic@example.com",
+        address: "45 Lê Lợi, Quận 3, TP.HCM",
+        totalOrders: 1,
+        totalSpent: 85000,
+        createdAt: "2026-09-10",
+      });
+
+      // Merge local saved customers
+      for (const lc of localCusts) {
+        const cleanP = lc.phone?.replace(/\s+/g, "");
+        if (cleanP) {
+          map.set(cleanP, {
+            ...lc,
+            phone: cleanP,
+          });
+        }
+      }
+
+      // Aggregate dynamically from all stored orders (#24)
+      for (const ord of orders) {
+        const rawPhone = ord.buyer_phone || ord.recipient_phone;
+        if (!rawPhone) continue;
+        const cleanPhone = rawPhone.replace(/\s+/g, "");
+
+        const existing = map.get(cleanPhone);
+        if (existing) {
+          existing.totalOrders = Math.max(existing.totalOrders, orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).length);
+          existing.totalSpent = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).reduce((sum, o) => sum + (o.final_amount || 0), 0);
+          if (ord.buyer_name && !existing.fullName) existing.fullName = ord.buyer_name;
+          if (ord.buyer_email && !existing.email) existing.email = ord.buyer_email;
+          if (ord.address_detail && !existing.address) existing.address = `${ord.address_detail}, ${ord.district || ""}, ${ord.province || ""}`;
+        } else {
+          const matchingOrders = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone);
+          map.set(cleanPhone, {
+            customerId: `cust-${cleanPhone}`,
+            fullName: ord.buyer_name || ord.recipient_name || "Khách hàng",
+            phone: cleanPhone,
+            email: ord.buyer_email || "",
+            address: `${ord.address_detail || ""}, ${ord.district || ""}, ${ord.province || ""}`,
+            totalOrders: matchingOrders.length,
+            totalSpent: matchingOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0),
+            createdAt: ord.created_at,
+          });
+        }
+      }
+
+      const list = Array.from(map.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+      setCustomers(list);
+    } catch (e) {
+      console.error("Error loading customers", e);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomers();
+    window.addEventListener("gieomo_orders_updated", loadCustomers);
+    return () => window.removeEventListener("gieomo_orders_updated", loadCustomers);
+  }, []);
 
   const filteredCustomers = customers.filter(
     (c) =>

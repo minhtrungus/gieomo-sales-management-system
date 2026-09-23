@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,8 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { parseProductDescription } from "@/lib/utils/productParser";
+import { BookOpen, Ruler, Sparkles, Heart, ShieldCheck } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -22,11 +24,19 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "size" | "materials" | "impact">("overview");
+
+  const parsedInfo = parseProductDescription(product.description, product.specs, product.impact_story ?? undefined);
 
   const addItem = useCartStore((state) => state.addItem);
 
   const currentStock = selectedVariant?.stock ?? 10;
   const isOutOfStock = currentStock <= 0;
+
+  // Reset quantity when variant changes to prevent stale values exceeding stock
+  useEffect(() => {
+    setQuantity((prev) => Math.min(prev, currentStock || 1, 1));
+  }, [selectedVariant?.variant_id, currentStock]);
 
   const handleAddToCart = () => {
     if (isOutOfStock) return;
@@ -228,50 +238,184 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        {/* Specs & Impact Tabs */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-xs mb-12 space-y-6">
-          <h3 className="font-heading font-bold text-xl text-emerald-950 border-b border-gray-100 pb-3">
-            Thông tin chi tiết & Ý nghĩa gây quỹ
-          </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-3">
-              <h4 className="font-semibold text-emerald-900 text-sm uppercase tracking-wider">
-                Mô tả sản phẩm
-              </h4>
-              <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                {product.description}
-              </div>
+        {/* Specs & Impact Structured Section (#2 Auto-Parse) */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-soft mb-12 space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div>
+              <h3 className="font-heading font-extrabold text-xl text-emerald-950">
+                Thông tin sản phẩm &amp; Ý nghĩa Mầm Mơ
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Chi tiết quy cách, chất liệu thủ công và giá trị thiện nguyện trong từng sản phẩm.
+              </p>
+            </div>
 
-              {product.specs && (
-                <div className="pt-4 space-y-2">
-                  <h4 className="font-semibold text-emerald-900 text-sm uppercase tracking-wider">
-                    Quy cách / Chất liệu
-                  </h4>
-                  <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
-                    {Object.entries(product.specs).map(([key, val]) => (
-                      <div key={key} className="flex justify-between p-3 text-xs">
-                        <span className="font-semibold text-gray-600">{key}</span>
-                        <span className="text-gray-900 text-right">{val}</span>
+            {/* Tab Navigation Buttons */}
+            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-cream/70 border border-emerald-100 overflow-x-auto max-w-full">
+              <button
+                type="button"
+                onClick={() => setActiveTab("overview")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  activeTab === "overview"
+                    ? "bg-[#2D6338] text-white shadow-xs"
+                    : "text-gray-600 hover:text-emerald-950 hover:bg-white"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Mô tả chi tiết</span>
+              </button>
+
+              {parsedInfo.sizeGuide && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("size")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    activeTab === "size"
+                      ? "bg-[#2D6338] text-white shadow-xs"
+                      : "text-gray-600 hover:text-emerald-950 hover:bg-white"
+                  }`}
+                >
+                  <Ruler className="w-3.5 h-3.5" />
+                  <span>Kích thước &amp; Size</span>
+                </button>
+              )}
+
+              {(parsedInfo.materials || parsedInfo.careGuide) && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("materials")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    activeTab === "materials"
+                      ? "bg-[#2D6338] text-white shadow-xs"
+                      : "text-gray-600 hover:text-emerald-950 hover:bg-white"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Chất liệu &amp; Bảo quản</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("impact")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  activeTab === "impact"
+                    ? "bg-[#2D6338] text-white shadow-xs"
+                    : "text-gray-600 hover:text-emerald-950 hover:bg-white"
+                }`}
+              >
+                <Heart className="w-3.5 h-3.5" />
+                <span>Ý nghĩa gây quỹ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Content Display */}
+          <div className="pt-2">
+            {/* 1. Tab Overview */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in fade-in">
+                <div className="md:col-span-8 space-y-4">
+                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line space-y-2">
+                    {parsedInfo.overview}
+                  </div>
+
+                  {Object.keys(parsedInfo.extraSpecs).length > 0 && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                        Thông số bổ sung:
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {Object.entries(parsedInfo.extraSpecs).map(([k, v]) => (
+                          <div key={k} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs flex justify-between">
+                            <span className="text-gray-500 font-medium">{k}:</span>
+                            <span className="font-bold text-gray-900">{v}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-4 p-5 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <span className="text-xs font-extrabold text-[#542B07] flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-[#2D6338]" />
+                      Cam kết chất lượng
+                    </span>
+                    <p className="text-xs text-[#7E7068] leading-relaxed">
+                      Sản phẩm được tuyển chọn kỹ lưỡng, đường may thủ công tỉ mỉ và đóng gói cẩn thận kèm thiệp cảm ơn từ Mầm Mơ.
+                    </p>
+                  </div>
+                  <div className="pt-3 border-t border-[#F0E5D8] text-[11px] text-[#2D6338] font-bold">
+                    🌱 100% lợi nhuận dành cho các dự án thiện nguyện
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Impact Box */}
-            <div className="p-6 rounded-2xl bg-soft-green/30 border border-soft-green/60 space-y-3">
-              <div className="flex items-center gap-2 text-emerald-950 font-bold text-base">
-                <span>🌱</span> Ý nghĩa từ Gieo Mơ
+            {/* 2. Tab Size Guide */}
+            {activeTab === "size" && (
+              <div className="p-6 rounded-2xl bg-gray-50 border border-gray-200/80 space-y-4 animate-in fade-in">
+                <div className="flex items-center gap-2 text-emerald-950 font-bold text-base">
+                  <Ruler className="w-5 h-5 text-[#2D6338]" />
+                  <span>Kích thước &amp; Bảng thông số</span>
+                </div>
+                <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-gray-200">
+                  {parsedInfo.sizeGuide}
+                </div>
+                <p className="text-xs text-gray-500 italic">
+                  * Kích thước thực tế có thể có dung sai nhỏ (±0.5 - 1cm) do đặc thù cắt may thủ công từ vải mộc.
+                </p>
               </div>
-              <p className="text-sm text-emerald-950/80 leading-relaxed">
-                {product.impact_story ?? "100% lợi nhuận từ sản phẩm này sẽ được đóng góp trực tiếp vào quỹ các dự án thiện nguyện vì cộng đồng của Mầm Mơ."}
-              </p>
-              <div className="pt-2 text-xs font-semibold text-emerald-800">
-                ✨ &quot;Little Pieces, Bigger Dreams&quot;
+            )}
+
+            {/* 3. Tab Materials & Care */}
+            {activeTab === "materials" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
+                {parsedInfo.materials && (
+                  <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm">
+                      <Sparkles className="w-4 h-4 text-[#2D6338]" />
+                      <span>Chất liệu vải &amp; Phụ liệu</span>
+                    </div>
+                    <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                      {parsedInfo.materials}
+                    </p>
+                  </div>
+                )}
+
+                {parsedInfo.careGuide && (
+                  <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-3">
+                    <div className="flex items-center gap-2 text-[#542B07] font-bold text-sm">
+                      <span>🧼</span>
+                      <span>Hướng dẫn giặt &amp; Bảo quản</span>
+                    </div>
+                    <p className="text-xs text-[#542B07]/80 leading-relaxed whitespace-pre-line">
+                      {parsedInfo.careGuide}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* 4. Tab Impact Meaning */}
+            {activeTab === "impact" && (
+              <div className="p-6 rounded-2xl bg-soft-green/30 border border-soft-green/60 space-y-4 animate-in fade-in">
+                <div className="flex items-center gap-2 text-emerald-950 font-bold text-base">
+                  <span>🌱</span>
+                  <span>Hành trình gieo mầm hy vọng cùng Mầm Mơ</span>
+                </div>
+                <p className="text-sm text-emerald-950/80 leading-relaxed">
+                  {parsedInfo.impactStory || "100% lợi nhuận thu được từ mỗi sản phẩm bạn mua sẽ được quy đổi thành tập vở, áo ấm và học bổng cho các em nhỏ tại các điểm trường khó khăn."}
+                </p>
+                <div className="pt-2 flex items-center justify-between text-xs font-bold text-emerald-900 border-t border-emerald-200/50">
+                  <span>✨ &quot;Little Pieces, Bigger Dreams&quot;</span>
+                  <span>Cảm ơn bạn đã đồng hành cùng Mầm!</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -280,7 +424,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           <h3 className="font-heading font-bold text-2xl text-emerald-950">
             Sản phẩm liên quan
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
             {relatedProducts.map((rel) => (
               <ProductCard key={rel.product_id} product={rel} />
             ))}

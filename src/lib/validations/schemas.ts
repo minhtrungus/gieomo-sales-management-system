@@ -23,7 +23,7 @@ export const checkoutSchema = z.object({
     .string()
     .transform((val) => val.replace(/\s+|-|\./g, "").replace(/^\+84/, "0"))
     .pipe(z.string().regex(/^(0[3-9])\d{8}$/, "Số điện thoại người nhận phải gồm 10 số")),
-  delivery_type: z.enum(["home_delivery", "pickup_point", "self_pickup"], {
+  delivery_type: z.enum(["home_delivery", "pickup_point", "self_pickup", "member_delivery"], {
     message: "Vui lòng chọn hình thức nhận hàng",
   }),
   shipping_address: z.string().optional(),
