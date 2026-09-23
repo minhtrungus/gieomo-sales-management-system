@@ -8,8 +8,8 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { MOCK_PRODUCTS } from "@/lib/data/mockData";
-import { parseProductDescription } from "@/lib/utils/productParser";
-import { BookOpen, Ruler, Sparkles, Heart, ShieldCheck } from "lucide-react";
+import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
+import { BookOpen, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -31,6 +31,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
   const currentStock = selectedVariant?.stock ?? 10;
   const isOutOfStock = currentStock <= 0;
+
+  const specRows = buildProductSpecRows(product, parsedInfo, currentStock);
 
   // Reset quantity when variant changes to prevent stale values exceeding stock
   useEffect(() => {
@@ -86,7 +88,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                   src={product.images[selectedImageIndex]}
                   alt={product.name}
                   fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                   className="object-cover"
+                  priority
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 text-emerald-800/60">
@@ -109,7 +113,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                         : "border-transparent opacity-70 hover:opacity-100"
                     }`}
                   >
-                    <Image src={img} alt="" fill className="object-cover" />
+                    <Image src={img} alt="" fill sizes="80px" className="object-cover" />
                   </button>
                 ))}
               </div>
@@ -250,7 +254,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Cột chính: Mô tả, Kích thước, Chất liệu & Bảo quản */}
+            {/* Cột chính: Mô tả chi tiết & Bảng Thông số chuẩn Shopee */}
             <div className="lg:col-span-8 space-y-6">
               {/* 1. Mô tả chi tiết */}
               <div className="space-y-2">
@@ -258,77 +262,44 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                   <BookOpen className="w-4 h-4 text-[#2D6338]" />
                   <span>Mô tả chi tiết</span>
                 </h4>
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-gray-50/70 p-4 sm:p-5 rounded-2xl border border-gray-100">
                   {parsedInfo.overview || product.description}
                 </div>
               </div>
 
-              {/* 2. Bảng Kích thước & Size (nếu có) */}
-              {parsedInfo.sizeGuide && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
-                    <Ruler className="w-4 h-4 text-[#2D6338]" />
-                    <span>Kích thước &amp; Bảng thông số</span>
-                  </h4>
-                  <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-2">
-                    <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
-                      {parsedInfo.sizeGuide}
-                    </div>
-                    <p className="text-[11px] text-gray-500 italic">
-                      * Kích thước thực tế có thể có dung sai nhỏ (±0.5 - 1cm) do đặc thù cắt may thủ công từ vải mộc.
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* 2. Thông tin bổ sung & Bảng thông số (Kẻ bảng chuyên nghiệp chuẩn Shopee) */}
+              <div className="space-y-2.5">
+                <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-4 h-4 text-[#2D6338]" />
+                  <span>Thông tin bổ sung</span>
+                </h4>
 
-              {/* 3. Chất liệu & Bảo quản (nếu có) */}
-              {(parsedInfo.materials || parsedInfo.careGuide) && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-[#2D6338]" />
-                    <span>Chất liệu &amp; Hướng dẫn bảo quản</span>
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {parsedInfo.materials && (
-                      <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-1.5">
-                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1">
-                          🧶 Chất liệu vải &amp; Phụ liệu
-                        </span>
-                        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
-                          {parsedInfo.materials}
-                        </p>
-                      </div>
-                    )}
-                    {parsedInfo.careGuide && (
-                      <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-1.5">
-                        <span className="text-xs font-bold text-[#542B07] flex items-center gap-1">
-                          🧼 Giặt &amp; Bảo quản
-                        </span>
-                        <p className="text-xs text-[#542B07]/80 leading-relaxed whitespace-pre-line">
-                          {parsedInfo.careGuide}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 4. Thông số bổ sung / Specs (nếu có) */}
-              {Object.keys(parsedInfo.extraSpecs).length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="font-bold text-gray-700 text-xs uppercase tracking-wider">
-                    Thông số bổ sung:
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {Object.entries(parsedInfo.extraSpecs).map(([k, v]) => (
-                      <div key={k} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs flex justify-between">
-                        <span className="text-gray-500 font-medium">{k}:</span>
-                        <span className="font-bold text-gray-900">{v}</span>
+                <div className="rounded-2xl border border-gray-200/90 overflow-hidden bg-white shadow-2xs">
+                  <div className="divide-y divide-gray-100 text-xs sm:text-sm">
+                    {specRows.map((row, idx) => (
+                      <div
+                        key={row.label}
+                        className={`flex items-start transition-colors ${
+                          idx % 2 === 0 ? "bg-[#FCFAF7]/90" : "bg-white"
+                        } hover:bg-emerald-50/40`}
+                      >
+                        <div className="w-36 sm:w-48 py-3 px-4 text-gray-500 font-medium shrink-0 border-r border-gray-100/90 flex items-center">
+                          {row.label}
+                        </div>
+                        <div className="py-3 px-4 text-gray-900 font-semibold leading-relaxed flex-1 whitespace-pre-line">
+                          {row.value}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+
+                {parsedInfo.sizeGuide && (
+                  <p className="text-[11px] text-gray-400 italic px-1">
+                    * Kích thước thực tế có thể có dung sai nhỏ (±0.5 - 1cm) do đặc thù cắt may thủ công từ vải mộc.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Cột phụ: Ý nghĩa gây quỹ & Cam kết chất lượng */}
@@ -381,7 +352,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
       <Footer />
 
       {toastMessage && (
-        <Toast type="success" message={toastMessage} onClose={() => setToastMessage(null)} />
+        <div className="fixed bottom-5 right-5 z-50 animate-slide-up pointer-events-auto">
+          <Toast type="success" message={toastMessage} onClose={() => setToastMessage(null)} />
+        </div>
       )}
     </div>
   );

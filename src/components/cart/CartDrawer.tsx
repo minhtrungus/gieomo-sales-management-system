@@ -15,6 +15,9 @@ interface CartDrawerProps {
 
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, getSubtotal, getItemCount } = useCartStore();
+
+  if (!isOpen) return null;
+
   const subtotal = getSubtotal();
   const count = getItemCount();
 
@@ -47,6 +50,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                         src={item.image_url}
                         alt={item.product_name ?? item.name ?? ""}
                         fill
+                        sizes="64px"
                         className="object-cover"
                       />
                     ) : (

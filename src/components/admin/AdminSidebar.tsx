@@ -74,6 +74,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 src="/images/logo_gieo mơ.jpg"
                 alt="Gieo Mơ Admin"
                 fill
+                sizes="32px"
                 className="object-cover"
               />
             </div>

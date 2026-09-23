@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
@@ -13,6 +14,7 @@ import { Search, Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
@@ -65,23 +67,25 @@ export default function AdminOrdersPage() {
     setPendingStatusChange(null);
   };
 
-  const filteredOrders = orders.filter((ord) => {
-    if (statusFilter !== "all" && ord.order_status !== statusFilter) return false;
-    if (introducerFilter !== "all") {
-      if (introducerFilter === "direct" && ord.introducer_info && ord.introducer_info !== "Trực tiếp (Website)") return false;
-      if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) return false;
-    }
-    if (
-      searchQuery &&
-      !ord.order_code.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !ord.buyer_name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !ord.buyer_phone?.includes(searchQuery) &&
-      !ord.introducer_info?.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredOrders = useMemo(() => {
+    return orders.filter((ord) => {
+      if (statusFilter !== "all" && ord.order_status !== statusFilter) return false;
+      if (introducerFilter !== "all") {
+        if (introducerFilter === "direct" && ord.introducer_info && ord.introducer_info !== "Trực tiếp (Website)") return false;
+        if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) return false;
+      }
+      if (
+        debouncedSearch &&
+        !ord.order_code.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+        !ord.buyer_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+        !ord.buyer_phone?.includes(debouncedSearch) &&
+        !ord.introducer_info?.toLowerCase().includes(debouncedSearch.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [orders, statusFilter, introducerFilter, debouncedSearch]);
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);

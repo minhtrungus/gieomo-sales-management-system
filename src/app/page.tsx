@@ -18,10 +18,10 @@ export default function HomePage() {
             HERO SECTION: THE STORYBOOK OF MẦM AND THE SEWING POUCH
             ======================================================== */}
         <section className="relative overflow-hidden pt-8 pb-16 md:pt-14 md:pb-24 gradient-fairy border-b border-[#F0E5D8]">
-          {/* Subtle floating background decorations */}
-          <div className="absolute top-10 left-10 w-48 h-48 rounded-full bg-[#BFE9C3]/20 blur-3xl pointer-events-none" />
-          <div className="absolute bottom-10 right-10 w-64 h-64 rounded-full bg-[#FFD1E1]/30 blur-3xl pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-[#FFE7A8]/20 blur-3xl pointer-events-none" />
+          {/* Subtle floating background decorations (GPU accelerated to eliminate scroll stutter) */}
+          <div className="absolute top-10 left-10 w-48 h-48 rounded-full bg-[#BFE9C3]/20 blur-3xl pointer-events-none transform-gpu" />
+          <div className="absolute bottom-10 right-10 w-64 h-64 rounded-full bg-[#FFD1E1]/30 blur-3xl pointer-events-none transform-gpu" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-[#FFE7A8]/20 blur-3xl pointer-events-none transform-gpu" />
 
           <div className="container mx-auto px-4 sm:px-6 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
@@ -92,6 +92,7 @@ export default function HomePage() {
                       src="/images/cover_gieomo.jpg"
                       alt="Gieo Mơ — Mầm trong chiếc túi Pouch may vá"
                       fill
+                      sizes="(max-width: 1024px) 100vw, 50vw"
                       className="object-cover hover:scale-105 transition-transform duration-700"
                       priority
                     />

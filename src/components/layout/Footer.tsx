@@ -34,6 +34,7 @@ export function Footer() {
                   src="/images/logo_gieo mơ.jpg"
                   alt="Gieo Mơ"
                   fill
+                  sizes="44px"
                   className="object-cover"
                 />
               </div>

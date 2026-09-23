@@ -52,8 +52,12 @@ const SEED_PAYMENTS: PaymentRecord[] = [
   },
 ];
 
+let cachedOrders: Order[] | null = null;
+let cachedPayments: PaymentRecord[] | null = null;
+
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return MOCK_ORDERS;
+  if (cachedOrders !== null) return cachedOrders;
   try {
     const raw = localStorage.getItem("gieomo_orders");
     let orders: Order[] = raw ? JSON.parse(raw) : [...MOCK_ORDERS];
@@ -70,6 +74,7 @@ export function getStoredOrders(): Order[] {
     if (hasAdded || !raw) {
       localStorage.setItem("gieomo_orders", JSON.stringify(orders));
     }
+    cachedOrders = orders;
     return orders;
   } catch (e) {
     console.error("Error reading gieomo_orders from localStorage", e);
@@ -93,6 +98,7 @@ export function saveNewOrder(newOrder: Order): void {
 
     const orders = getStoredOrders();
     const updated = [newOrder, ...orders.filter((o) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code)];
+    cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
     // If banking payment method, automatically add to payments list
@@ -154,6 +160,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
           }
         : o
     );
+    cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -173,6 +180,7 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
           }
         : o
     );
+    cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -194,6 +202,7 @@ export function updateStoredOrderNotes(orderId: string, notes: { customer_note?:
           }
         : o
     );
+    cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -216,6 +225,7 @@ export function updateStoredOrderWarehouse(orderId: string, warehouseId: string)
           }
         : o
     );
+    cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -225,6 +235,7 @@ export function updateStoredOrderWarehouse(orderId: string, warehouseId: string)
 
 export function getStoredPayments(): PaymentRecord[] {
   if (typeof window === "undefined") return SEED_PAYMENTS;
+  if (cachedPayments !== null) return cachedPayments;
   try {
     const raw = localStorage.getItem("gieomo_payments");
     let payments: PaymentRecord[] = raw ? JSON.parse(raw) : [...SEED_PAYMENTS];
@@ -235,6 +246,7 @@ export function getStoredPayments(): PaymentRecord[] {
     } else if (!raw) {
       localStorage.setItem("gieomo_payments", JSON.stringify(payments));
     }
+    cachedPayments = payments;
     return payments;
   } catch (e) {
     console.error("Error reading gieomo_payments", e);
@@ -254,6 +266,7 @@ export function approveStoredPayment(paymentId: string): void {
       }
       return p;
     });
+    cachedPayments = updatedPayments;
     localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
 
     if (approvedOrderCode) {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 
 export type NotificationType = "order" | "payment" | "stock" | "member" | "system";
 
@@ -118,8 +118,8 @@ function generateInitialNotifications(): NotificationItem[] {
     }
   ];
 
-  // Generate 145 additional realistic notifications spanning the last 14 days
-  for (let i = 6; i <= 150; i++) {
+  // Generate 20 additional realistic notifications spanning the last 14 days
+  for (let i = 6; i <= 25; i++) {
     const type = types[i % types.length];
     const customer = customers[i % customers.length];
     const product = products[i % products.length];
@@ -214,14 +214,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     localStorage.setItem("gieomo_admin_auto_push", val ? "true" : "false");
   }, []);
 
-  // Save to localStorage
+  // Save to localStorage (limit to 50 most recent to prevent storage bloat)
   useEffect(() => {
     if (notifications.length > 0) {
-      localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 200)));
+      localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 50)));
     }
   }, [notifications]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -323,23 +323,39 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
   }, []);
 
+  const contextValue = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      autoPushEnabled,
+      setAutoPushEnabled,
+      markAsRead,
+      markAsUnread,
+      toggleStar,
+      deleteNotifications,
+      pushNotification,
+      triggerTestPush,
+      toasts,
+      dismissToast,
+    }),
+    [
+      notifications,
+      unreadCount,
+      autoPushEnabled,
+      setAutoPushEnabled,
+      markAsRead,
+      markAsUnread,
+      toggleStar,
+      deleteNotifications,
+      pushNotification,
+      triggerTestPush,
+      toasts,
+      dismissToast,
+    ]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        autoPushEnabled,
-        setAutoPushEnabled,
-        markAsRead,
-        markAsUnread,
-        toggleStar,
-        deleteNotifications,
-        pushNotification,
-        triggerTestPush,
-        toasts,
-        dismissToast,
-      }}
-    >
+    <NotificationContext.Provider value={contextValue}>
       {children}
     </NotificationContext.Provider>
   );

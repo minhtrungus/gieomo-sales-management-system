@@ -273,6 +273,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
               src="/images/logo_gieo mơ.jpg"
               alt="Admin BTC"
               fill
+              sizes="32px"
               className="object-cover"
             />
           </div>

@@ -6,12 +6,15 @@ import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/data/mockData";
 import { EmptyState } from "@/components/ui/States";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import { Search, Sparkles } from "lucide-react";
 
 export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("featured");
+
+  const debouncedSearch = useDebounce(searchQuery, 250);
 
   const filteredProducts = useMemo(() => {
     return MOCK_PRODUCTS.filter((product) => {
@@ -21,9 +24,9 @@ export default function ProductsPage() {
       }
       // Search Query
       if (
-        searchQuery.trim() !== "" &&
-        !product.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !product.short_description?.toLowerCase().includes(searchQuery.toLowerCase())
+        debouncedSearch.trim() !== "" &&
+        !product.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+        !product.short_description?.toLowerCase().includes(debouncedSearch.toLowerCase())
       ) {
         return false;
       }
@@ -34,7 +37,7 @@ export default function ProductsPage() {
       if (sortBy === "newest") return b.sort_order - a.sort_order;
       return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
     });
-  }, [selectedCategory, searchQuery, sortBy]);
+  }, [selectedCategory, debouncedSearch, sortBy]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">

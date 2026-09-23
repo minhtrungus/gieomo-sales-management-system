@@ -60,7 +60,13 @@ export default function CombosPage() {
             >
               <div className="relative w-full sm:w-48 aspect-square rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center text-4xl">
                 {combo.images?.[0] ? (
-                  <Image src={combo.images[0]} alt="" fill className="object-cover" />
+                  <Image
+                    src={combo.images[0]}
+                    alt={combo.name}
+                    fill
+                    sizes="(max-width: 640px) 100vw, 192px"
+                    className="object-cover"
+                  />
                 ) : (
                   <span>🎁</span>
                 )}
@@ -121,7 +127,9 @@ export default function CombosPage() {
       <Footer />
 
       {toastMessage && (
-        <Toast type="success" message={toastMessage} onClose={() => setToastMessage(null)} />
+        <div className="fixed bottom-5 right-5 z-50 animate-slide-up pointer-events-auto">
+          <Toast type="success" message={toastMessage} onClose={() => setToastMessage(null)} />
+        </div>
       )}
     </div>
   );

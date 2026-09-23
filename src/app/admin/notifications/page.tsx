@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import {
   useNotifications,
   NotificationItem,
@@ -52,6 +53,7 @@ export default function NotificationsPage() {
 
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
@@ -72,8 +74,8 @@ export default function NotificationsPage() {
       }
 
       // Search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
+      if (debouncedSearch.trim()) {
+        const query = debouncedSearch.toLowerCase();
         const matchesTitle = item.title.toLowerCase().includes(query);
         const matchesDesc = item.desc.toLowerCase().includes(query);
         const matchesCode = item.meta?.order_code?.toLowerCase().includes(query);
@@ -83,7 +85,7 @@ export default function NotificationsPage() {
 
       return true;
     });
-  }, [notifications, activeTab, searchQuery]);
+  }, [notifications, activeTab, debouncedSearch]);
 
   // Pagination calculation: 50 items per page
   const totalItems = filteredNotifications.length;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -12,6 +13,7 @@ import { Plus, Search, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye } fro
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>(MOCK_PRODUCTS);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedCategory, setSelectedCategory] = useState("all");
 
   // Modal States
@@ -19,10 +21,12 @@ export default function AdminProductsPage() {
   const [deletingProduct, setDeletingProduct] = useState<ExtendedProduct | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
-  // 4 Khung chi tiết khi sửa sản phẩm
+  // Các khung chi tiết khi sửa sản phẩm (tách ở quản trị)
   const [editOverview, setEditOverview] = useState("");
   const [editSize, setEditSize] = useState("");
   const [editMaterials, setEditMaterials] = useState("");
+  const [editCare, setEditCare] = useState("");
+  const [editExtraSpecs, setEditExtraSpecs] = useState("");
   const [editImpact, setEditImpact] = useState("");
 
   // Quick Add Form States
@@ -33,19 +37,21 @@ export default function AdminProductsPage() {
   const [addCategory, setAddCategory] = useState("cat-1");
   const [addImageUrl, setAddImageUrl] = useState("/images/products/pounch_1.png");
 
-  const filteredProducts = products.filter((p) => {
-    if (selectedCategory !== "all" && p.category?.category_id !== selectedCategory) {
-      return false;
-    }
-    if (
-      searchQuery.trim() !== "" &&
-      !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !p.slug.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (selectedCategory !== "all" && p.category?.category_id !== selectedCategory) {
+        return false;
+      }
+      if (
+        debouncedSearch.trim() !== "" &&
+        !p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+        !p.slug.toLowerCase().includes(debouncedSearch.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [products, selectedCategory, debouncedSearch]);
 
   // Toggle active/draft status
   const handleToggleStatus = (productId: string) => {
@@ -58,12 +64,18 @@ export default function AdminProductsPage() {
     );
   };
 
-  // Start editing product with 4 frames populated
+  // Start editing product with separate spec fields populated
   const handleStartEdit = (p: ExtendedProduct) => {
     const parsed = parseProductDescription(p.description, p.specs, p.impact_story ?? undefined);
     setEditOverview(parsed.overview || p.description || "");
     setEditSize(parsed.sizeGuide || "");
-    setEditMaterials([parsed.materials, parsed.careGuide].filter(Boolean).join("\n") || "");
+    setEditMaterials(parsed.materials || "");
+    setEditCare(parsed.careGuide || "");
+    setEditExtraSpecs(
+      Object.entries(parsed.extraSpecs)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n")
+    );
     setEditImpact(parsed.impactStory || p.impact_story || "");
     setEditingProduct(p);
   };
@@ -73,10 +85,34 @@ export default function AdminProductsPage() {
     e.preventDefault();
     if (!editingProduct) return;
 
+    // Parse extra specs: mỗi dòng 1 thông số dạng "Tên: Giá trị"
+    const parsedExtraSpecs: Record<string, string> = {};
+    if (editExtraSpecs.trim()) {
+      const lines = editExtraSpecs.split("\n");
+      for (const line of lines) {
+        const parts = line.split(/[:：]/);
+        if (parts.length >= 2) {
+          const k = parts[0].trim();
+          const v = parts.slice(1).join(":").trim();
+          if (k && v) {
+            parsedExtraSpecs[k] = v;
+          }
+        }
+      }
+    }
+
+    const newSpecs: Record<string, string> = {
+      ...parsedExtraSpecs,
+    };
+    if (editSize.trim()) newSpecs["Kích thước"] = editSize.trim();
+    if (editMaterials.trim()) newSpecs["Chất liệu"] = editMaterials.trim();
+    if (editCare.trim()) newSpecs["Bảo quản"] = editCare.trim();
+
     const fullDescription = [
       editOverview.trim(),
       editSize.trim() ? `\n\n## Kích thước\n${editSize.trim()}` : "",
       editMaterials.trim() ? `\n\n## Chất liệu\n${editMaterials.trim()}` : "",
+      editCare.trim() ? `\n\n## Bảo quản\n${editCare.trim()}` : "",
       editImpact.trim() ? `\n\n## Ý nghĩa\n${editImpact.trim()}` : "",
     ].filter(Boolean).join("");
 
@@ -84,6 +120,7 @@ export default function AdminProductsPage() {
       ...editingProduct,
       description: fullDescription,
       impact_story: editImpact.trim() || undefined,
+      specs: newSpecs,
     };
 
     setProducts((prev) =>
@@ -517,51 +554,84 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              {/* 4 Khung Mô tả & Thông tin chuyên sâu */}
+              {/* Các khung thông tin chi tiết (Tách bạch ở quản trị để dễ nhập liệu) */}
               <div className="space-y-3 pt-2 border-t border-gray-100">
-                <label className="font-extrabold text-emerald-950 uppercase tracking-wider block">
-                  Nội dung chi tiết sản phẩm (4 Khung hiển thị)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
+                    Chi tiết &amp; Thông số sản phẩm (Tách riêng ở quản trị)
+                  </label>
+                  <span className="text-[11px] text-gray-500 italic">
+                    Tự động đồng bộ lên bảng thông số Shopee ở trang bán hàng
+                  </span>
+                </div>
 
-                {/* Khung 1 */}
+                {/* Khung 1: Mô tả chung */}
                 <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                  <label className="font-bold text-gray-800 block">📋 Khung 1: Mô tả chung sản phẩm</label>
+                  <label className="font-bold text-gray-800 block text-xs">📋 Khung 1: Mô tả giới thiệu sản phẩm</label>
                   <textarea
                     value={editOverview}
                     onChange={(e) => setEditOverview(e.target.value)}
-                    placeholder="Mô tả giới thiệu chi tiết sản phẩm..."
+                    placeholder="Mô tả giới thiệu chi tiết sản phẩm, công năng và câu chuyện..."
                     rows={3}
                     className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
                   />
                 </div>
 
-                {/* Khung 2 */}
-                <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                  <label className="font-bold text-gray-800 block">📏 Khung 2: Kích thước &amp; Bảng Size</label>
-                  <textarea
-                    value={editSize}
-                    onChange={(e) => setEditSize(e.target.value)}
-                    placeholder="Thông số kích thước, sức chứa..."
-                    rows={2}
-                    className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Khung 2: Kích thước */}
+                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
+                    <label className="font-bold text-gray-800 block text-xs">📏 Khung 2: Kích thước &amp; Bảng Size</label>
+                    <textarea
+                      value={editSize}
+                      onChange={(e) => setEditSize(e.target.value)}
+                      placeholder="Ví dụ: 35cm x 40cm, quai dài 28cm..."
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                    />
+                  </div>
+
+                  {/* Khung 3: Chất liệu */}
+                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
+                    <label className="font-bold text-gray-800 block text-xs">🧶 Khung 3: Chất liệu vải &amp; Phụ liệu</label>
+                    <textarea
+                      value={editMaterials}
+                      onChange={(e) => setEditMaterials(e.target.value)}
+                      placeholder="Ví dụ: Vải Canvas 12oz dày dặn, đứng form..."
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                    />
+                  </div>
                 </div>
 
-                {/* Khung 3 */}
-                <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                  <label className="font-bold text-gray-800 block">🧶 Khung 3: Chất liệu &amp; Bảo quản</label>
-                  <textarea
-                    value={editMaterials}
-                    onChange={(e) => setEditMaterials(e.target.value)}
-                    placeholder="Chất liệu vải may, lót và hướng dẫn giặt..."
-                    rows={2}
-                    className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Khung 4: Hướng dẫn bảo quản */}
+                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
+                    <label className="font-bold text-gray-800 block text-xs">🧼 Khung 4: Hướng dẫn bảo quản &amp; Giặt</label>
+                    <textarea
+                      value={editCare}
+                      onChange={(e) => setEditCare(e.target.value)}
+                      placeholder="Ví dụ: Giặt tay nhẹ nhàng, không dùng thuốc tẩy..."
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                    />
+                  </div>
+
+                  {/* Khung 5: Thông số bổ sung khác */}
+                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
+                    <label className="font-bold text-gray-800 block text-xs">⚙️ Khung 5: Thông số bổ sung khác</label>
+                    <textarea
+                      value={editExtraSpecs}
+                      onChange={(e) => setEditExtraSpecs(e.target.value)}
+                      placeholder={"Mỗi dòng 1 thông số (Tên: Giá trị)\nVí dụ:\nTính năng: Có ngăn phụ kéo khóa\nKhóa kéo: Kim loại YKK"}
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white font-mono text-[11px]"
+                    />
+                  </div>
                 </div>
 
-                {/* Khung 4 */}
+                {/* Khung 6: Ý nghĩa gây quỹ */}
                 <div className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-1">
-                  <label className="font-bold text-emerald-950 block">💖 Khung 4: Ý nghĩa gây quỹ Mầm Mơ</label>
+                  <label className="font-bold text-emerald-950 block text-xs">💖 Khung 6: Ý nghĩa gây quỹ Mầm Mơ</label>
                   <textarea
                     value={editImpact}
                     onChange={(e) => setEditImpact(e.target.value)}

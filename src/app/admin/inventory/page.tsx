@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import { MOCK_PRODUCTS, MOCK_WAREHOUSES } from "@/lib/data/mockData";
 import {
   Search,
@@ -64,6 +65,7 @@ export default function AdminInventoryPage() {
   });
 
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<"all" | "wh-1" | "wh-2">("all");
   const [activeLogTab, setActiveLogTab] = useState<"inflow" | "transfer">("inflow");
 
@@ -317,35 +319,45 @@ export default function AdminInventoryPage() {
     setActiveLogTab("transfer"); // Switch to view transfer logs
   };
 
-  // Flatten rows with both warehouse stocks
-  const inventoryRows = products
-    .flatMap((p) =>
-      (p.variants || []).map((v) => ({
-        productId: p.product_id,
-        variantId: v.variant_id,
-        productName: p.name,
-        variantName: v.name,
-        sku: v.sku || "N/A",
-        stockWh1: v.stock_warehouse_1 ?? 0,
-        stockWh2: v.stock_warehouse_2 ?? 0,
-        stockTotal: (v.stock_warehouse_1 ?? 0) + (v.stock_warehouse_2 ?? 0),
-      }))
-    )
-    .filter((item) => {
-      if (
-        searchQuery.trim() !== "" &&
-        !item.productName.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !item.sku.toLowerCase().includes(searchQuery.toLowerCase())
-      ) {
-        return false;
-      }
-      return true;
-    });
+  // Flatten rows with both warehouse stocks (Memoized)
+  const inventoryRows = useMemo(() => {
+    return products
+      .flatMap((p) =>
+        (p.variants || []).map((v) => ({
+          productId: p.product_id,
+          variantId: v.variant_id,
+          productName: p.name,
+          variantName: v.name,
+          sku: v.sku || "N/A",
+          stockWh1: v.stock_warehouse_1 ?? 0,
+          stockWh2: v.stock_warehouse_2 ?? 0,
+          stockTotal: (v.stock_warehouse_1 ?? 0) + (v.stock_warehouse_2 ?? 0),
+        }))
+      )
+      .filter((item) => {
+        if (
+          debouncedSearch.trim() !== "" &&
+          !item.productName.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+          !item.sku.toLowerCase().includes(debouncedSearch.toLowerCase())
+        ) {
+          return false;
+        }
+        return true;
+      });
+  }, [products, debouncedSearch]);
 
-  // Calculate summary metrics across 2 warehouses
-  const totalStockAll = inventoryRows.reduce((sum, r) => sum + r.stockTotal, 0);
-  const totalStockWh1 = inventoryRows.reduce((sum, r) => sum + r.stockWh1, 0);
-  const totalStockWh2 = inventoryRows.reduce((sum, r) => sum + r.stockWh2, 0);
+  // Calculate summary metrics across 2 warehouses (Single pass memoized)
+  const { totalStockAll, totalStockWh1, totalStockWh2 } = useMemo(() => {
+    let all = 0;
+    let wh1 = 0;
+    let wh2 = 0;
+    for (const r of inventoryRows) {
+      all += r.stockTotal;
+      wh1 += r.stockWh1;
+      wh2 += r.stockWh2;
+    }
+    return { totalStockAll: all, totalStockWh1: wh1, totalStockWh2: wh2 };
+  }, [inventoryRows]);
 
   const selectedProductVariants =
     products.find((p) => p.product_id === selectedProductId)?.variants || [];

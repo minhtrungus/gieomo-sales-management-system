@@ -5,8 +5,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/store/cart";
-import { CartDrawer } from "@/components/cart/CartDrawer";
+import dynamic from "next/dynamic";
 import { ShoppingBag, Search, Menu, X, Sparkles } from "lucide-react";
+
+const CartDrawer = dynamic(
+  () => import("@/components/cart/CartDrawer").then((mod) => mod.CartDrawer),
+  { ssr: false }
+);
 
 export function Navbar() {
   const pathname = usePathname();
@@ -39,6 +44,7 @@ export function Navbar() {
                 src="/images/logo_gieo mơ.jpg"
                 alt="Gieo Mơ Logo"
                 fill
+                sizes="44px"
                 className="object-cover"
                 priority
               />
@@ -136,8 +142,10 @@ export function Navbar() {
         )}
       </header>
 
-      {/* Cart Drawer */}
-      <CartDrawer isOpen={cartDrawerOpen} onClose={() => setCartDrawerOpen(false)} />
+      {/* Cart Drawer: Lazy loaded only when opened */}
+      {cartDrawerOpen && (
+        <CartDrawer isOpen={cartDrawerOpen} onClose={() => setCartDrawerOpen(false)} />
+      )}
     </>
   );
 }

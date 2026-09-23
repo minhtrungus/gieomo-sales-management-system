@@ -7,14 +7,14 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
 import { Toast } from "@/components/ui/Toast";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Plus } from "lucide-react";
 
 interface ProductCardProps {
   product: ExtendedProduct;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export const ProductCard = memo(function ProductCard({ product }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -56,6 +56,7 @@ export function ProductCard({ product }: ProductCardProps) {
               src={product.images[0]}
               alt={product.name}
               fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
           ) : (
@@ -125,14 +126,17 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
       </Link>
 
-      {/* Toast Notification */}
+      {/* Toast Notification (Fixed to bottom-right to prevent layout shift) */}
       {toastMessage && (
-        <Toast
-          type="success"
-          message={toastMessage}
-          onClose={() => setToastMessage(null)}
-        />
+        <div className="fixed bottom-5 right-5 z-50 animate-slide-up pointer-events-auto">
+          <Toast
+            type="success"
+            message={toastMessage}
+            onClose={() => setToastMessage(null)}
+          />
+        </div>
       )}
     </>
   );
-}
+});
+
