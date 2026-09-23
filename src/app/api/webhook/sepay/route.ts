@@ -3,14 +3,20 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     // 1. Authenticate SePay API Key (Header "Authorization: Apikey <SEPAY_API_KEY>")
-    const authHeader = request.headers.get("authorization");
-    const configuredApiKey = process.env.SEPAY_API_KEY;
+    const authHeader = request.headers.get("authorization") || request.headers.get("x-api-key") || "";
+    const configuredApiKey = (process.env.SEPAY_API_KEY || "").trim();
 
     if (configuredApiKey) {
-      const expectedBearer = `Apikey ${configuredApiKey}`;
-      if (!authHeader || authHeader !== expectedBearer) {
+      // Extract token from "Apikey <token>", "Bearer <token>", or raw "<token>"
+      const token = authHeader.replace(/^(Apikey|Bearer|apikey)\s+/i, "").trim();
+      if (!token || token !== configuredApiKey) {
+        console.warn(`[SePay Webhook] 401 Unauthorized: Received token '${token}', expected '${configuredApiKey}'`);
         return NextResponse.json(
-          { success: false, error: "Unauthorized: Invalid or missing SePay API Key" },
+          {
+            success: false,
+            error: "Unauthorized: Invalid or missing SePay API Key",
+            hint: "Please ensure the API Key in SePay exactly matches SEPAY_API_KEY in Vercel environment variables",
+          },
           { status: 401 }
         );
       }
