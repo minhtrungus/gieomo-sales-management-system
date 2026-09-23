@@ -35,12 +35,36 @@ export async function POST(request: Request) {
      * transactionContent: string (e.g. "GM-369817 ung ho du an mam mo")
      * referenceNumber: string
      */
-    const { id, amountIn, transactionContent, referenceNumber, gateway, accountNumber } = payload;
+    const transactionContent: string =
+      payload.transactionContent ||
+      payload.content ||
+      payload.description ||
+      payload.body ||
+      payload.code ||
+      "";
 
-    if (!transactionContent || typeof amountIn !== "number" || amountIn <= 0) {
+    const id = payload.id || "";
+    const referenceNumber = payload.referenceNumber || payload.reference_number || "";
+    const gateway = payload.gateway || "Bank";
+    const accountNumber = payload.accountNumber || payload.account_number || "";
+
+    const rawAmount =
+      payload.amountIn ??
+      payload.amount_in ??
+      payload.transferAmount ??
+      payload.amount ??
+      0;
+    const amountIn = typeof rawAmount === "string" ? parseFloat(rawAmount) || 0 : Number(rawAmount) || 0;
+
+    // Handle test pings from SePay (when test payload is empty or has zero amount)
+    if (!transactionContent && amountIn <= 0) {
       return NextResponse.json(
-        { success: false, error: "Invalid payload: Missing transactionContent or amountIn" },
-        { status: 400 }
+        {
+          success: true,
+          message: "SePay Webhook test ping received successfully. Endpoint is active and ready.",
+          test: true,
+        },
+        { status: 200 }
       );
     }
 
