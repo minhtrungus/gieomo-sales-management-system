@@ -4,8 +4,11 @@ import { useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
+
 export default function FAQPage() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const settings = useSiteSettings();
 
   const faqs = [
     {
@@ -18,7 +21,7 @@ export default function FAQPage() {
     },
     {
       q: "Phí giao hàng được tính như thế nào?",
-      a: "Phí giao hàng mặc định cho đơn giao tận nơi là 25.000đ toàn quốc. Đặc biệt, các đơn hàng từ 200.000đ trở lên sẽ được MIỄN PHÍ VẬN CHUYỂN hoàn toàn.",
+      a: `Phí giao hàng mặc định cho đơn giao tận nơi là ${settings.flatShippingFee.toLocaleString("vi-VN")}đ toàn quốc. Đặc biệt, các đơn hàng từ ${settings.freeShippingThreshold.toLocaleString("vi-VN")}đ trở lên sẽ được MIỄN PHÍ VẬN CHUYỂN hoàn toàn.`,
     },
     {
       q: "Tôi có thể theo dõi đơn hàng của mình bằng cách nào?",
@@ -26,7 +29,7 @@ export default function FAQPage() {
     },
     {
       q: "Tôi muốn ủng hộ thêm hoặc hợp tác với Mầm Mơ thì làm thế nào?",
-      a: "Bạn có thể liên hệ trực tiếp với Ban tổ chức qua hotline 0123 456 789 hoặc email gieomo@mammo.vn. Chúng mình luôn rộng mở đón nhận sự đồng hành từ các bạn!",
+      a: `Bạn có thể liên hệ trực tiếp với Ban tổ chức qua hotline ${settings.contactPhone} hoặc email ${settings.contactEmail}. Chúng mình luôn rộng mở đón nhận sự đồng hành từ các bạn!`,
     },
   ];
 

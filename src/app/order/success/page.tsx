@@ -26,6 +26,9 @@ function OrderSuccessContent() {
 
   useEffect(() => {
     setSettings(getStoredSettings());
+    const handleUpdate = () => setSettings(getStoredSettings());
+    window.addEventListener("gieomo_settings_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_settings_updated", handleUpdate);
   }, []);
 
   useEffect(() => {

@@ -5,9 +5,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Sparkles, Mail, Phone, MapPin } from "lucide-react";
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 
 export function Footer() {
   const pathname = usePathname();
+  const settings = useSiteSettings();
 
   const handleFooterLinkClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -127,15 +129,19 @@ export function Footer() {
             <div className="space-y-3.5 text-xs text-white/90 font-medium">
               <p className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span className="text-white">gieomo@mammo.vn</span>
+                <a href={`mailto:${settings.contactEmail}`} className="text-white hover:text-[#FFE7A8] transition-colors">
+                  {settings.contactEmail}
+                </a>
               </p>
               <p className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span className="text-white font-bold">0123 456 789</span>
+                <a href={`tel:${settings.contactPhone}`} className="text-white font-bold hover:text-[#FFE7A8] transition-colors">
+                  {settings.contactPhone}
+                </a>
               </p>
               <p className="flex items-center gap-2.5">
                 <MapPin className="w-4 h-4 text-[#FFB98A] shrink-0" />
-                <span className="text-white">TP. Hồ Chí Minh, Việt Nam</span>
+                <span className="text-white">{settings.officeAddress || "TP. Hồ Chí Minh, Việt Nam"}</span>
               </p>
             </div>
           </div>

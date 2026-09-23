@@ -230,6 +230,15 @@ export function saveNewOrder(newOrder: Order): void {
       // ignore
     }
 
+    // Sync order to Supabase PostgreSQL database
+    fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newOrder),
+    }).catch((err) => {
+      console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
+    });
+
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
     console.error("Error saving new order", e);
@@ -251,6 +260,18 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
     );
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    // Sync order status update to Supabase
+    fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        orderStatus: newStatus,
+      }),
+    }).catch((err) => {
+      console.warn("[updateStoredOrderStatus] Failed to sync status to Supabase:", err);
+    });
 
     // Restore stock if order is cancelled
     if (newStatus === "cancelled") {
@@ -348,6 +369,18 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
         // ignore
       }
     }
+
+    // Sync payment status to Supabase
+    fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: orderCodeOrId,
+        paymentStatus,
+      }),
+    }).catch((err) => {
+      console.warn("[updateStoredPaymentStatus] Failed to sync payment status to Supabase:", err);
+    });
 
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -1136,6 +1169,7 @@ export interface SiteSettings {
   siteName: string;
   contactPhone: string;
   contactEmail: string;
+  officeAddress?: string;
   flatShippingFee: number;
   freeShippingThreshold: number;
   bankName: string;
@@ -1153,6 +1187,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "Gieo Mơ",
   contactPhone: "0123456789",
   contactEmail: "gieomo@mammo.vn",
+  officeAddress: "TP. Hồ Chí Minh, Việt Nam",
   flatShippingFee: 25000,
   freeShippingThreshold: 200000,
   bankNumber: "03456789999",
@@ -1167,9 +1202,30 @@ export const DEFAULT_SETTINGS: SiteSettings = {
 };
 
 let cachedSettings: SiteSettings | null = null;
+let hasSyncedSettingsWithServer = false;
+
+export function syncSettingsFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedSettingsWithServer) return;
+  hasSyncedSettingsWithServer = true;
+  fetch("/api/settings")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && data?.settings) {
+        cachedSettings = { ...DEFAULT_SETTINGS, ...data.settings };
+        localStorage.setItem("gieomo_site_settings", JSON.stringify(cachedSettings));
+        window.dispatchEvent(new Event("gieomo_settings_updated"));
+      }
+    })
+    .catch((err) => {
+      console.warn("Could not sync settings from server:", err);
+    });
+}
 
 export function getStoredSettings(): SiteSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  if (!hasSyncedSettingsWithServer) {
+    syncSettingsFromServer();
+  }
   if (cachedSettings !== null) return cachedSettings;
   try {
     const raw = localStorage.getItem("gieomo_site_settings");
@@ -1196,6 +1252,15 @@ export function saveStoredSettings(settings: Partial<SiteSettings>): void {
     cachedSettings = updated;
     localStorage.setItem("gieomo_site_settings", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_settings_updated"));
+
+    // Sync to Supabase DB in background
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    }).catch((err) => {
+      console.error("Failed to sync settings to Supabase DB:", err);
+    });
   } catch (e) {
     console.error("Error saving gieomo_site_settings", e);
   }

@@ -3,7 +3,12 @@ import type { Order } from "@/types/database";
 /**
  * Generates brand-styled HTML email for Order Confirmation
  */
-export function generateOrderConfirmationHtml(order: Order): string {
+export function generateOrderConfirmationHtml(
+  order: Order,
+  customSettings?: { contactPhone?: string; contactEmail?: string }
+): string {
+  const hotline = customSettings?.contactPhone || "0123 456 789";
+  const contactMail = customSettings?.contactEmail || "gieomo@mammo.vn";
   const formattedAmount = order.final_amount.toLocaleString("vi-VN");
   const formattedSubtotal = order.subtotal.toLocaleString("vi-VN");
   const formattedShipping = order.shipping_fee.toLocaleString("vi-VN");
@@ -84,7 +89,7 @@ export function generateOrderConfirmationHtml(order: Order): string {
 
     <!-- Footer -->
     <div style="background-color: #FFF8EE; padding: 18px 24px; text-align: center; border-top: 1px solid #F0E5D8; font-size: 11px; color: #7E7068;">
-      Nếu bạn có câu hỏi hoặc cần hỗ trợ khẩn, liên hệ với Mầm qua Hotline: <strong>0123 456 789</strong> hoặc email <a href="mailto:gieomo@mammo.vn" style="color: #2D6338; font-weight: bold;">gieomo@mammo.vn</a>.
+      Nếu bạn có câu hỏi hoặc cần hỗ trợ khẩn, liên hệ với Mầm qua Hotline: <strong>${hotline}</strong> hoặc email <a href="mailto:${contactMail}" style="color: #2D6338; font-weight: bold;">${contactMail}</a>.
     </div>
   </div>
 </body>

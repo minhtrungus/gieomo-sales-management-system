@@ -76,7 +76,40 @@ function TrackContent() {
     }
   }, [initialCode]);
 
-  const performSearchByCode = (rawQuery: string, ordersList?: Order[]) => {
+  const mapServerOrder = (srv: any): Order => ({
+    order_id: srv.order_id,
+    order_code: srv.order_code,
+    buyer_name: srv.customers?.full_name || srv.receiver_name,
+    buyer_phone: srv.customers?.phone || srv.receiver_phone,
+    buyer_email: srv.customers?.email || "",
+    recipient_name: srv.receiver_name,
+    recipient_phone: srv.receiver_phone,
+    delivery_type: srv.delivery_type,
+    address_detail: srv.shipping_address_snapshot || "",
+    subtotal: srv.subtotal,
+    discount_amount: srv.voucher_discount || 0,
+    shipping_fee: srv.shipping_fee,
+    final_amount: srv.final_amount,
+    order_status: srv.order_status,
+    payment_status: srv.payment_status,
+    delivery_status: srv.delivery_status,
+    payment_method: srv.payment_method,
+    customer_note: srv.customer_note || "",
+    created_at: srv.created_at,
+    completed_at: null,
+    updated_at: srv.created_at,
+    items: (srv.order_items || []).map((it: any) => ({
+      order_item_id: it.order_item_id,
+      order_id: srv.order_id,
+      product_name: it.item_name_snapshot,
+      variant_name: it.variant_name_snapshot,
+      quantity: it.quantity,
+      price: it.unit_price,
+      subtotal: it.subtotal,
+    })),
+  });
+
+  const performSearchByCode = async (rawQuery: string, ordersList?: Order[]) => {
     setErrorMsg(null);
     setHasSearched(true);
 
@@ -91,7 +124,7 @@ function TrackContent() {
     const orders = ordersList || getStoredOrders();
     const upperQuery = query.toUpperCase();
 
-    // Exact order_code match for privacy
+    // 1. Try local exact match first
     const results = orders.filter((o) => {
       return (
         o.order_code.toUpperCase() === upperQuery ||
@@ -102,16 +135,32 @@ function TrackContent() {
     if (results.length > 0) {
       setMatchedOrders(results);
       setSelectedOrder(results[0]);
-    } else {
-      setMatchedOrders([]);
-      setSelectedOrder(null);
-      setErrorMsg(
-        `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817) được cấp khi bạn đặt hàng.`
-      );
+      return;
     }
+
+    // 2. Query Supabase database via API
+    try {
+      const res = await fetch(`/api/orders?code=${encodeURIComponent(upperQuery)}`);
+      const data = await res.json();
+      if (data?.success && data?.orders && data.orders.length > 0) {
+        const dbOrder = mapServerOrder(data.orders[0]);
+        setMatchedOrders([dbOrder]);
+        setSelectedOrder(dbOrder);
+        setDeviceOrders((prev) => [dbOrder, ...prev.filter((p) => p.order_code !== dbOrder.order_code)]);
+        return;
+      }
+    } catch (e) {
+      console.warn("Could not query server orders:", e);
+    }
+
+    setMatchedOrders([]);
+    setSelectedOrder(null);
+    setErrorMsg(
+      `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817) được cấp khi bạn đặt hàng.`
+    );
   };
 
-  const performSearchByPhoneAndName = (rawPhone: string, rawName: string) => {
+  const performSearchByPhoneAndName = async (rawPhone: string, rawName: string) => {
     setErrorMsg(null);
     setHasSearched(true);
 
@@ -134,37 +183,55 @@ function TrackContent() {
 
     const orders = getStoredOrders();
 
-    // Must match BOTH phone AND name (buyer or recipient) to prevent unauthorized snooping
-    const results = orders.filter((o) => {
-      const buyerPhoneClean = (o.buyer_phone || "").replace(/\D/g, "");
-      const recipientPhoneClean = (o.recipient_phone || "").replace(/\D/g, "");
-      const phoneMatched = buyerPhoneClean.includes(cleanPhone) || recipientPhoneClean.includes(cleanPhone);
+    // 1. Check local match
+    const filterByNameAndPhone = (list: Order[]) =>
+      list.filter((o) => {
+        const buyerPhoneClean = (o.buyer_phone || "").replace(/\D/g, "");
+        const recipientPhoneClean = (o.recipient_phone || "").replace(/\D/g, "");
+        const phoneMatched = buyerPhoneClean.includes(cleanPhone) || recipientPhoneClean.includes(cleanPhone);
 
-      const buyerNameClean = removeVietnameseTones(o.buyer_name || "");
-      const recipientNameClean = removeVietnameseTones(o.recipient_name || "");
-      const nameMatched =
-        buyerNameClean.includes(cleanName) ||
-        cleanName.includes(buyerNameClean) ||
-        recipientNameClean.includes(cleanName) ||
-        cleanName.includes(recipientNameClean);
+        const buyerNameClean = removeVietnameseTones(o.buyer_name || "");
+        const recipientNameClean = removeVietnameseTones(o.recipient_name || "");
+        const nameMatched =
+          buyerNameClean.includes(cleanName) ||
+          cleanName.includes(buyerNameClean) ||
+          recipientNameClean.includes(cleanName) ||
+          cleanName.includes(recipientNameClean);
 
-      return phoneMatched && nameMatched;
-    });
+        return phoneMatched && nameMatched;
+      });
 
-    if (results.length > 0) {
-      setMatchedOrders(results);
-      if (results.length === 1) {
-        setSelectedOrder(results[0]);
-      } else {
-        setSelectedOrder(null); // show list
-      }
-    } else {
-      setMatchedOrders([]);
-      setSelectedOrder(null);
-      setErrorMsg(
-        "Không tìm thấy đơn hàng nào khớp với cả Số điện thoại và Họ tên bạn đã nhập. Vui lòng kiểm tra lại thông tin."
-      );
+    const localResults = filterByNameAndPhone(orders);
+    if (localResults.length > 0) {
+      setMatchedOrders(localResults);
+      if (localResults.length === 1) setSelectedOrder(localResults[0]);
+      else setSelectedOrder(null);
+      return;
     }
+
+    // 2. Query Supabase DB by phone
+    try {
+      const res = await fetch(`/api/orders?phone=${encodeURIComponent(cleanPhone)}`);
+      const data = await res.json();
+      if (data?.success && data?.orders && data.orders.length > 0) {
+        const mappedOrders = data.orders.map(mapServerOrder);
+        const serverResults = filterByNameAndPhone(mappedOrders);
+        if (serverResults.length > 0) {
+          setMatchedOrders(serverResults);
+          if (serverResults.length === 1) setSelectedOrder(serverResults[0]);
+          else setSelectedOrder(null);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not query server orders by phone:", e);
+    }
+
+    setMatchedOrders([]);
+    setSelectedOrder(null);
+    setErrorMsg(
+      "Không tìm thấy đơn hàng nào khớp với cả Số điện thoại và Họ tên bạn đã nhập. Vui lòng kiểm tra lại thông tin."
+    );
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {

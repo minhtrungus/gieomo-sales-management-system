@@ -5,8 +5,10 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Mail, Phone, MapPin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { saveContactMessage } from "@/lib/data/orderStore";
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 
 export default function ContactPage() {
+  const settings = useSiteSettings();
   const [submitted, setSubmitted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -86,7 +88,9 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <span className="text-[11px] text-emerald-400 block font-semibold uppercase">Email</span>
-                    <span className="font-medium">gieomo@mammo.vn</span>
+                    <a href={`mailto:${settings.contactEmail}`} className="font-medium hover:underline">
+                      {settings.contactEmail}
+                    </a>
                   </div>
                 </div>
 
@@ -96,7 +100,9 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <span className="text-[11px] text-emerald-400 block font-semibold uppercase">Hotline</span>
-                    <span className="font-medium">0123 456 789</span>
+                    <a href={`tel:${settings.contactPhone}`} className="font-medium hover:underline">
+                      {settings.contactPhone}
+                    </a>
                   </div>
                 </div>
 
@@ -106,7 +112,7 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <span className="text-[11px] text-emerald-400 block font-semibold uppercase">Địa chỉ văn phòng</span>
-                    <span className="font-medium">TP. Hồ Chí Minh, Việt Nam</span>
+                    <span className="font-medium">{settings.officeAddress || "TP. Hồ Chí Minh, Việt Nam"}</span>
                   </div>
                 </div>
               </div>

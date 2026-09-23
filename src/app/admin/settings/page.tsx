@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2 } from "lucide-react";
 import { getStoredSettings, saveStoredSettings } from "@/lib/data/orderStore";
+import { uploadAsset } from "@/lib/services/uploadService";
 
 export default function AdminSettingsPage() {
   const [siteName, setSiteName] = useState("Gieo Mơ");
   const [contactPhone, setContactPhone] = useState("0123456789");
   const [contactEmail, setContactEmail] = useState("gieomo@mammo.vn");
+  const [officeAddress, setOfficeAddress] = useState("TP. Hồ Chí Minh, Việt Nam");
   const [flatShippingFee, setFlatShippingFee] = useState("25000");
   const [freeShippingThreshold, setFreeShippingThreshold] = useState("200000");
 
@@ -26,13 +28,15 @@ export default function AdminSettingsPage() {
   const [coverTheme, setCoverTheme] = useState("emerald");
   const [faviconPreview, setFaviconPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Load from store
+  // Load from store & server DB
   useEffect(() => {
     const s = getStoredSettings();
     setSiteName(s.siteName);
     setContactPhone(s.contactPhone);
     setContactEmail(s.contactEmail);
+    if (s.officeAddress) setOfficeAddress(s.officeAddress);
     setFlatShippingFee(String(s.flatShippingFee));
     setFreeShippingThreshold(String(s.freeShippingThreshold));
     setBankNumber(s.bankNumber);
@@ -44,6 +48,31 @@ export default function AdminSettingsPage() {
     setCoverTheme(s.coverTheme);
     setFaviconPreview(s.faviconPreview);
     setAvatarPreview(s.avatarPreview);
+
+    // Fetch fresh from Supabase via API
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.settings) {
+          const fresh = data.settings;
+          setSiteName(fresh.siteName);
+          setContactPhone(fresh.contactPhone);
+          setContactEmail(fresh.contactEmail);
+          if (fresh.officeAddress) setOfficeAddress(fresh.officeAddress);
+          setFlatShippingFee(String(fresh.flatShippingFee));
+          setFreeShippingThreshold(String(fresh.freeShippingThreshold));
+          setBankNumber(fresh.bankNumber);
+          setBankHolder(fresh.bankHolder);
+          setBankName(fresh.bankName);
+          setQrMode(fresh.qrMode);
+          setQrImageUrl(fresh.qrImageUrl);
+          setActivePalette(fresh.activePalette);
+          setCoverTheme(fresh.coverTheme);
+          setFaviconPreview(fresh.faviconPreview);
+          setAvatarPreview(fresh.avatarPreview);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch fresh settings:", err));
   }, []);
 
   const palettes = [
@@ -62,30 +91,42 @@ export default function AdminSettingsPage() {
   ];
 
   // Handle Favicon File Upload
-  const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setFaviconPreview(url);
+      const localPreview = URL.createObjectURL(file);
+      setFaviconPreview(localPreview);
+      const res = await uploadAsset(file, "content-media", `favicon-${Date.now()}.${file.name.split('.').pop()}`);
+      if (res.success && res.url) {
+        setFaviconPreview(res.url);
+      }
     }
   };
 
   // Handle QR Image Upload
-  const handleQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setQrImageUrl(url);
+      const localPreview = URL.createObjectURL(file);
+      setQrImageUrl(localPreview);
       setQrMode("upload");
+      const res = await uploadAsset(file, "content-media", `vietqr-${Date.now()}.${file.name.split('.').pop()}`);
+      if (res.success && res.url) {
+        setQrImageUrl(res.url);
+      }
     }
   };
 
   // Handle Avatar Upload
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setAvatarPreview(url);
+      const localPreview = URL.createObjectURL(file);
+      setAvatarPreview(localPreview);
+      const res = await uploadAsset(file, "content-media", `avatar-${Date.now()}.${file.name.split('.').pop()}`);
+      if (res.success && res.url) {
+        setAvatarPreview(res.url);
+      }
     }
   };
 
@@ -97,12 +138,14 @@ export default function AdminSettingsPage() {
     setIsConfirmSaveOpen(true);
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     setIsConfirmSaveOpen(false);
-    saveStoredSettings({
+    setIsSaving(true);
+    const updatedSettings = {
       siteName,
       contactPhone,
       contactEmail,
+      officeAddress,
       flatShippingFee: Number(flatShippingFee) || 25000,
       freeShippingThreshold: Number(freeShippingThreshold) || 200000,
       bankNumber,
@@ -114,9 +157,27 @@ export default function AdminSettingsPage() {
       coverTheme,
       faviconPreview,
       avatarPreview,
-    });
-    setSaveSuccessMessage("Đã lưu thành công cấu hình nhận diện thương hiệu, Favicon, QR thanh toán & thông tin hệ thống!");
-    setTimeout(() => setSaveSuccessMessage(null), 4000);
+    };
+    saveStoredSettings(updatedSettings);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedSettings),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setSaveSuccessMessage("Đã lưu thành công cấu hình vào cơ sở dữ liệu Supabase & đồng bộ toàn bộ website!");
+      } else {
+        setSaveSuccessMessage("Đã lưu vào bộ nhớ cục bộ (Lưu ý: " + (data?.error || "Lỗi đồng bộ DB") + ")");
+      }
+    } catch {
+      setSaveSuccessMessage("Đã lưu thành công vào bộ nhớ cục bộ!");
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveSuccessMessage(null), 5000);
+    }
   };
 
   return (
@@ -408,12 +469,20 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          <Input
-            label="Email tiếp nhận liên hệ *"
-            value={contactEmail}
-            onChange={(e) => setContactEmail(e.target.value)}
-            required
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Email tiếp nhận liên hệ *"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              required
+            />
+            <Input
+              label="Địa chỉ văn phòng / trụ sở BTC *"
+              value={officeAddress}
+              onChange={(e) => setOfficeAddress(e.target.value)}
+              required
+            />
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <Input

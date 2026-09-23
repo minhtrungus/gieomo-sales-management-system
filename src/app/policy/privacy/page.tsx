@@ -1,8 +1,10 @@
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Lock, Shield, EyeOff, UserCheck } from "lucide-react";
+import { getSystemSettingsServer } from "@/lib/services/configService";
 
-export default function PrivacyPolicyPage() {
+export default async function PrivacyPolicyPage() {
+  const settings = await getSystemSettingsServer();
   return (
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
@@ -91,7 +93,7 @@ export default function PrivacyPolicyPage() {
               4. Liên hệ thắc mắc về quyền riêng tư
             </h2>
             <p>
-              Nếu bạn có bất kỳ câu hỏi hoặc yêu cầu nào về bảo mật thông tin cá nhân, vui lòng gửi email về <strong>gieomo@mammo.vn</strong> hoặc hotline <strong>0123 456 789</strong>.
+              Nếu bạn có bất kỳ câu hỏi hoặc yêu cầu nào về bảo mật thông tin cá nhân, vui lòng gửi email về <strong>{settings.contactEmail}</strong> hoặc hotline <strong>{settings.contactPhone}</strong>.
             </p>
           </section>
         </div>

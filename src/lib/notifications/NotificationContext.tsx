@@ -45,141 +45,20 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-// Generate 150 realistic seed notifications
+// Clean initial system notifications
 function generateInitialNotifications(): NotificationItem[] {
-  const types: NotificationType[] = ["order", "payment", "stock", "member", "system"];
-  const customers = [
-    "Nguyễn Thị Mai", "Trần Thu Hà", "Lê Hoàng Phúc", "Phạm Minh Anh", 
-    "Vũ Đức Trọng", "Đặng Thị Thảo", "Bùi Kim Ngân", "Hoàng Văn Tuấn",
-    "Đỗ Mai Lan", "Ngô Quốc Huy", "Dương Bảo Ngọc", "Lý Gia Hân"
-  ];
-  const products = [
-    "Túi Canvas Mầm Mơ Thêu Tay", "Bộ 3 Huy Hiệu Nút Áo Gieo Mơ",
-    "Sổ Tay Bìa Vải Thô Vintage", "Bình Giữ Nhiệt Khắc Laser Mầm Mơ",
-    "Kẹp Tóc Nút Áo Handmade", "Set Quà Tặng Gieo Mơ Đặc Biệt",
-    "Vòng Tay May Mắn Gieo Hạt"
-  ];
-  const members = ["Mai Lan", "Quốc Bảo", "Thu Trang", "Minh Hưng", "Khánh Linh", "Bảo Châu"];
-
-  const items: NotificationItem[] = [
+  return [
     {
-      id: "notif-seed-1",
-      type: "order",
-      title: "Đơn hàng mới #GM-1025",
-      desc: "Khách hàng Nguyễn Thị Mai vừa đặt đơn hàng trị giá 385.000đ (2 món).",
-      created_at: new Date(Date.now() - 1000 * 60 * 3).toISOString(), // 3 mins ago
+      id: "notif-system-init",
+      type: "system",
+      title: "Hệ thống quản lý Gieo Mơ sẵn sàng",
+      desc: "Chào mừng ban tổ chức Mầm Mơ. Hệ thống vận hành và ghi nhận đơn hàng đã sẵn sàng.",
+      created_at: new Date().toISOString(),
       read: false,
       starred: true,
       link: "/admin/orders",
-      meta: { order_code: "GM-1025", amount: 385000, customer: "Nguyễn Thị Mai" },
-    },
-    {
-      id: "notif-seed-2",
-      type: "payment",
-      title: "Chờ xác nhận VietQR: 385.000đ",
-      desc: "Giao dịch chuyển khoản ngân hàng khớp mã GM1025 đang chờ BTC đối soát.",
-      created_at: new Date(Date.now() - 1000 * 60 * 7).toISOString(),
-      read: false,
-      starred: false,
-      link: "/admin/payments",
-      meta: { order_code: "GM-1025", amount: 385000 },
-    },
-    {
-      id: "notif-seed-3",
-      type: "stock",
-      title: "Cảnh báo tồn kho: Kẹp Tóc Nút Áo",
-      desc: "Sản phẩm Kẹp Tóc Nút Áo Handmade chỉ còn 4 chiếc trong kho. Vui lòng nhập thêm.",
-      created_at: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-      read: false,
-      starred: false,
-      link: "/admin/inventory",
-      meta: { product_name: "Kẹp Tóc Nút Áo Handmade", stock: 4 },
-    },
-    {
-      id: "notif-seed-4",
-      type: "member",
-      title: "Thành viên chốt đơn thành công",
-      desc: "Tình nguyện viên Mai Lan vừa mang lại đơn hàng #GM-1024 qua mã giới thiệu MAM-LAN.",
-      created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      read: true,
-      starred: false,
-      link: "/admin/members",
-      meta: { member_name: "Mai Lan", order_code: "GM-1024" },
-    },
-    {
-      id: "notif-seed-5",
-      type: "system",
-      title: "Hệ thống tự động đồng bộ tồn kho",
-      desc: "Hệ thống đã cập nhật số lượng tồn kho theo 12 đơn hoàn tất trong ngày.",
-      created_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-      read: true,
-      starred: false,
-      link: "/admin/inventory",
     }
   ];
-
-  // Generate 20 additional realistic notifications spanning the last 14 days
-  for (let i = 6; i <= 25; i++) {
-    const type = types[i % types.length];
-    const customer = customers[i % customers.length];
-    const product = products[i % products.length];
-    const member = members[i % members.length];
-    const hoursAgo = Math.floor(i * 2.2);
-    const date = new Date(Date.now() - 1000 * 60 * 60 * hoursAgo);
-    const orderCode = `GM-${1025 - i}`;
-    const amount = (Math.floor((i * 37) % 8) + 1) * 65000;
-
-    let title = "";
-    let desc = "";
-    let link = "/admin/orders";
-
-    switch (type) {
-      case "order":
-        title = `Đơn hàng mới #${orderCode}`;
-        desc = `Khách hàng ${customer} đã đặt mua ${product} (${amount.toLocaleString("vi-VN")}đ).`;
-        link = "/admin/orders";
-        break;
-      case "payment":
-        title = `Xác nhận thanh toán #${orderCode}`;
-        desc = `Khách hàng ${customer} đã thanh toán ${amount.toLocaleString("vi-VN")}đ qua VietQR MB Bank.`;
-        link = "/admin/payments";
-        break;
-      case "stock":
-        title = `Cảnh báo tồn kho: ${product}`;
-        desc = `Số lượng khả dụng của sản phẩm ${product} chạm ngưỡng báo động (${(i % 5) + 1} cái).`;
-        link = "/admin/inventory";
-        break;
-      case "member":
-        title = `Ghi nhận hoa hồng: ${member}`;
-        desc = `Thành viên ${member} vừa kích hoạt thành công đơn hàng #${orderCode}.`;
-        link = "/admin/members";
-        break;
-      case "system":
-        title = `Báo cáo ca trực gây quỹ ngày ${date.toLocaleDateString("vi-VN")}`;
-        desc = `Đã kết toán doanh thu bán hàng gây quỹ ca trực. Toàn bộ tiền đã đối chiếu với tài khoản BTC.`;
-        link = "/admin/reports";
-        break;
-    }
-
-    items.push({
-      id: `notif-seed-${i}`,
-      type,
-      title,
-      desc,
-      created_at: date.toISOString(),
-      read: i > 12, // First 12 are unread
-      starred: i % 7 === 0,
-      link,
-      meta: {
-        order_code: orderCode,
-        amount,
-        customer,
-        product_name: product,
-      },
-    });
-  }
-
-  return items;
 }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -287,19 +166,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     pushNotification(randomEvent);
   }, [pushNotification]);
 
-  // Periodic Auto-push simulator (every 40 seconds if enabled)
-  useEffect(() => {
-    if (!autoPushEnabled) return;
-
-    const interval = setInterval(() => {
-      const chance = Math.random();
-      if (chance > 0.4) {
-        triggerTestPush();
-      }
-    }, 40000);
-
-    return () => clearInterval(interval);
-  }, [autoPushEnabled, triggerTestPush]);
+  // Auto-push simulator completely disabled in production
 
   const markAsRead = useCallback((ids: string[]) => {
     setNotifications((prev) =>
