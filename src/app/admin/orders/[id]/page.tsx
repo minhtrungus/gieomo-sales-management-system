@@ -6,9 +6,18 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
-import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus, updateStoredOrderNotes, updateStoredOrderWarehouse } from "@/lib/data/orderStore";
+import {
+  getStoredOrders,
+  updateStoredOrderStatus,
+  updateStoredPaymentStatus,
+  updateStoredOrderNotes,
+  updateStoredOrderWarehouse,
+  getStoredMembers,
+  updateOrderShipper,
+  type StoredMember,
+} from "@/lib/data/orderStore";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
-import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -27,10 +36,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [warehouseId, setWarehouseId] = useState<string>(
     order.warehouse_id || (order.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
   );
+  const [members, setMembers] = useState<StoredMember[]>([]);
+  const [assignedShipperId, setAssignedShipperId] = useState<string>(order.assigned_shipper_id || "");
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
   useEffect(() => {
+    setMembers(getStoredMembers());
     const stored = getStoredOrders();
     const found =
       stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
@@ -40,6 +52,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       setOrderStatus(found.order_status);
       setPaymentStatus(found.payment_status);
       setInternalNote(found.internal_note || "");
+      setAssignedShipperId(found.assigned_shipper_id || "");
       setWarehouseId(
         found.warehouse_id ||
           (found.delivery_type === "pickup_point" && found.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
@@ -52,6 +65,14 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
     updateStoredOrderWarehouse(order.order_id, warehouseId);
+
+    const selectedShipper = members.find((m) => m.memberId === assignedShipperId);
+    updateOrderShipper(
+      order.order_code,
+      assignedShipperId || null,
+      selectedShipper ? selectedShipper.fullName : null
+    );
+
     setIsSavedNotice(true);
     setTimeout(() => setIsSavedNotice(false), 2500);
   };
@@ -176,6 +197,39 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 >
                   <option value="wh-1">📍 Kho 1: Trung Tâm (Quận 3)</option>
                   <option value="wh-2">📍 Kho 2: Cơ Sở 2 (Thủ Đức)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Phân công thành viên giao hàng (Shipper nội bộ) */}
+            <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-500 block text-[11px]">Thành viên phụ trách giao hàng (Shipper):</span>
+                <span className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs mt-0.5">
+                  <Bike className="w-3.5 h-3.5 text-emerald-700" />
+                  {assignedShipperId ? (
+                    (() => {
+                      const shipper = members.find((m) => m.memberId === assignedShipperId);
+                      return shipper ? `${shipper.fullName} (${shipper.phone})` : "Đã gán thành viên";
+                    })()
+                  ) : (
+                    <span className="text-gray-400 font-normal italic">Chưa phân công thành viên giao</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 whitespace-nowrap">Gán người giao:</span>
+                <select
+                  value={assignedShipperId}
+                  onChange={(e) => setAssignedShipperId(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold outline-none bg-white text-emerald-950 focus:border-emerald-600"
+                >
+                  <option value="">-- Chưa gán shipper --</option>
+                  {members.map((m) => (
+                    <option key={m.memberId} value={m.memberId}>
+                      🛵 {m.fullName} ({m.phone}) - {m.role === "admin" ? "Admin" : "Sale"}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

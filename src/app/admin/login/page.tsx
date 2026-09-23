@@ -69,9 +69,13 @@ export default function AdminLoginPage() {
           </div>
         )}
 
-        <Button type="submit" variant="primary" fullWidth size="lg" loading={loading}>
-          Đăng nhập Quản trị ➔
-        </Button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full h-11 inline-flex items-center justify-center font-bold text-xs sm:text-sm text-white bg-[#342A24] hover:bg-[#231B16] rounded-full shadow-xs transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? "Đang xử lý..." : "Đăng nhập Quản trị"}
+        </button>
       </form>
 
       <div className="text-center pt-2 border-t border-gray-100">

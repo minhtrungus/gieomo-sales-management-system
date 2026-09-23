@@ -4,78 +4,71 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { Plus, Copy, Check, X, UserPlus, Shield, User, Trash2, AlertTriangle, Calendar, Eye, ExternalLink, ShoppingBag } from "lucide-react";
+import {
+  Plus,
+  Copy,
+  Check,
+  X,
+  UserPlus,
+  Shield,
+  User,
+  Trash2,
+  AlertTriangle,
+  Calendar,
+  Eye,
+  ExternalLink,
+  ShoppingBag,
+  KeyRound,
+} from "lucide-react";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
-import { getStoredOrders } from "@/lib/data/orderStore";
+import {
+  getStoredOrders,
+  getStoredMembers,
+  saveStoredMembers,
+  type StoredMember,
+} from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 
-interface MemberItem {
-  memberId: string;
-  fullName: string;
-  email: string;
-  role: "admin" | "btc_sale";
-  referralCode: string;
-  phone: string;
-  totalOrders: number;
-  totalRevenue: number;
-  status: "active" | "inactive";
-  joinedDate: string; // DD/MM/YYYY
+type MemberItem = StoredMember;
+
+function generateReferralFromName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  const lastName = parts[parts.length - 1] || "MAM";
+  const normalized = lastName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return `MAM-${normalized || Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 }
 
 export default function AdminMembersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
+  const [members, setMembers] = useState<MemberItem[]>([]);
 
   useEffect(() => {
     setOrders(getStoredOrders());
-    const handleUpdate = () => setOrders(getStoredOrders());
-    window.addEventListener("gieomo_orders_updated", handleUpdate);
-    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
-  }, []);
+    setMembers(getStoredMembers());
 
-  const [members, setMembers] = useState<MemberItem[]>([
-    {
-      memberId: "mem-0",
-      fullName: "BTC Mầm Mơ (Trưởng ban)",
-      email: "admin@mammo.vn",
-      role: "admin",
-      referralCode: "MAM-ADMIN",
-      phone: "0123456789",
-      totalOrders: 28,
-      totalRevenue: 4850000,
-      status: "active",
-      joinedDate: "15/08/2026",
-    },
-    {
-      memberId: "mem-1",
-      fullName: "Nguyễn Thị Mai Lan",
-      email: "mailan@mammo.vn",
-      role: "btc_sale",
-      referralCode: "MAM-LAN",
-      phone: "0901112233",
-      totalOrders: 15,
-      totalRevenue: 2450000,
-      status: "active",
-      joinedDate: "20/08/2026",
-    },
-    {
-      memberId: "mem-2",
-      fullName: "Trần Minh Quang",
-      email: "minhquang@mammo.vn",
-      role: "btc_sale",
-      referralCode: "MAM-QUANG",
-      phone: "0904445566",
-      totalOrders: 8,
-      totalRevenue: 1120000,
-      status: "active",
-      joinedDate: "01/09/2026",
-    },
-  ]);
+    const handleOrdersUpdate = () => setOrders(getStoredOrders());
+    const handleMembersUpdate = () => setMembers(getStoredMembers());
+
+    window.addEventListener("gieomo_orders_updated", handleOrdersUpdate);
+    window.addEventListener("gieomo_members_updated", handleMembersUpdate);
+    return () => {
+      window.removeEventListener("gieomo_orders_updated", handleOrdersUpdate);
+      window.removeEventListener("gieomo_members_updated", handleMembersUpdate);
+    };
+  }, []);
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
+  const [passwordMember, setPasswordMember] = useState<MemberItem | null>(null);
 
   // Form states for new member
   const [newFullName, setNewFullName] = useState("");
@@ -83,7 +76,14 @@ export default function AdminMembersPage() {
   const [newPhone, setNewPhone] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "btc_sale">("btc_sale");
   const [newReferralCode, setNewReferralCode] = useState("");
-  const [newPassword, setNewPassword] = useState("MamMo@2026");
+  const [newPassword, setNewPassword] = useState("MamMo@123");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Password modal states
+  const [changePasswordInput, setChangePasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const handleCopy = (code: string) => {
     navigator.clipboard.writeText(`https://gieomo.vn/?ref=${code}`);
@@ -91,11 +91,27 @@ export default function AdminMembersPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const handleNameChange = (name: string) => {
+    setNewFullName(name);
+    // Auto generate referral code if not manually set or matching previous auto format
+    if (!newReferralCode || newReferralCode.startsWith("MAM-")) {
+      setNewReferralCode(generateReferralFromName(name));
+    }
+  };
+
   const handleCreateMember = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!newFullName || !newEmail) return;
 
-    const refCode = newReferralCode.trim() || `MAM-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const refCode = (newReferralCode.trim() || generateReferralFromName(newFullName)).toUpperCase();
+
+    // Check duplicate referral code
+    if (members.some((m) => m.referralCode.toUpperCase() === refCode)) {
+      setFormError(`Mã referral "${refCode}" đã tồn tại. Vui lòng đặt mã khác.`);
+      return;
+    }
+
     const today = new Date();
     const joinedDateStr = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
 
@@ -110,9 +126,12 @@ export default function AdminMembersPage() {
       totalRevenue: 0,
       status: "active",
       joinedDate: joinedDateStr,
+      password: newPassword,
     };
 
-    setMembers([newMember, ...members]);
+    const updated = [newMember, ...members];
+    setMembers(updated);
+    saveStoredMembers(updated);
     setIsModalOpen(false);
 
     // Reset form
@@ -121,12 +140,46 @@ export default function AdminMembersPage() {
     setNewPhone("");
     setNewReferralCode("");
     setNewRole("btc_sale");
+    setFormError(null);
   };
 
   const handleConfirmRevoke = () => {
     if (!deletingMember) return;
-    setMembers((prev) => prev.filter((m) => m.memberId !== deletingMember.memberId));
+    const updated = members.filter((m) => m.memberId !== deletingMember.memberId);
+    setMembers(updated);
+    saveStoredMembers(updated);
     setDeletingMember(null);
+  };
+
+  const handleSavePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (changePasswordInput.length < 6) {
+      setPasswordError("Mật khẩu mới phải có tối thiểu 6 ký tự.");
+      return;
+    }
+
+    if (changePasswordInput !== confirmPasswordInput) {
+      setPasswordError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+
+    if (!passwordMember) return;
+
+    const updated = members.map((m) =>
+      m.memberId === passwordMember.memberId ? { ...m, password: changePasswordInput } : m
+    );
+
+    setMembers(updated);
+    saveStoredMembers(updated);
+    setPasswordSuccess(`Đã cập nhật mật khẩu mới cho ${passwordMember.fullName}!`);
+    setTimeout(() => {
+      setPasswordSuccess(null);
+      setPasswordMember(null);
+      setChangePasswordInput("");
+      setConfirmPasswordInput("");
+    }, 1500);
   };
 
   return (
@@ -277,6 +330,21 @@ export default function AdminMembersPage() {
                           )}
                         </button>
 
+                        <button
+                          onClick={() => {
+                            setPasswordMember(m);
+                            setChangePasswordInput("");
+                            setConfirmPasswordInput("");
+                            setPasswordError(null);
+                            setPasswordSuccess(null);
+                          }}
+                          className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Đổi mật khẩu tài khoản"
+                        >
+                          <KeyRound className="w-3 h-3 text-amber-700" />
+                          <span className="hidden sm:inline">Đổi pass</span>
+                        </button>
+
                         {m.memberId !== "mem-0" && (
                           <button
                             onClick={() => setDeletingMember(m)}
@@ -324,7 +392,7 @@ export default function AdminMembersPage() {
                   type="text"
                   required
                   value={newFullName}
-                  onChange={(e) => setNewFullName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="Ví dụ: Lê Thị Thanh"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
                 />
@@ -390,6 +458,12 @@ export default function AdminMembersPage() {
                 </div>
               </div>
 
+              {formError && (
+                <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium text-center">
+                  {formError}
+                </div>
+              )}
+
               <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] leading-relaxed">
                 💡 <strong>Lưu ý:</strong> Quản trị viên (Admin) có toàn quyền cấu hình và tài chính. Thành viên (BTC Sale) chỉ có thể xem số liệu của bản thân và dùng tính năng Nhập đơn hộ.
               </div>
@@ -445,6 +519,90 @@ export default function AdminMembersPage() {
                 Xác nhận thu hồi
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ĐỔI MẬT KHẨU THÀNH VIÊN */}
+      {passwordMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 p-6 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#F0E5D8]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                    Đổi mật khẩu thành viên
+                  </h3>
+                  <p className="text-xs text-[#7E7068]">
+                    {passwordMember.fullName} ({passwordMember.email})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPasswordMember(null)}
+                className="p-1 rounded-xl text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePassword} className="space-y-4">
+              <div className="space-y-1">
+                <label className="font-bold text-xs text-[#342A24] block">Mật khẩu mới *</label>
+                <input
+                  type="password"
+                  required
+                  value={changePasswordInput}
+                  onChange={(e) => setChangePasswordInput(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-xs text-[#342A24] block">Xác nhận mật khẩu mới *</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="Nhập lại mật khẩu mới"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {passwordError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+                  {passwordError}
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPasswordMember(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-xs transition-colors"
+                >
+                  Lưu mật khẩu mới
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

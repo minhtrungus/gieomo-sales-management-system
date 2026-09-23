@@ -19,7 +19,9 @@ export function Navbar() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const itemCount = useCartStore((state) => state.getItemCount());
+  const itemCount = useCartStore((state) =>
+    state.items.reduce((sum, item) => sum + item.quantity, 0)
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -35,7 +37,7 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE]/90 backdrop-blur-md transition-all">
+      <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE]/95 backdrop-blur-sm">
         <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6">
           {/* Brand Logo with Real Artwork */}
           <Link href="/" className="flex items-center gap-3 group">
@@ -54,7 +56,7 @@ export function Navbar() {
                 <span className="font-heading font-extrabold text-xl text-[#342A24] tracking-tight leading-none group-hover:text-[#2D6338] transition-colors">
                   Gieo Mơ
                 </span>
-                <span className="w-2 h-2 rounded-full bg-[#FFB98A] inline-block animate-pulse-subtle" />
+                <span className="w-2 h-2 rounded-full bg-[#FFB98A] inline-block" />
               </div>
               <span className="text-[10px] text-[#7E7068] font-medium tracking-wide leading-tight mt-0.5">
                 Little Pieces, Bigger Dreams
@@ -70,7 +72,7 @@ export function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
                     isActive
                       ? "bg-[#BFE9C3] text-[#1B3622] shadow-xs"
                       : "text-[#5C4D44] hover:text-[#231B16] hover:bg-[#FFF4E5]"
@@ -96,7 +98,7 @@ export function Navbar() {
             {/* Cart Button */}
             <button
               onClick={() => setCartDrawerOpen(true)}
-              className="relative flex items-center gap-2 px-4 py-2 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-bold text-xs transition-all shadow-xs active:scale-95 border border-[#9ed4a3]"
+              className="relative flex items-center gap-2 px-4 py-2 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-bold text-xs transition-[transform,background-color] shadow-xs active:scale-95 border border-[#9ed4a3]"
             >
               <ShoppingBag className="w-4 h-4 text-[#1B3622]" />
               <span className="hidden sm:inline">Giỏ hàng</span>

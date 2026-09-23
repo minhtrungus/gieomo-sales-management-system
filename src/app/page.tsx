@@ -18,18 +18,27 @@ export default function HomePage() {
             HERO SECTION: THE STORYBOOK OF MẦM AND THE SEWING POUCH
             ======================================================== */}
         <section className="relative overflow-hidden pt-8 pb-16 md:pt-14 md:pb-24 gradient-fairy border-b border-[#F0E5D8]">
-          {/* Subtle floating background decorations (GPU accelerated to eliminate scroll stutter) */}
-          <div className="absolute top-10 left-10 w-48 h-48 rounded-full bg-[#BFE9C3]/20 blur-3xl pointer-events-none transform-gpu" />
-          <div className="absolute bottom-10 right-10 w-64 h-64 rounded-full bg-[#FFD1E1]/30 blur-3xl pointer-events-none transform-gpu" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-[#FFE7A8]/20 blur-3xl pointer-events-none transform-gpu" />
+          {/* Lightweight radial gradient decorations (zero blur filter cost for high INP/FPS) */}
+          <div
+            className="absolute top-10 left-10 w-64 h-64 rounded-full pointer-events-none opacity-60"
+            style={{ background: "radial-gradient(circle, rgba(191, 233, 195, 0.5) 0%, rgba(191, 233, 195, 0) 70%)" }}
+          />
+          <div
+            className="absolute bottom-10 right-10 w-80 h-80 rounded-full pointer-events-none opacity-50"
+            style={{ background: "radial-gradient(circle, rgba(255, 209, 225, 0.6) 0%, rgba(255, 209, 225, 0) 70%)" }}
+          />
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full pointer-events-none opacity-40"
+            style={{ background: "radial-gradient(circle, rgba(255, 231, 168, 0.5) 0%, rgba(255, 231, 168, 0) 70%)" }}
+          />
 
           <div className="container mx-auto px-4 sm:px-6 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
               
               {/* Left Column: Story & Narrative */}
               <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
-                {/* Floating Campaign Badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-[#FFB98A] shadow-soft backdrop-blur-xs text-xs font-bold text-[#4A2603] animate-float">
+                {/* Floating Campaign Badge - Crisp bg without backdrop-filter to prevent layer invalidation */}
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float">
                   <Sparkles className="w-3.5 h-3.5 text-[#FFB98A]" />
                   <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
                 </div>
@@ -52,7 +61,7 @@ export default function HomePage() {
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-2">
                   <Link
                     href="/products"
-                    className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-all active:scale-95 border border-[#9ed4a3]"
+                    className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-[transform,background-color,box-shadow] active:scale-95 border border-[#9ed4a3]"
                   >
                     <span>Khám phá sản phẩm handmade</span>
                     <ArrowRight className="w-4 h-4" />
@@ -60,7 +69,8 @@ export default function HomePage() {
 
                   <Link
                     href="#impact"
-                    className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white/90 hover:bg-white text-[#4A3B32] font-bold text-sm flex items-center justify-center gap-2 border border-[#EADBCC] shadow-soft hover:shadow-sm transition-all"
+                    prefetch={false}
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white/90 hover:bg-white text-[#4A3B32] font-bold text-sm flex items-center justify-center gap-2 border border-[#EADBCC] shadow-soft hover:shadow-xs transition-[transform,background-color,border-color]"
                   >
                     <Heart className="w-4 h-4 text-[#FF85A1]" />
                     <span>Ý nghĩa dự án</span>
@@ -99,7 +109,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Cute floating badge */}
-                  <div className="absolute -bottom-2 right-4 bg-white/95 backdrop-blur-xs px-3.5 py-1.5 rounded-2xl border border-[#FFB98A] shadow-md flex items-center gap-2 text-xs font-extrabold text-[#342A24]">
+                  <div className="absolute -bottom-2 right-4 bg-white/95 px-3.5 py-1.5 rounded-2xl border border-[#FFB98A] shadow-md flex items-center gap-2 text-xs font-extrabold text-[#342A24]">
                     <span className="text-base">🌱</span>
                     <span>Mầm & Thế giới may vá</span>
                   </div>
@@ -233,7 +243,7 @@ export default function HomePage() {
             <div className="pt-2">
               <Link
                 href="/products"
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-all active:scale-95"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-[transform,background-color] active:scale-95"
               >
                 <span>Rước quà handmade ngay ➔</span>
               </Link>

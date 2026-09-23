@@ -142,7 +142,7 @@ Kích thước vừa vặn để đựng mỹ phẩm, dụng cụ học tập ho
       "Khóa kéo": "Khóa kéo kim loại YKK êm mượt",
       "Kỹ thuật": "May thủ công 100% kết hợp thêu viền",
     },
-    impact_story: "100% lợi nhuận từ chiếc Pouch này sẽ đóng góp vào quỹ sách vở và dụng cụ học tập cho trẻ em vùng cao trong chiến dịch gây quỹ Mầm Mơ 2026.",
+    impact_story: "100% lợi nhuận từ chiếc Pouch này sẽ đóng góp vào quỹ sách vở và dụng cụ học tập cho trẻ em vùng cao trong chiến dịch gây quỹ Mầm Mơ.",
   },
   {
     product_id: "prod-2",

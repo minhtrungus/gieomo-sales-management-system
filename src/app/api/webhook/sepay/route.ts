@@ -103,6 +103,29 @@ export async function POST(request: Request) {
               confirmed_at: new Date().toISOString(),
             },
           ]);
+
+          // Send payment confirmation email via Resend if configured
+          const resendApiKey = process.env.RESEND_API_KEY;
+          if (resendApiKey && (order as any).buyer_email) {
+            try {
+              const { generatePaymentReceivedHtml } = await import("@/lib/utils/emailService");
+              await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${resendApiKey}`,
+                },
+                body: JSON.stringify({
+                  from: process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>",
+                  to: [(order as any).buyer_email],
+                  subject: `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`,
+                  html: generatePaymentReceivedHtml(order as any),
+                }),
+              });
+            } catch (mailErr) {
+              console.error("SePay Webhook: Error sending payment email:", mailErr);
+            }
+          }
         }
       } catch (dbErr) {
         console.error("SePay Webhook: Database update error:", dbErr);

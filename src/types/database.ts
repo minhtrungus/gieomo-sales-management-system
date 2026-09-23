@@ -235,6 +235,7 @@ export interface Order {
   subtotal: number;
   shipping_fee: number;
   voucher_id?: string | null;
+  voucher_code?: string | null;
   voucher_discount?: number;
   discount_amount?: number;
   final_amount: number;
@@ -245,6 +246,7 @@ export interface Order {
   payment_method: PaymentMethod | null;
   created_by_member_id?: string | null;
   assigned_shipper_id?: string | null;
+  assigned_shipper_name?: string | null;
   cancel_reason?: string | null;
   customer_note?: string | null;
   internal_note?: string | null;

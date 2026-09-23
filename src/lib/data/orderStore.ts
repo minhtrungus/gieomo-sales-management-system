@@ -1,6 +1,6 @@
 "use client";
 
-import type { Order, OrderStatus, PaymentStatus, PickupPoint, ContactMessage } from "@/types/database";
+import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage } from "@/types/database";
 import { MOCK_ORDERS } from "./mockData";
 
 export interface PaymentRecord {
@@ -172,16 +172,46 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
-    const updated = orders.map((o) =>
-      o.order_id === orderCodeOrId || o.order_code === orderCodeOrId
-        ? {
-            ...o,
-            payment_status: paymentStatus,
-          }
-        : o
-    );
+    let justPaidOrder: Order | null = null;
+
+    const updated = orders.map((o) => {
+      if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
+        if (o.payment_status !== "paid" && paymentStatus === "paid") {
+          justPaidOrder = { ...o, payment_status: paymentStatus };
+        }
+        return {
+          ...o,
+          payment_status: paymentStatus,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return o;
+    });
+
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    // Guard: Only fire payment notification when payment has been completed (paid)
+    if (justPaidOrder) {
+      try {
+        const notifRaw = localStorage.getItem("gieomo_admin_notifications");
+        const notifs = notifRaw ? JSON.parse(notifRaw) : [];
+        const newNotif = {
+          id: `notif-paid-${Date.now()}`,
+          type: "payment",
+          title: `💰 Đơn hàng #${(justPaidOrder as Order).order_code} đã thanh toán thành công`,
+          desc: `Nhận ${(justPaidOrder as Order).final_amount.toLocaleString("vi-VN")}đ từ ${(justPaidOrder as Order).buyer_name || "Khách hàng"}.`,
+          created_at: new Date().toISOString(),
+          read: false,
+          starred: true,
+          link: `/admin/orders/${(justPaidOrder as Order).order_id}`,
+        };
+        localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
+      } catch {
+        // ignore
+      }
+    }
+
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
     console.error("Error updating payment status", e);
@@ -499,4 +529,114 @@ export function confirmOrderPaymentFromWebhook(orderCode: string, amount: number
     return false;
   }
 }
+
+// === MEMBER & SHIPPER ASSIGNMENT HELPERS ===
+
+export interface StoredMember {
+  memberId: string;
+  fullName: string;
+  email: string;
+  role: "admin" | "btc_sale";
+  referralCode: string;
+  phone: string;
+  totalOrders: number;
+  totalRevenue: number;
+  status: "active" | "inactive";
+  joinedDate: string;
+  password?: string;
+}
+
+const SEED_MEMBERS: StoredMember[] = [
+  {
+    memberId: "mem-0",
+    fullName: "BTC Mầm Mơ (Trưởng ban)",
+    email: "admin@mammo.vn",
+    role: "admin",
+    referralCode: "MAM-ADMIN",
+    phone: "0123456789",
+    totalOrders: 28,
+    totalRevenue: 4850000,
+    status: "active",
+    joinedDate: "15/08/2026",
+    password: "••••••••",
+  },
+  {
+    memberId: "mem-1",
+    fullName: "Nguyễn Thị Mai Lan",
+    email: "mailan@mammo.vn",
+    role: "btc_sale",
+    referralCode: "MAM-LAN",
+    phone: "0901112233",
+    totalOrders: 15,
+    totalRevenue: 2450000,
+    status: "active",
+    joinedDate: "20/08/2026",
+    password: "••••••••",
+  },
+  {
+    memberId: "mem-2",
+    fullName: "Trần Minh Quang",
+    email: "minhquang@mammo.vn",
+    role: "btc_sale",
+    referralCode: "MAM-QUANG",
+    phone: "0904445566",
+    totalOrders: 8,
+    totalRevenue: 1120000,
+    status: "active",
+    joinedDate: "01/09/2026",
+    password: "••••••••",
+  },
+];
+
+export function getStoredMembers(): StoredMember[] {
+  if (typeof window === "undefined") return SEED_MEMBERS;
+  try {
+    const raw = localStorage.getItem("gieomo_members");
+    if (!raw) {
+      localStorage.setItem("gieomo_members", JSON.stringify(SEED_MEMBERS));
+      return SEED_MEMBERS;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return SEED_MEMBERS;
+  }
+}
+
+export function saveStoredMembers(members: StoredMember[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("gieomo_members", JSON.stringify(members));
+    window.dispatchEvent(new Event("gieomo_members_updated"));
+  } catch (e) {
+    console.error("Error saving members to storage", e);
+  }
+}
+
+export function updateOrderShipper(
+  orderCode: string,
+  shipperId: string | null,
+  shipperName: string | null
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const updated = orders.map((o) => {
+      if (o.order_code === orderCode) {
+        return {
+          ...o,
+          assigned_shipper_id: shipperId,
+          assigned_shipper_name: shipperName,
+          delivery_status: (shipperId ? "out_for_delivery" : o.delivery_status) as DeliveryStatus,
+        };
+      }
+      return o;
+    });
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+    cachedOrders = updated;
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error updating shipper", e);
+  }
+}
+
 

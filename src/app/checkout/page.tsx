@@ -218,6 +218,21 @@ function CheckoutContent() {
 
     saveNewOrder(newOrderRecord);
 
+    // Send order confirmation email asynchronously (if Resend is configured)
+    try {
+      fetch("/api/notify/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "order_confirmation",
+          order: newOrderRecord,
+          toEmail: formData.buyer_email || undefined,
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
     // Save to local customer history and update customers store
     try {
       const myRaw = localStorage.getItem("gieomo_my_order_codes");

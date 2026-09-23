@@ -35,6 +35,10 @@ function TrackContent() {
   const initialCode = searchParams.get("code") || "";
 
   const [searchQuery, setSearchQuery] = useState(initialCode);
+  const [searchMode, setSearchMode] = useState<"code" | "phone_name">("code");
+  const [searchPhone, setSearchPhone] = useState("");
+  const [searchName, setSearchName] = useState("");
+
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -65,14 +69,14 @@ function TrackContent() {
 
       // If URL has code, search directly
       if (initialCode) {
-        performSearch(initialCode, allOrders);
+        performSearchByCode(initialCode, allOrders);
       }
     } catch (e) {
       console.error("Error reading device history", e);
     }
   }, [initialCode]);
 
-  const performSearch = (rawQuery: string, ordersList?: Order[]) => {
+  const performSearchByCode = (rawQuery: string, ordersList?: Order[]) => {
     setErrorMsg(null);
     setHasSearched(true);
 
@@ -87,7 +91,7 @@ function TrackContent() {
     const orders = ordersList || getStoredOrders();
     const upperQuery = query.toUpperCase();
 
-    // ONLY search by order_code for customer privacy
+    // Exact order_code match for privacy
     const results = orders.filter((o) => {
       return (
         o.order_code.toUpperCase() === upperQuery ||
@@ -107,9 +111,69 @@ function TrackContent() {
     }
   };
 
+  const performSearchByPhoneAndName = (rawPhone: string, rawName: string) => {
+    setErrorMsg(null);
+    setHasSearched(true);
+
+    const cleanPhone = rawPhone.replace(/\D/g, "").trim();
+    const cleanName = removeVietnameseTones(rawName).trim();
+
+    if (!cleanPhone || cleanPhone.length < 9) {
+      setErrorMsg("Vui lòng nhập số điện thoại hợp lệ (tối thiểu 9-10 chữ số).");
+      setMatchedOrders([]);
+      setSelectedOrder(null);
+      return;
+    }
+
+    if (!cleanName || cleanName.length < 2) {
+      setErrorMsg("Vui lòng nhập đầy đủ Họ và tên để bảo mật thông tin đơn hàng.");
+      setMatchedOrders([]);
+      setSelectedOrder(null);
+      return;
+    }
+
+    const orders = getStoredOrders();
+
+    // Must match BOTH phone AND name (buyer or recipient) to prevent unauthorized snooping
+    const results = orders.filter((o) => {
+      const buyerPhoneClean = (o.buyer_phone || "").replace(/\D/g, "");
+      const recipientPhoneClean = (o.recipient_phone || "").replace(/\D/g, "");
+      const phoneMatched = buyerPhoneClean.includes(cleanPhone) || recipientPhoneClean.includes(cleanPhone);
+
+      const buyerNameClean = removeVietnameseTones(o.buyer_name || "");
+      const recipientNameClean = removeVietnameseTones(o.recipient_name || "");
+      const nameMatched =
+        buyerNameClean.includes(cleanName) ||
+        cleanName.includes(buyerNameClean) ||
+        recipientNameClean.includes(cleanName) ||
+        cleanName.includes(recipientNameClean);
+
+      return phoneMatched && nameMatched;
+    });
+
+    if (results.length > 0) {
+      setMatchedOrders(results);
+      if (results.length === 1) {
+        setSelectedOrder(results[0]);
+      } else {
+        setSelectedOrder(null); // show list
+      }
+    } else {
+      setMatchedOrders([]);
+      setSelectedOrder(null);
+      setErrorMsg(
+        "Không tìm thấy đơn hàng nào khớp với cả Số điện thoại và Họ tên bạn đã nhập. Vui lòng kiểm tra lại thông tin."
+      );
+    }
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    performSearch(searchQuery);
+    if (searchMode === "code") {
+      performSearchByCode(searchQuery);
+    } else {
+      performSearchByPhoneAndName(searchPhone, searchName);
+    }
   };
 
   const handleSelectDeviceHistory = () => {
@@ -141,7 +205,7 @@ function TrackContent() {
           Tra cứu tiến độ &amp; Đơn hàng
         </h1>
         <p className="text-gray-600 text-xs sm:text-sm max-w-xl mx-auto">
-          Nhập <strong>Mã đơn hàng (GM-...)</strong> được gửi cho bạn khi đặt hàng để theo dõi tiến độ xử lý và vận chuyển một cách an toàn, bảo mật.
+          Nhập <strong>Mã đơn hàng</strong> hoặc kết hợp <strong>Số điện thoại + Họ tên</strong> để theo dõi tiến độ một cách bảo mật và an toàn.
         </p>
       </div>
 
@@ -152,7 +216,7 @@ function TrackContent() {
             <span className="text-3xl">🌱</span>
             <div className="text-xs">
               <span className="font-bold text-[#16381D] text-sm block">
-                Chào {savedProfile?.name || "bạn"}! Trình duyệt ghi nhận bạn đã có {deviceOrders.length} đơn hàng trên thiết bị này.
+                Chào {savedProfile?.name || "bạn"}! Trình duyệt ghi nhận bạn có {deviceOrders.length} đơn hàng trên thiết bị này.
               </span>
               <span className="text-[#386341]">
                 Tổng số tiền gây quỹ ủng hộ: <strong>{deviceOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0).toLocaleString("vi-VN")}đ</strong>
@@ -169,54 +233,108 @@ function TrackContent() {
         </div>
       )}
 
-      {/* Search Form - Secure: Order Code Only */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-xs space-y-4">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
-            <Input
-              label="Nhập chính xác Mã đơn hàng:"
-              placeholder="Ví dụ: GM-369817 hoặc GM-260901..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end">
-            <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto h-11 px-6">
-              Tra cứu đơn
-            </Button>
-          </div>
+      {/* Search Form - Secure Options */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-xs space-y-5">
+        {/* Search Mode Tabs */}
+        <div className="flex p-1 bg-gray-100 rounded-2xl max-w-md mx-auto sm:mx-0">
+          <button
+            type="button"
+            onClick={() => {
+              setSearchMode("code");
+              setErrorMsg(null);
+            }}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+              searchMode === "code"
+                ? "bg-white text-emerald-950 shadow-xs"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            Tra cứu bằng Mã đơn hàng
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchMode("phone_name");
+              setErrorMsg(null);
+            }}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+              searchMode === "phone_name"
+                ? "bg-white text-emerald-950 shadow-xs"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            SĐT + Họ tên (Bảo mật 2 lớp)
+          </button>
+        </div>
+
+        <form onSubmit={handleSearchSubmit} className="space-y-4">
+          {searchMode === "code" ? (
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <Input
+                  label="Mã đơn hàng:"
+                  placeholder="Ví dụ: GM-369817 hoặc GM-260901..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto h-11 px-6">
+                  Tra cứu ngay
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Số điện thoại đặt hàng: *"
+                  placeholder="0912 345 678"
+                  type="tel"
+                  value={searchPhone}
+                  onChange={(e) => setSearchPhone(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Họ và tên người nhận / đặt hàng: *"
+                  placeholder="Nguyễn Văn A"
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  required
+                />
+              </div>
+              <p className="text-[11px] text-gray-500 italic">
+                🔒 Hệ thống yêu cầu khớp cả Số điện thoại và Họ tên để bảo vệ danh tính và đơn hàng của bạn.
+              </p>
+              <div className="flex justify-end">
+                <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto h-11 px-6">
+                  Xác thực &amp; Tra cứu
+                </Button>
+              </div>
+            </div>
+          )}
         </form>
 
-        {/* Suggestion tags: Only user's own orders if any, or demo code */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 pt-1">
-          <span className="text-[11px]">Đơn của bạn trên máy này:</span>
-          {deviceOrders.length > 0 ? (
-            deviceOrders.slice(0, 3).map((ord) => (
+        {/* Suggestion tags: ONLY user's own orders on this device */}
+        {deviceOrders.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 pt-1 border-t border-gray-100">
+            <span className="text-[11px]">Đơn của bạn trên máy này:</span>
+            {deviceOrders.slice(0, 3).map((ord) => (
               <button
                 key={ord.order_code}
                 type="button"
                 onClick={() => {
+                  setSearchMode("code");
                   setSearchQuery(ord.order_code);
-                  performSearch(ord.order_code);
+                  performSearchByCode(ord.order_code);
                 }}
                 className="px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] transition-colors cursor-pointer border border-emerald-200"
               >
                 #{ord.order_code}
               </button>
-            ))
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("GM-369817");
-                performSearch("GM-369817");
-              }}
-              className="px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-emerald-100 text-emerald-950 font-mono font-bold text-[11px] transition-colors cursor-pointer"
-            >
-              Mẫu: GM-369817
-            </button>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
 
         {errorMsg && (
           <div className="p-3.5 rounded-2xl bg-red-50 border border-red-100 text-xs text-red-600 font-medium text-center">
@@ -265,7 +383,7 @@ function TrackContent() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-600">
-                    Người nhận: <strong>{ord.recipient_name || ord.buyer_name}</strong> • SĐT: {ord.recipient_phone || ord.buyer_phone}
+                    Người nhận: <strong>{ord.recipient_name || ord.buyer_name}</strong> • SĐT: {maskPhone(ord.recipient_phone || ord.buyer_phone)}
                   </p>
                   <p className="text-[11px] text-gray-400">
                     Ngày đặt: {new Date(ord.created_at).toLocaleDateString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })}

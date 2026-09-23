@@ -140,6 +140,8 @@ export default function AdminInventoryPage() {
     },
   ]);
 
+  const [stockSyncWarning, setStockSyncWarning] = useState<string | null>(null);
+
   // Update stock for a specific warehouse
   const handleStockUpdate = (
     productId: string,
@@ -163,11 +165,18 @@ export default function AdminInventoryPage() {
               wh2 = Math.max(0, wh2 + delta);
             }
 
+            const totalStock = wh1 + wh2;
+            if (totalStock < 20) {
+              setStockSyncWarning(
+                `⚠️ Cảnh báo tồn kho: "${p.name} (${v.name})" hiện chỉ còn ${totalStock} cái (< 20 cái). Vui lòng đồng bộ và kiểm tra kỹ số lượng đơn đặt!`
+              );
+            }
+
             return {
               ...v,
               stock_warehouse_1: wh1,
               stock_warehouse_2: wh2,
-              stock: wh1 + wh2,
+              stock: totalStock,
             };
           }),
         };
@@ -512,6 +521,27 @@ export default function AdminInventoryPage() {
         </div>
       </div>
 
+      {/* Stock Sync Alert Banner (< 20 items warning) */}
+      {stockSyncWarning && (
+        <div className="p-4 rounded-3xl bg-amber-50 border border-amber-200 flex items-start justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-start gap-2.5">
+            <span className="text-xl">⚠️</span>
+            <div className="space-y-0.5 text-xs text-amber-900">
+              <span className="font-bold block text-sm">
+                Cảnh báo mức tồn kho thấp (&lt; 20 sản phẩm)
+              </span>
+              <p>{stockSyncWarning}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setStockSyncWarning(null)}
+            className="p-1 rounded-xl text-amber-700 hover:bg-amber-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Inventory Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden space-y-2">
         <div className="p-4 border-b border-[#F0E5D8] bg-[#FFF8EE] flex items-center justify-between">
@@ -554,7 +584,7 @@ export default function AdminInventoryPage() {
               {inventoryRows.map((row, idx) => {
                 const isWh1Low = row.stockWh1 <= 5;
                 const isWh2Low = row.stockWh2 <= 3;
-                const isTotalLow = row.stockTotal <= 10;
+                const isTotalLow = row.stockTotal < 20;
 
                 return (
                   <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
@@ -636,12 +666,16 @@ export default function AdminInventoryPage() {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold border border-red-200">
                           <AlertTriangle className="w-2.5 h-2.5" /> Hết hàng cả 2 kho
                         </span>
+                      ) : isTotalLow ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-300">
+                          <AlertTriangle className="w-2.5 h-2.5" /> Tồn ít (&lt;20 món)
+                        </span>
                       ) : isWh1Low ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 text-[10px] font-bold border border-amber-200">
                           ⚠️ Kho Q.3 sắp hết ({row.stockWh1})
                         </span>
                       ) : isWh2Low ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-900 text-[10px] font-bold border border-orange-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-900 text-[10px] font-bold border border-orange-200">
                           ⚠️ Kho Thủ Đức sắp hết ({row.stockWh2})
                         </span>
                       ) : (
