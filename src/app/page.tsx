@@ -2,12 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
 import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
 
 export default function HomePage() {
-  const featuredProducts = MOCK_PRODUCTS.slice(0, 4);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
@@ -123,35 +121,7 @@ export default function HomePage() {
         {/* ========================================================
             FEATURED PRODUCTS: REAL HANDMADE PRODUCTS
             ======================================================== */}
-        <section className="py-16 sm:py-20 container mx-auto px-4 sm:px-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 text-center sm:text-left">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#BFE9C3]/50 text-[#1B3622] text-xs font-bold mb-2">
-                <span>✨ Vật phẩm lưu niệm</span>
-              </div>
-              <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16]">
-                Sản phẩm handmade nổi bật
-              </h2>
-              <p className="text-xs sm:text-sm text-[#7E7068] mt-1">
-                Từng đường kim mũi chỉ được hoàn thiện bởi tình nguyện viên Mầm Mơ.
-              </p>
-            </div>
-
-            <Link
-              href="/products"
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#2D6338] hover:text-[#1B3622] transition-colors group"
-            >
-              <span>Xem tất cả sản phẩm</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            {featuredProducts.map((product) => (
-              <ProductCard key={product.product_id} product={product} />
-            ))}
-          </div>
-        </section>
+        <FeaturedProductsSection />
 
 
         {/* ========================================================

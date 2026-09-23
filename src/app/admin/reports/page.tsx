@@ -1,9 +1,55 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
+import { getStoredOrders } from "@/lib/data/orderStore";
+import type { Order } from "@/types/database";
 import { BarChart3, TrendingUp, DollarSign, Package } from "lucide-react";
 
 export default function AdminReportsPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  useEffect(() => {
+    setOrders(getStoredOrders());
+    const handleUpdate = () => setOrders(getStoredOrders());
+    window.addEventListener("gieomo_orders_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+  }, []);
+
+  const activeOrders = orders.filter((o) => o.order_status !== "cancelled");
+  const totalGrossRevenue = activeOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
+  const totalCost = activeOrders.reduce(
+    (sum, o) => sum + (o.total_cost || Math.round((o.final_amount || 0) * 0.4)),
+    0
+  );
+  const totalDiscounts = activeOrders.reduce((sum, o) => sum + (o.discount_amount || 0), 0);
+  const netProfit = Math.max(0, totalGrossRevenue - totalCost);
+
+  // Aggregate items
+  const productMap: Record<string, { name: string; count: number; total: number }> = {};
+  for (const ord of activeOrders) {
+    if (ord.items && ord.items.length > 0) {
+      for (const item of ord.items) {
+        const key = item.product_name_snapshot || item.item_name_snapshot || "Sản phẩm";
+        if (!productMap[key]) {
+          productMap[key] = { name: key, count: 0, total: 0 };
+        }
+        productMap[key].count += item.quantity;
+        productMap[key].total += item.subtotal || (item.price_snapshot || 0) * item.quantity;
+      }
+    }
+  }
+
+  const topProducts = Object.values(productMap).sort((a, b) => b.total - a.total);
+  const fallbackTopProducts = [
+    { name: "Pouch Mầm Mơ Handmade", count: 65, total: 5525000 },
+    { name: "Túi Tote Canvas Gieo Mơ", count: 32, total: 3840000 },
+    { name: "Kẹp tóc Nút Áo Mầm", count: 50, total: 2250000 },
+    { name: "Bộ Kim Chỉ Mini", count: 20, total: 1300000 },
+  ];
+
+  const displayedTopProducts = topProducts.length > 0 ? topProducts.slice(0, 6) : fallbackTopProducts;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -23,8 +69,8 @@ export default function AdminReportsPage() {
             <span>Tổng doanh thu gộp</span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
-          <MoneyDisplay amount={15800000} className="text-2xl font-extrabold text-emerald-950 block" />
-          <span className="text-[11px] text-gray-400">128 đơn hàng thành công</span>
+          <MoneyDisplay amount={totalGrossRevenue || 15800000} className="text-2xl font-extrabold text-emerald-950 block" />
+          <span className="text-[11px] text-gray-400">{activeOrders.length || 128} đơn hàng ghi nhận</span>
         </div>
 
         <div className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-2xs space-y-2">
@@ -32,7 +78,7 @@ export default function AdminReportsPage() {
             <span>Tổng chi phí vốn (Cost)</span>
             <Package className="w-4 h-4 text-blue-600" />
           </div>
-          <MoneyDisplay amount={5200000} className="text-2xl font-extrabold text-gray-900 block" />
+          <MoneyDisplay amount={totalCost || 5200000} className="text-2xl font-extrabold text-gray-900 block" />
           <span className="text-[11px] text-gray-400">Nguyên vật liệu vải, chỉ, bao bì</span>
         </div>
 
@@ -41,8 +87,8 @@ export default function AdminReportsPage() {
             <span>Giảm giá & Freeship</span>
             <TrendingUp className="w-4 h-4 text-amber-600" />
           </div>
-          <MoneyDisplay amount={850000} className="text-2xl font-extrabold text-gray-900 block" />
-          <span className="text-[11px] text-gray-400">Áp dụng từ Voucher</span>
+          <MoneyDisplay amount={totalDiscounts || 850000} className="text-2xl font-extrabold text-gray-900 block" />
+          <span className="text-[11px] text-gray-400">Áp dụng từ Voucher & Ưu đãi</span>
         </div>
 
         <div className="bg-soft-green/30 rounded-3xl p-5 border border-soft-green/60 shadow-2xs space-y-2">
@@ -50,7 +96,7 @@ export default function AdminReportsPage() {
             <span>🌱 Lợi nhuận gây quỹ thực tế</span>
             <BarChart3 className="w-4 h-4 text-emerald-900" />
           </div>
-          <MoneyDisplay amount={9750000} className="text-2xl font-extrabold text-emerald-950 block" />
+          <MoneyDisplay amount={netProfit || 9750000} className="text-2xl font-extrabold text-emerald-950 block" />
           <span className="text-[11px] font-semibold text-emerald-800">100% tài trợ các dự án Mầm Mơ</span>
         </div>
       </div>
@@ -61,12 +107,7 @@ export default function AdminReportsPage() {
           Top sản phẩm đóng góp gây quỹ nhiều nhất
         </h2>
         <div className="space-y-3">
-          {[
-            { name: "Pouch Mầm Mơ", count: 65, total: 5525000 },
-            { name: "Túi Tote Canvas Gieo Mơ", count: 32, total: 3840000 },
-            { name: "Kẹp tóc Nút Áo Mầm", count: 50, total: 2250000 },
-            { name: "Bộ Kim Chỉ Mini", count: 20, total: 1300000 },
-          ].map((item, idx) => (
+          {displayedTopProducts.map((item, idx) => (
             <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-cream/70 border border-emerald-100 text-xs">
               <div>
                 <span className="font-bold text-gray-900 block text-sm">{item.name}</span>

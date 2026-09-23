@@ -1,48 +1,65 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { MOCK_PRODUCTS } from "@/lib/data/mockData";
-import { saveNewOrder } from "@/lib/data/orderStore";
-import type { Order } from "@/types/database";
+import {
+  saveNewOrder,
+  getStoredProducts,
+  getStoredMembers,
+  getStoredPickupPoints,
+  type StoredMember,
+} from "@/lib/data/orderStore";
+import type { Order, OrderItem, PickupPoint } from "@/types/database";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 export default function AdminCreateOrderPage() {
   const router = useRouter();
+  const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
+  const [members, setMembers] = useState<StoredMember[]>([]);
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
+
+  useEffect(() => {
+    setAvailableProducts(getStoredProducts());
+    setMembers(getStoredMembers());
+    setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
+  }, []);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [sourceType, setSourceType] = useState("admin_manual");
   const [memberId, setMemberId] = useState("");
   const [deliveryType, setDeliveryType] = useState("home_delivery");
+  const [pickupPointId, setPickupPointId] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
   const [district, setDistrict] = useState("");
   const [province, setProvince] = useState("TP. Hồ Chí Minh");
   const [paymentMethod, setPaymentMethod] = useState("banking");
+
+  const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
   // Selected Order Items
   const [orderItems, setOrderItems] = useState<
     Array<{ productId: string; name: string; price: number; quantity: number }>
   >([
     {
-      productId: MOCK_PRODUCTS[0].product_id,
-      name: MOCK_PRODUCTS[0].name,
-      price: MOCK_PRODUCTS[0].price,
+      productId: defaultProd.product_id,
+      name: defaultProd.name,
+      price: defaultProd.price,
       quantity: 1,
     },
   ]);
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shippingFee = deliveryType === "self_pickup" ? 0 : subtotal >= 200000 ? 0 : 25000;
+  const shippingFee = deliveryType === "self_pickup" || deliveryType === "pickup_point" ? 0 : subtotal >= 200000 ? 0 : 25000;
   const finalAmount = subtotal + shippingFee;
 
   const handleAddItem = () => {
-    const firstProd = MOCK_PRODUCTS[0];
+    const firstProd = availableProducts[0] || defaultProd;
     setOrderItems((prev) => [
       ...prev,
       { productId: firstProd.product_id, name: firstProd.name, price: firstProd.price, quantity: 1 },
@@ -54,7 +71,7 @@ export default function AdminCreateOrderPage() {
   };
 
   const handleProductSelect = (index: number, prodId: string) => {
-    const prod = MOCK_PRODUCTS.find((p) => p.product_id === prodId);
+    const prod = availableProducts.find((p) => p.product_id === prodId);
     if (!prod) return;
     setOrderItems((prev) =>
       prev.map((item, i) =>
@@ -73,6 +90,28 @@ export default function AdminCreateOrderPage() {
     e.preventDefault();
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrderId = `ord-${Date.now()}`;
+
+    const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
+      const prod = availableProducts.find((p) => p.product_id === item.productId);
+      return {
+        order_item_id: `item-${newOrderId}-${idx + 1}`,
+        order_id: newOrderId,
+        product_id: item.productId,
+        variant_id: prod?.variants?.[0]?.variant_id || null,
+        combo_id: null,
+        product_name_snapshot: item.name,
+        item_name_snapshot: item.name,
+        variant_name_snapshot: prod?.variants?.[0]?.name || null,
+        price_snapshot: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity,
+        created_at: new Date().toISOString(),
+      };
+    });
+
+    const matchedMember = members.find((m) => m.memberId === memberId);
+    const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
+
     const newOrder: Order = {
       order_id: newOrderId,
       order_code: randomCode,
@@ -82,11 +121,16 @@ export default function AdminCreateOrderPage() {
       recipient_name: customerName || "Khách mua tại quầy",
       recipient_phone: customerPhone || "0900000000",
       delivery_type: deliveryType as any,
-      address_detail: addressDetail || "Tại điểm hẹn",
-      district: district || "Quận 1",
+      address_detail:
+        deliveryType === "home_delivery"
+          ? addressDetail || "Tại điểm hẹn"
+          : deliveryType === "pickup_point"
+          ? selectedPickup ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}` : "Điểm hẹn nhận hàng"
+          : "Tự đến lấy tại văn phòng BTC",
+      district: deliveryType === "home_delivery" ? district || "Quận 1" : "TP. Hồ Chí Minh",
       province: province,
       payment_method: paymentMethod as any,
-      payment_status: paymentMethod === "banking" ? "pending" : "pending",
+      payment_status: "pending",
       order_status: "pending",
       delivery_status: "not_ready",
       subtotal,
@@ -94,8 +138,15 @@ export default function AdminCreateOrderPage() {
       shipping_fee: shippingFee,
       final_amount: finalAmount,
       total_cost: Math.round(finalAmount * 0.4),
-      introducer_info: memberId ? `Thành viên (${memberId})` : "Ban tổ chức nhập đơn",
-      created_by_member_id: memberId || null,
+      seller_id: matchedMember ? matchedMember.memberId : null,
+      introducer_info: matchedMember
+        ? `${matchedMember.fullName} (${matchedMember.referralCode})`
+        : sourceType === "admin_manual"
+        ? "Ban tổ chức nhập đơn"
+        : "Khách lẻ tự liên hệ",
+      referral_code: matchedMember?.referralCode || null,
+      created_by_member_id: matchedMember ? matchedMember.memberId : null,
+      items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
       completed_at: null,
       updated_at: new Date().toISOString(),
@@ -165,9 +216,10 @@ export default function AdminCreateOrderPage() {
                 onChange={(e) => setMemberId(e.target.value)}
                 options={[
                   { value: "", label: "Trực tiếp / Không qua giới thiệu" },
-                  { value: "mem-1", label: "Nguyễn Thị Mai Lan (MAM-LAN)" },
-                  { value: "mem-2", label: "Trần Minh Quang (MAM-QUANG)" },
-                  { value: "mem-0", label: "BTC Mầm Mơ (MAM-ADMIN)" },
+                  ...members.map((m) => ({
+                    value: m.memberId,
+                    label: `${m.fullName} (${m.referralCode})`,
+                  })),
                 ]}
               />
             </div>
@@ -197,7 +249,7 @@ export default function AdminCreateOrderPage() {
                       onChange={(e) => handleProductSelect(idx, e.target.value)}
                       className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
                     >
-                      {MOCK_PRODUCTS.map((p) => (
+                      {availableProducts.map((p) => (
                         <option key={p.product_id} value={p.product_id}>
                           {p.name} - {p.price.toLocaleString("vi-VN")}đ
                         </option>
@@ -259,6 +311,23 @@ export default function AdminCreateOrderPage() {
                 ]}
               />
             </div>
+
+            {deliveryType === "pickup_point" && (
+              <div className="pt-2">
+                <Select
+                  label="Chọn điểm hẹn nhận hàng *"
+                  value={pickupPointId}
+                  onChange={(e) => setPickupPointId(e.target.value)}
+                  options={[
+                    { value: "", label: "-- Chọn điểm hẹn --" },
+                    ...pickupPoints.map((p) => ({
+                      value: p.pickup_point_id,
+                      label: `${p.name} (${p.address || p.address_detail || ""})`,
+                    })),
+                  ]}
+                />
+              </div>
+            )}
 
             {deliveryType === "home_delivery" && (
               <div className="space-y-3 pt-2">

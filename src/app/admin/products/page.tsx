@@ -1,17 +1,42 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { MOCK_PRODUCTS, MOCK_CATEGORIES, ExtendedProduct } from "@/lib/data/mockData";
+import { ExtendedProduct } from "@/lib/data/mockData";
+import {
+  getStoredProducts,
+  saveNewProduct,
+  updateStoredProduct,
+  deleteStoredProduct,
+  getStoredCategories,
+} from "@/lib/data/orderStore";
+import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { Plus, Search, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye } from "lucide-react";
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<ExtendedProduct[]>(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<ExtendedProduct[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
+
+  useEffect(() => {
+    setProducts(getStoredProducts());
+    setCategories(getStoredCategories());
+
+    const handleUpdate = () => setProducts(getStoredProducts());
+    const handleCatUpdate = () => setCategories(getStoredCategories());
+
+    window.addEventListener("gieomo_products_updated", handleUpdate);
+    window.addEventListener("gieomo_categories_updated", handleCatUpdate);
+
+    return () => {
+      window.removeEventListener("gieomo_products_updated", handleUpdate);
+      window.removeEventListener("gieomo_categories_updated", handleCatUpdate);
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -55,13 +80,14 @@ export default function AdminProductsPage() {
 
   // Toggle active/draft status
   const handleToggleStatus = (productId: string) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.product_id === productId
-          ? { ...p, status: p.status === "active" ? "draft" : "active" }
-          : p
-      )
-    );
+    const target = products.find((p) => p.product_id === productId);
+    if (!target) return;
+    const updated: ExtendedProduct = {
+      ...target,
+      status: target.status === "active" ? "draft" : "active",
+    };
+    updateStoredProduct(updated);
+    setProducts(getStoredProducts());
   };
 
   // Start editing product with separate spec fields populated
@@ -123,16 +149,16 @@ export default function AdminProductsPage() {
       specs: newSpecs,
     };
 
-    setProducts((prev) =>
-      prev.map((p) => (p.product_id === editingProduct.product_id ? updated : p))
-    );
+    updateStoredProduct(updated);
+    setProducts(getStoredProducts());
     setEditingProduct(null);
   };
 
   // Confirm delete product
   const handleConfirmDelete = () => {
     if (!deletingProduct) return;
-    setProducts((prev) => prev.filter((p) => p.product_id !== deletingProduct.product_id));
+    deleteStoredProduct(deletingProduct.product_id);
+    setProducts(getStoredProducts());
     setDeletingProduct(null);
   };
 
@@ -150,10 +176,13 @@ export default function AdminProductsPage() {
       .trim()
       .replace(/\s+/g, "-");
 
-    const categoryObj = MOCK_CATEGORIES.find((c) => c.category_id === addCategory) || MOCK_CATEGORIES[0];
+    const categoryObj = categories.find((c) => c.category_id === addCategory) || categories[0];
+    const prodId = `prod-${Date.now()}`;
+    const wh1Stock = Math.ceil(addStock * 0.7);
+    const wh2Stock = addStock - wh1Stock;
 
     const newProd: ExtendedProduct = {
-      product_id: `prod-${Date.now()}`,
+      product_id: prodId,
       name: addName,
       slug,
       short_description: `Sản phẩm ${addName} handmade gây quỹ Mầm Mơ`,
@@ -172,10 +201,12 @@ export default function AdminProductsPage() {
       variants: [
         {
           variant_id: `var-${Date.now()}`,
-          product_id: `prod-${Date.now()}`,
+          product_id: prodId,
           name: "Mặc định",
           sku: `GM-${slug.toUpperCase().slice(0, 8)}`,
           stock: addStock,
+          stock_warehouse_1: wh1Stock,
+          stock_warehouse_2: wh2Stock,
           price: null,
           compare_at_price: null,
           cost_price: null,
@@ -189,7 +220,8 @@ export default function AdminProductsPage() {
       updated_at: new Date().toISOString(),
     };
 
-    setProducts([newProd, ...products]);
+    saveNewProduct(newProd);
+    setProducts(getStoredProducts());
     setIsQuickAddOpen(false);
 
     // Reset Form
@@ -255,7 +287,7 @@ export default function AdminProductsPage() {
           >
             Tất cả ({products.length})
           </button>
-          {MOCK_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.category_id}
               onClick={() => setSelectedCategory(cat.category_id)}
@@ -463,7 +495,7 @@ export default function AdminProductsPage() {
                   <select
                     value={editingProduct.category_id ?? "cat-1"}
                     onChange={(e) => {
-                      const cat = MOCK_CATEGORIES.find((c) => c.category_id === e.target.value);
+                      const cat = categories.find((c) => c.category_id === e.target.value);
                       setEditingProduct({
                         ...editingProduct,
                         category_id: e.target.value,
@@ -472,7 +504,7 @@ export default function AdminProductsPage() {
                     }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
                   >
-                    {MOCK_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.category_id} value={c.category_id}>
                         {c.name}
                       </option>
@@ -765,7 +797,7 @@ export default function AdminProductsPage() {
                     onChange={(e) => setAddCategory(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
                   >
-                    {MOCK_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.category_id} value={c.category_id}>
                         {c.name}
                       </option>

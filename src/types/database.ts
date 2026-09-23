@@ -149,6 +149,7 @@ export interface ProductVariant {
   stock: number;
   stock_warehouse_1?: number; // Tồn Kho 1 (Trung Tâm - Q3)
   stock_warehouse_2?: number; // Tồn Kho 2 (Cơ Sở 2 - Thủ Đức)
+  warehouse_stocks?: Record<string, number>; // Dynamic stock by warehouse_id
   sort_order?: number;
   weight_gram: number | null;
   status: ProductStatus;
@@ -334,6 +335,7 @@ export interface PickupPoint {
   pickup_point_id: string;
   name: string;
   address: string;
+  address_detail?: string;
   contact_name: string | null;
   contact_phone: string | null;
   opening_hours: string | null;

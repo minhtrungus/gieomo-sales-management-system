@@ -481,6 +481,40 @@ function TrackContent() {
             </div>
           </div>
 
+          {/* Order Items Breakdown */}
+          {selectedOrder.items && selectedOrder.items.length > 0 && (
+            <div className="pt-4 border-t border-gray-100 space-y-3">
+              <span className="font-bold text-gray-900 block text-sm">
+                Sản phẩm đã đặt ({selectedOrder.items.length} món):
+              </span>
+              <div className="bg-gray-50/80 rounded-2xl p-4 divide-y divide-gray-200/60 border border-gray-100">
+                {selectedOrder.items.map((item, idx) => (
+                  <div
+                    key={item.order_item_id || idx}
+                    className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-emerald-950 block">
+                        {item.product_name_snapshot || item.item_name_snapshot || "Sản phẩm Mầm Mơ"}
+                      </span>
+                      {item.variant_name_snapshot && (
+                        <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
+                      )}
+                      <span className="text-gray-500 text-[11px]">
+                        Số lượng: <strong>{item.quantity}</strong> • Đơn giá:{" "}
+                        <MoneyDisplay amount={item.price_snapshot ?? item.unit_price ?? 85000} />
+                      </span>
+                    </div>
+                    <MoneyDisplay
+                      amount={item.subtotal || (item.price_snapshot ?? 85000) * item.quantity}
+                      className="font-extrabold text-emerald-950 text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Delivery & Items Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100 text-xs">
             <div className="space-y-2">

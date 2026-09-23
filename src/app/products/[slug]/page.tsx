@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { MOCK_PRODUCTS, ExtendedProduct } from "@/lib/data/mockData";
+import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
 import { BookOpen, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -18,9 +19,22 @@ import { Toast } from "@/components/ui/Toast";
 export default function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const product = MOCK_PRODUCTS.find((p) => p.slug === resolvedParams.slug) ?? MOCK_PRODUCTS[0];
+
+  const [product, setProduct] = useState<ExtendedProduct>(() => {
+    const list = getStoredProducts();
+    return list.find((p) => p.slug === resolvedParams.slug) ?? list[0] ?? MOCK_PRODUCTS[0];
+  });
 
   const [selectedVariant, setSelectedVariant] = useState(product.variants?.[0] ?? null);
+
+  useEffect(() => {
+    const list = getStoredProducts();
+    const found = list.find((p) => p.slug === resolvedParams.slug);
+    if (found) {
+      setProduct(found);
+      setSelectedVariant(found.variants?.[0] ?? null);
+    }
+  }, [resolvedParams.slug]);
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -62,7 +76,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
     router.push("/checkout");
   };
 
-  const relatedProducts = MOCK_PRODUCTS.filter((p) => p.product_id !== product.product_id).slice(0, 3);
+  const relatedProducts = getStoredProducts()
+    .filter((p) => p.status === "active" && p.product_id !== product.product_id)
+    .slice(0, 3);
 
   return (
     <div className="min-h-screen flex flex-col bg-cream/60">

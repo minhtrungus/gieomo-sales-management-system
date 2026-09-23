@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from "@/lib/data/mockData";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { getStoredCategories, saveNewCategory, saveNewProduct } from "@/lib/data/orderStore";
+import type { ProductCategory } from "@/types/database";
+import { ArrowLeft, Plus, Trash2, FolderPlus, X } from "lucide-react";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
+
+  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
+  const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatDesc, setNewCatDesc] = useState("");
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -20,12 +26,21 @@ export default function AdminNewProductPage() {
   const [descSize, setDescSize] = useState("");
   const [descMaterials, setDescMaterials] = useState("");
   const [descImpact, setDescImpact] = useState("");
-  const [categoryId, setCategoryId] = useState("cat-1");
+  const [categoryId, setCategoryId] = useState(() => categories[0]?.category_id || "cat-1");
   const [price, setPrice] = useState<number>(0);
   const [compareAtPrice, setCompareAtPrice] = useState<number | "">("");
   const [costPrice, setCostPrice] = useState<number | "">("");
   const [status, setStatus] = useState("active");
   const [featured, setFeatured] = useState(false);
+
+  // Load stored categories
+  useEffect(() => {
+    const list = getStoredCategories();
+    setCategories(list);
+    if (!categoryId && list.length > 0) {
+      setCategoryId(list[0].category_id);
+    }
+  }, []);
 
   // Variants list
   const [variants, setVariants] = useState([
@@ -56,6 +71,37 @@ export default function AdminNewProductPage() {
     setVariants((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleQuickAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    const catSlug = newCatName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[đĐ]/g, "d")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+
+    const newCat: ProductCategory = {
+      category_id: `cat-${Date.now()}`,
+      name: newCatName.trim(),
+      slug: catSlug || `cat-${Date.now()}`,
+      description: newCatDesc.trim() || null,
+      status: "active",
+      sort_order: categories.length + 1,
+      created_at: new Date().toISOString(),
+    };
+
+    saveNewCategory(newCat);
+    const updated = getStoredCategories();
+    setCategories(updated);
+    setCategoryId(newCat.category_id);
+    setNewCatName("");
+    setNewCatDesc("");
+    setIsAddCatModalOpen(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -66,38 +112,54 @@ export default function AdminNewProductPage() {
       descImpact.trim() ? `\n\n## Ý nghĩa\n${descImpact.trim()}` : "",
     ].filter(Boolean).join("");
 
+    const categoryObj =
+      categories.find((c) => c.category_id === categoryId) || categories[0];
+    const prodId = `prod-${Date.now()}`;
+    const cleanSlug = slug.trim() || `prod-${Date.now()}`;
+
     const newProd = {
-      product_id: `prod-${Date.now()}`,
+      product_id: prodId,
       category_id: categoryId,
+      category: categoryObj,
       name,
-      slug,
+      slug: cleanSlug,
       short_description: shortDescription,
       description: fullDescription,
-      price,
+      price: Number(price) || 0,
       compare_at_price: compareAtPrice ? Number(compareAtPrice) : null,
       cost_price: costPrice ? Number(costPrice) : null,
       featured,
       status: status as "active" | "draft",
+      sort_order: 1,
+      thumbnail: "/images/products/pounch_1.png",
       images: ["/images/products/pounch_1.png"],
       impact_story: descImpact || undefined,
-      variants: variants.map((v, i) => ({
-        variant_id: `var-${Date.now()}-${i}`,
-        product_id: `prod-${Date.now()}`,
-        name: v.name,
-        sku: v.sku,
-        stock: v.stock,
-        price: null,
-        compare_at_price: null,
-        cost_price: null,
-        weight_gram: 100,
-        status: "active" as const,
-        sort_order: i + 1,
-        created_at: new Date().toISOString(),
-      })),
+      variants: variants.map((v, i) => {
+        const st = Number(v.stock) || 0;
+        const wh1 = Math.ceil(st * 0.7);
+        const wh2 = st - wh1;
+        return {
+          variant_id: `var-${Date.now()}-${i}`,
+          product_id: prodId,
+          name: v.name,
+          sku: v.sku || `GM-${cleanSlug.toUpperCase().slice(0, 6)}-0${i + 1}`,
+          stock: st,
+          stock_warehouse_1: wh1,
+          stock_warehouse_2: wh2,
+          price: null,
+          compare_at_price: null,
+          cost_price: null,
+          weight_gram: 100,
+          status: "active" as const,
+          sort_order: i + 1,
+          created_at: new Date().toISOString(),
+        };
+      }),
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    MOCK_PRODUCTS.unshift(newProd as any);
+    saveNewProduct(newProd as any);
     router.push("/admin/products");
   };
 
@@ -337,12 +399,23 @@ export default function AdminNewProductPage() {
               Cấu hình xuất bản
             </h3>
 
-            <Select
-              label="Danh mục sản phẩm *"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              options={MOCK_CATEGORIES.map((c) => ({ value: c.category_id, label: c.name }))}
-            />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-800">Danh mục sản phẩm *</label>
+                <button
+                  type="button"
+                  onClick={() => setIsAddCatModalOpen(true)}
+                  className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200"
+                >
+                  <Plus className="w-3 h-3" /> Thêm danh mục
+                </button>
+              </div>
+              <Select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                options={categories.map((c) => ({ value: c.category_id, label: c.name }))}
+              />
+            </div>
 
             <Select
               label="Trạng thái xuất bản"
@@ -371,6 +444,70 @@ export default function AdminNewProductPage() {
           </div>
         </div>
       </form>
+
+      {/* Modal Quick Add Category */}
+      {isAddCatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-gray-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <FolderPlus className="w-5 h-5 text-emerald-800" />
+                <h3 className="font-heading font-extrabold text-base text-gray-900">
+                  Thêm danh mục mới
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddCatModalOpen(false)}
+                className="p-1 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddCategory} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-gray-800 block">Tên danh mục *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Phụ kiện handmade, Set quà tặng..."
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-gray-800 block">Mô tả ngắn</label>
+                <textarea
+                  rows={2}
+                  placeholder="Mô tả nhóm sản phẩm..."
+                  value={newCatDesc}
+                  onChange={(e) => setNewCatDesc(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCatModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  Tạo danh mục ➔
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

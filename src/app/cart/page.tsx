@@ -9,7 +9,7 @@ import { useCartStore } from "@/store/cart";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
-import { MOCK_VOUCHERS } from "@/lib/data/mockData";
+import { getStoredVouchers } from "@/lib/data/orderStore";
 import { SITE_CONFIG } from "@/lib/constants";
 
 export default function CartPage() {
@@ -33,7 +33,8 @@ export default function CartPage() {
     e.preventDefault();
     setVoucherError(null);
 
-    const found = MOCK_VOUCHERS.find(
+    const vouchers = getStoredVouchers();
+    const found = vouchers.find(
       (v) => v.code.toUpperCase() === voucherCode.trim().toUpperCase() && v.status === "active"
     );
 

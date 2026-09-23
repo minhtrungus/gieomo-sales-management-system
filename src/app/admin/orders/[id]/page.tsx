@@ -317,23 +317,44 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
           {/* Items Recap */}
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
-            <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
-              Sản phẩm trong đơn ({MOCK_ORDER_ITEMS.length} món)
-            </h3>
+            {(() => {
+              const displayItems = order.items && order.items.length > 0 ? order.items : MOCK_ORDER_ITEMS;
+              return (
+                <>
+                  <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
+                    Sản phẩm trong đơn ({displayItems.length} món)
+                  </h3>
 
-            <div className="divide-y divide-gray-100">
-              {MOCK_ORDER_ITEMS.map((item) => (
-                <div key={item.order_item_id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-gray-900 block">{item.product_name_snapshot}</span>
-                    <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
-                    <span className="text-gray-500">Đơn giá: <MoneyDisplay amount={item.price_snapshot ?? 85000} /> x {item.quantity}</span>
+                  <div className="divide-y divide-gray-100">
+                    {displayItems.map((item, idx) => (
+                      <div
+                        key={item.order_item_id || idx}
+                        className="py-3 first:pt-0 last:pb-0 flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-bold text-gray-900 block">
+                            {item.product_name_snapshot || item.item_name_snapshot || "Sản phẩm Mầm Mơ"}
+                          </span>
+                          {item.variant_name_snapshot && (
+                            <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
+                          )}
+                          <span className="text-gray-500">
+                            Đơn giá:{" "}
+                            <MoneyDisplay amount={item.price_snapshot ?? item.unit_price ?? 85000} /> x{" "}
+                            {item.quantity}
+                          </span>
+                        </div>
+
+                        <MoneyDisplay
+                          amount={item.subtotal || (item.price_snapshot ?? 85000) * item.quantity}
+                          className="font-extrabold text-emerald-950 text-sm"
+                        />
+                      </div>
+                    ))}
                   </div>
-
-                  <MoneyDisplay amount={item.subtotal} className="font-extrabold text-emerald-950 text-sm" />
-                </div>
-              ))}
-            </div>
+                </>
+              );
+            })()}
 
             <div className="pt-3 border-t border-gray-100 space-y-2 text-xs">
               <div className="flex justify-between text-gray-600">

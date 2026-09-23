@@ -37,6 +37,7 @@ export interface ExtendedCombo extends Omit<Combo, "items"> {
     quantity: number;
   }>;
   images?: string[];
+  thumbnail?: string;
 }
 
 export const MOCK_CATEGORIES: ProductCategory[] = [
@@ -364,6 +365,7 @@ export const MOCK_VOUCHERS: Voucher[] = [
     usage_limit: 50,
     usage_count: 12,
     status: "active",
+    visibility: "public",
     created_at: new Date().toISOString(),
   },
   {
@@ -375,6 +377,7 @@ export const MOCK_VOUCHERS: Voucher[] = [
     usage_limit: 100,
     usage_count: 45,
     status: "active",
+    visibility: "public",
     created_at: new Date().toISOString(),
   },
 ];

@@ -4,19 +4,29 @@ import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { MOCK_COMBOS } from "@/lib/data/mockData";
+import { getStoredCombos, type ExtendedCombo } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Toast } from "@/components/ui/Toast";
 import { Gift, Plus } from "lucide-react";
 
 export default function CombosPage() {
   const addItem = useCartStore((state) => state.addItem);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [combos, setCombos] = useState<ExtendedCombo[]>([]);
 
-  const handleAddCombo = (combo: (typeof MOCK_COMBOS)[0]) => {
+  useEffect(() => {
+    setCombos(getStoredCombos().filter((c) => c.status === "active"));
+    const handleUpdate = () => {
+      setCombos(getStoredCombos().filter((c) => c.status === "active"));
+    };
+    window.addEventListener("gieomo_combos_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_combos_updated", handleUpdate);
+  }, []);
+
+  const handleAddCombo = (combo: ExtendedCombo) => {
     addItem({
       product_id: `combo-${combo.combo_id}`,
       variant_id: null,
@@ -53,7 +63,7 @@ export default function CombosPage() {
 
         {/* Combo Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {MOCK_COMBOS.map((combo) => (
+          {combos.map((combo) => (
             <div
               key={combo.combo_id}
               className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row gap-6 items-start hover:shadow-card-hover transition-all"
@@ -91,7 +101,7 @@ export default function CombosPage() {
                         Bao gồm {combo.items.length} món quà ghép:
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#5C4D44]">
-                        {combo.items.map((it, idx) => (
+                        {combo.items.map((it: any, idx: number) => (
                           <span key={idx} className="inline-flex items-center gap-1.5">
                             <span className="px-2.5 py-1 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] font-bold text-[#342A24] text-xs">
                               {it.product.name} <span className="text-[#2D6338] font-black">×{it.quantity}</span>

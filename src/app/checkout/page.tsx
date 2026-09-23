@@ -11,14 +11,23 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
-import { saveNewOrder, getStoredPickupPoints } from "@/lib/data/orderStore";
-import type { Order, PickupPoint } from "@/types/database";
+import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers } from "@/lib/data/orderStore";
+import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { items, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
+
+  const [siteSettings, setSiteSettings] = useState(() => getStoredSettings());
+
+  useEffect(() => {
+    setSiteSettings(getStoredSettings());
+    const handleSettingsUpdate = () => setSiteSettings(getStoredSettings());
+    window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
+    return () => window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
+  }, []);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [differentRecipient, setDifferentRecipient] = useState(false);
@@ -55,6 +64,20 @@ function CheckoutContent() {
     }
   }, [searchParams]);
 
+  // Capture referral code from URL or stored
+  useEffect(() => {
+    const refParam = searchParams.get("ref");
+    if (refParam) {
+      localStorage.setItem("gieomo_referral_code", refParam);
+      setFormData((prev) => ({ ...prev, introducer_info: prev.introducer_info || refParam.toUpperCase() }));
+    } else {
+      const savedRef = localStorage.getItem("gieomo_referral_code");
+      if (savedRef) {
+        setFormData((prev) => ({ ...prev, introducer_info: prev.introducer_info || savedRef.toUpperCase() }));
+      }
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     const pts = getStoredPickupPoints().filter((p) => p.status === "active");
     setPickupPoints(pts);
@@ -63,40 +86,45 @@ function CheckoutContent() {
     }
   }, []);
 
-  const shippingFee = deliveryType !== "home_delivery" ? 0 : subtotal >= 200000 ? 0 : 25000;
+  const shippingFee = deliveryType !== "home_delivery" ? 0 : subtotal >= siteSettings.freeShippingThreshold ? 0 : siteSettings.flatShippingFee;
 
   const calculateDiscount = () => {
     const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
-    if (code === "GIEOMO10") {
-      return Math.round(subtotal * 0.1);
+    if (!code) return 0;
+    const vouchers = getStoredVouchers();
+    const found = vouchers.find((v) => v.code === code && v.status === "active");
+    if (!found) return 0;
+    if (subtotal < found.min_order_value) return 0;
+    if (found.discount_type === "percentage") {
+      return Math.round((subtotal * found.discount_value) / 100);
     }
-    if (code === "WELCOME20K") {
-      return subtotal >= 150000 ? 20000 : 0;
-    }
-    return 0;
+    return found.discount_value;
   };
 
   const discountAmount = calculateDiscount();
   const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
 
-  const handleApplyVoucher = () => {
+  const handleApplyVoucher = (codeOverride?: string) => {
     setVoucherError(null);
-    const code = formData.voucher_code.trim().toUpperCase();
+    const code = (codeOverride || formData.voucher_code).trim().toUpperCase();
     if (!code) {
       setVoucherError("Vui lòng nhập mã giảm giá");
       return;
     }
-    if (code === "GIEOMO10") {
-      setVoucherApplied("GIEOMO10");
-    } else if (code === "WELCOME20K") {
-      if (subtotal < 150000) {
-        setVoucherError("Mã WELCOME20K yêu cầu đơn từ 150.000đ trở lên");
-        return;
-      }
-      setVoucherApplied("WELCOME20K");
-    } else {
+    const vouchers = getStoredVouchers();
+    const found = vouchers.find((v) => v.code === code && v.status === "active");
+    if (!found) {
       setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn");
+      return;
     }
+    if (subtotal < found.min_order_value) {
+      setVoucherError(
+        `Mã ${found.code} yêu cầu đơn từ ${found.min_order_value.toLocaleString("vi-VN")}đ trở lên`
+      );
+      return;
+    }
+    setVoucherApplied(found.code);
+    handleInputChange("voucher_code", found.code);
   };
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -180,6 +208,31 @@ function CheckoutContent() {
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrderId = `ord-${Date.now()}`;
 
+    // Build order items snapshot
+    const orderItemsSnapshot: OrderItem[] = items.map((it, idx) => ({
+      order_item_id: `item-${newOrderId}-${idx + 1}`,
+      order_id: newOrderId,
+      product_id: it.product_id,
+      variant_id: it.variant_id,
+      combo_id: it.combo_id || null,
+      product_name_snapshot: it.product_name || "Sản phẩm",
+      item_name_snapshot: it.product_name || "Sản phẩm",
+      variant_name_snapshot: it.variant_name || null,
+      price_snapshot: it.price,
+      quantity: it.quantity,
+      subtotal: it.price * it.quantity,
+      created_at: new Date().toISOString(),
+    }));
+
+    // Match seller from stored members
+    const members = getStoredMembers();
+    const cleanRef = (formData.introducer_info || "").trim().toUpperCase();
+    const matchedSeller = members.find(
+      (m) =>
+        (m.referralCode && m.referralCode.toUpperCase() === cleanRef) ||
+        (m.fullName && m.fullName.toLowerCase() === (formData.introducer_info || "").trim().toLowerCase())
+    );
+
     const newOrderRecord: Order = {
       order_id: newOrderId,
       order_code: randomCode,
@@ -208,9 +261,11 @@ function CheckoutContent() {
       shipping_fee: shippingFee,
       final_amount: finalAmount,
       total_cost: Math.round(finalAmount * 0.4),
+      seller_id: matchedSeller ? matchedSeller.memberId : null,
       introducer_info: formData.introducer_info ? formData.introducer_info : "Trực tiếp (Website)",
       referral_code: formData.introducer_info ? formData.introducer_info.toUpperCase() : null,
       customer_note: formData.note || "",
+      items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
       completed_at: null,
       updated_at: new Date().toISOString(),
@@ -640,7 +695,7 @@ function CheckoutContent() {
                   />
                   <button
                     type="button"
-                    onClick={handleApplyVoucher}
+                    onClick={() => handleApplyVoucher()}
                     className="px-3.5 py-2 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-bold text-xs transition-colors cursor-pointer"
                   >
                     Áp dụng
@@ -648,35 +703,27 @@ function CheckoutContent() {
                 </div>
 
                 {/* Quick Chips */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                  <span className="text-[10px] text-gray-500 font-medium">Gợi ý:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleInputChange("voucher_code", "GIEOMO10");
-                      setVoucherApplied("GIEOMO10");
-                      setVoucherError(null);
-                    }}
-                    className="px-2 py-0.5 rounded-lg bg-soft-green/40 hover:bg-soft-green text-emerald-900 text-[10.5px] font-bold border border-emerald-200 transition-colors cursor-pointer"
-                  >
-                    🏷️ GIEOMO10 (-10%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (subtotal < 150000) {
-                        setVoucherError("Mã WELCOME20K yêu cầu đơn từ 150.000đ trở lên");
-                        return;
-                      }
-                      handleInputChange("voucher_code", "WELCOME20K");
-                      setVoucherApplied("WELCOME20K");
-                      setVoucherError(null);
-                    }}
-                    className="px-2 py-0.5 rounded-lg bg-warm-orange/30 hover:bg-warm-orange text-orange-950 text-[10.5px] font-bold border border-orange-200 transition-colors cursor-pointer"
-                  >
-                    🏷️ WELCOME20K (-20k)
-                  </button>
-                </div>
+                {(() => {
+                  const publicVouchers = getStoredVouchers().filter(
+                    (v) => (v.visibility || "public") === "public" && v.status === "active"
+                  );
+                  if (publicVouchers.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">Gợi ý:</span>
+                      {publicVouchers.slice(0, 4).map((v) => (
+                        <button
+                          key={v.voucher_id}
+                          type="button"
+                          onClick={() => handleApplyVoucher(v.code)}
+                          className="px-2 py-0.5 rounded-lg bg-soft-green/40 hover:bg-soft-green text-emerald-900 text-[10.5px] font-bold border border-emerald-200 transition-colors cursor-pointer"
+                        >
+                          🏷️ {v.code} ({v.discount_type === "percentage" ? `-${v.discount_value}%` : `-${Math.round(v.discount_value / 1000)}k`})
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {voucherError && (
                   <p className="text-[11px] text-red-600 font-medium">{voucherError}</p>

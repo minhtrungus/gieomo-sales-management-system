@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2 } from "lucide-react";
+import { getStoredSettings, saveStoredSettings } from "@/lib/data/orderStore";
 
 export default function AdminSettingsPage() {
   const [siteName, setSiteName] = useState("Gieo Mơ");
@@ -25,6 +26,25 @@ export default function AdminSettingsPage() {
   const [coverTheme, setCoverTheme] = useState("emerald");
   const [faviconPreview, setFaviconPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
+
+  // Load from store
+  useEffect(() => {
+    const s = getStoredSettings();
+    setSiteName(s.siteName);
+    setContactPhone(s.contactPhone);
+    setContactEmail(s.contactEmail);
+    setFlatShippingFee(String(s.flatShippingFee));
+    setFreeShippingThreshold(String(s.freeShippingThreshold));
+    setBankNumber(s.bankNumber);
+    setBankHolder(s.bankHolder);
+    setBankName(s.bankName);
+    setQrMode(s.qrMode);
+    setQrImageUrl(s.qrImageUrl);
+    setActivePalette(s.activePalette);
+    setCoverTheme(s.coverTheme);
+    setFaviconPreview(s.faviconPreview);
+    setAvatarPreview(s.avatarPreview);
+  }, []);
 
   const palettes = [
     { id: "soft-green", name: "Soft Green (Mầm Mơ)", color: "#BFE9C3" },
@@ -79,6 +99,22 @@ export default function AdminSettingsPage() {
 
   const handleConfirmSave = () => {
     setIsConfirmSaveOpen(false);
+    saveStoredSettings({
+      siteName,
+      contactPhone,
+      contactEmail,
+      flatShippingFee: Number(flatShippingFee) || 25000,
+      freeShippingThreshold: Number(freeShippingThreshold) || 200000,
+      bankNumber,
+      bankHolder,
+      bankName,
+      qrMode,
+      qrImageUrl,
+      activePalette,
+      coverTheme,
+      faviconPreview,
+      avatarPreview,
+    });
     setSaveSuccessMessage("Đã lưu thành công cấu hình nhận diện thương hiệu, Favicon, QR thanh toán & thông tin hệ thống!");
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };

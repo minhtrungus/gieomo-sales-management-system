@@ -1,7 +1,9 @@
 "use client";
 
-import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage } from "@/types/database";
-import { MOCK_ORDERS } from "./mockData";
+import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo } from "@/types/database";
+import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
+
+export type { ExtendedProduct, ExtendedCombo };
 
 export interface PaymentRecord {
   paymentId: string;
@@ -54,6 +56,9 @@ const SEED_PAYMENTS: PaymentRecord[] = [
 
 let cachedOrders: Order[] | null = null;
 let cachedPayments: PaymentRecord[] | null = null;
+let cachedVouchers: Voucher[] | null = null;
+let cachedProducts: ExtendedProduct[] | null = null;
+let cachedWarehouses: Warehouse[] | null = null;
 
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return MOCK_ORDERS;
@@ -101,6 +106,89 @@ export function saveNewOrder(newOrder: Order): void {
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
+    // Deduct inventory stock atomically
+    if (newOrder.items && newOrder.items.length > 0) {
+      try {
+        const products = getStoredProducts();
+        const targetWhId = newOrder.warehouse_id || "wh-1";
+        let prodsChanged = false;
+
+        const updatedProds = products.map((prod) => {
+          let prodModified = false;
+          const updatedVariants = prod.variants?.map((v) => {
+            const matchingItem = newOrder.items?.find(
+              (it) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
+            );
+            if (matchingItem) {
+              prodModified = true;
+              prodsChanged = true;
+              const qty = matchingItem.quantity || 1;
+              const stocks = { ...(v.warehouse_stocks || {}) };
+              let wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
+              let wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+              if (targetWhId === "wh-1") {
+                wh1 = Math.max(0, wh1 - qty);
+              } else if (targetWhId === "wh-2") {
+                wh2 = Math.max(0, wh2 - qty);
+              }
+              const currentTargetStock = stocks[targetWhId] ?? (targetWhId === "wh-1" ? wh1 : targetWhId === "wh-2" ? wh2 : 0);
+              stocks[targetWhId] = Math.max(0, currentTargetStock - qty);
+              const newTotalStock = Math.max(0, (v.stock || 0) - qty);
+              return {
+                ...v,
+                stock: newTotalStock,
+                stock_warehouse_1: wh1,
+                stock_warehouse_2: wh2,
+                warehouse_stocks: stocks,
+              };
+            }
+            return v;
+          });
+          return prodModified ? { ...prod, variants: updatedVariants } : prod;
+        });
+
+        if (prodsChanged) {
+          cachedProducts = updatedProds;
+          localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
+          window.dispatchEvent(new Event("gieomo_products_updated"));
+        }
+      } catch (e) {
+        console.error("Error deducting inventory stock", e);
+      }
+    }
+
+    // Auto-sync customer record
+    try {
+      const custRaw = localStorage.getItem("gieomo_customers");
+      const custList = custRaw ? JSON.parse(custRaw) : [];
+      const cleanPhone = (newOrder.buyer_phone || newOrder.recipient_phone || "").replace(/\s+/g, "");
+      if (cleanPhone) {
+        const existingIdx = custList.findIndex((c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone);
+        if (existingIdx >= 0) {
+          custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 0) + 1;
+          custList[existingIdx].totalSpent = (custList[existingIdx].totalSpent || 0) + (newOrder.final_amount || 0);
+          if (newOrder.buyer_name) custList[existingIdx].fullName = newOrder.buyer_name;
+          if (newOrder.buyer_email) custList[existingIdx].email = newOrder.buyer_email;
+          if (newOrder.address_detail) custList[existingIdx].address = `${newOrder.address_detail}, ${newOrder.district || ""}, ${newOrder.province || ""}`;
+        } else {
+          custList.unshift({
+            customerId: `cust-${Date.now()}`,
+            fullName: newOrder.buyer_name || newOrder.recipient_name || "Khách hàng",
+            phone: cleanPhone,
+            email: newOrder.buyer_email || "",
+            address: `${newOrder.address_detail || ""}, ${newOrder.district || ""}, ${newOrder.province || ""}`,
+            totalOrders: 1,
+            totalSpent: newOrder.final_amount || 0,
+            createdAt: newOrder.created_at,
+          });
+        }
+        localStorage.setItem("gieomo_customers", JSON.stringify(custList));
+        window.dispatchEvent(new Event("gieomo_customers_updated"));
+      }
+    } catch {
+      // ignore
+    }
+
     // If banking payment method, automatically add to payments list
     if (newOrder.payment_method === "banking") {
       const payments = getStoredPayments();
@@ -137,6 +225,7 @@ export function saveNewOrder(newOrder: Order): void {
         },
       };
       localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
+      window.dispatchEvent(new Event("gieomo_notifications_updated"));
     } catch {
       // ignore
     }
@@ -162,6 +251,54 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
     );
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    // Restore stock if order is cancelled
+    if (newStatus === "cancelled") {
+      const cancelledOrder = orders.find((o) => o.order_id === orderId || o.order_code === orderId);
+      if (cancelledOrder && cancelledOrder.items && cancelledOrder.items.length > 0) {
+        try {
+          const prods = getStoredProducts();
+          const targetWhId = cancelledOrder.warehouse_id || "wh-1";
+          let prodsChanged = false;
+          const restored = prods.map((prod) => {
+            let prodModified = false;
+            const updatedVariants = prod.variants?.map((v) => {
+              const matchingItem = cancelledOrder.items?.find(
+                (it) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
+              );
+              if (matchingItem) {
+                prodModified = true;
+                prodsChanged = true;
+                const qty = matchingItem.quantity || 1;
+                const stocks = { ...(v.warehouse_stocks || {}) };
+                let wh1 = v.stock_warehouse_1 ?? 0;
+                let wh2 = v.stock_warehouse_2 ?? 0;
+                if (targetWhId === "wh-1") wh1 += qty;
+                else if (targetWhId === "wh-2") wh2 += qty;
+                stocks[targetWhId] = (stocks[targetWhId] ?? 0) + qty;
+                return {
+                  ...v,
+                  stock: (v.stock || 0) + qty,
+                  stock_warehouse_1: wh1,
+                  stock_warehouse_2: wh2,
+                  warehouse_stocks: stocks,
+                };
+              }
+              return v;
+            });
+            return prodModified ? { ...prod, variants: updatedVariants } : prod;
+          });
+          if (prodsChanged) {
+            cachedProducts = restored;
+            localStorage.setItem("gieomo_products", JSON.stringify(restored));
+            window.dispatchEvent(new Event("gieomo_products_updated"));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
     console.error("Error updating order status", e);
@@ -638,5 +775,569 @@ export function updateOrderShipper(
     console.error("Error updating shipper", e);
   }
 }
+
+// ==========================================
+// VOUCHERS STORE (BÁN HÀNG & QUẢN TRỊ ƯU ĐÃI)
+// ==========================================
+
+export function getStoredVouchers(): Voucher[] {
+  if (typeof window === "undefined") {
+    return MOCK_VOUCHERS.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+  }
+  if (cachedVouchers !== null) return cachedVouchers;
+  try {
+    const raw = localStorage.getItem("gieomo_vouchers");
+    let vouchers: Voucher[] = raw ? JSON.parse(raw) : [...MOCK_VOUCHERS];
+
+    let hasAdded = false;
+    for (const mockV of MOCK_VOUCHERS) {
+      if (!vouchers.some((v) => v.code === mockV.code)) {
+        vouchers.push({ ...mockV, visibility: mockV.visibility || "public" });
+        hasAdded = true;
+      }
+    }
+    vouchers = vouchers.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+
+    if (hasAdded || !raw) {
+      localStorage.setItem("gieomo_vouchers", JSON.stringify(vouchers));
+    }
+    cachedVouchers = vouchers;
+    return vouchers;
+  } catch (e) {
+    console.error("Error reading gieomo_vouchers from localStorage", e);
+    return MOCK_VOUCHERS.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+  }
+}
+
+export function saveNewVoucher(voucher: Voucher): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredVouchers();
+    const updated = [
+      { ...voucher, visibility: voucher.visibility || "public" },
+      ...list.filter((v) => v.voucher_id !== voucher.voucher_id && v.code !== voucher.code),
+    ];
+    cachedVouchers = updated;
+    localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+  } catch (e) {
+    console.error("Error saving new voucher", e);
+  }
+}
+
+export function updateStoredVoucher(voucher: Voucher): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredVouchers();
+    const updated = list.map((v) =>
+      v.voucher_id === voucher.voucher_id ? { ...voucher, visibility: voucher.visibility || "public" } : v
+    );
+    cachedVouchers = updated;
+    localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+  } catch (e) {
+    console.error("Error updating voucher", e);
+  }
+}
+
+export function deleteStoredVoucher(voucherId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredVouchers();
+    const updated = list.filter((v) => v.voucher_id !== voucherId);
+    cachedVouchers = updated;
+    localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+  } catch (e) {
+    console.error("Error deleting voucher", e);
+  }
+}
+
+// ==========================================
+// PRODUCTS STORE (TOÀN BỘ SẢN PHẨM & CỬA HÀNG)
+// ==========================================
+
+export function getStoredProducts(): ExtendedProduct[] {
+  if (typeof window === "undefined") return MOCK_PRODUCTS;
+  if (cachedProducts !== null) return cachedProducts;
+  try {
+    const raw = localStorage.getItem("gieomo_products");
+    let products: ExtendedProduct[] = raw ? JSON.parse(raw) : [...MOCK_PRODUCTS];
+
+    let hasAdded = false;
+    for (const mockP of MOCK_PRODUCTS) {
+      if (!products.some((p) => p.product_id === mockP.product_id || p.slug === mockP.slug)) {
+        products.push(mockP);
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded || !raw) {
+      localStorage.setItem("gieomo_products", JSON.stringify(products));
+    }
+    cachedProducts = products;
+    return products;
+  } catch (e) {
+    console.error("Error reading gieomo_products from localStorage", e);
+    return MOCK_PRODUCTS;
+  }
+}
+
+export function getStoredProductBySlug(slug: string): ExtendedProduct | undefined {
+  const products = getStoredProducts();
+  return products.find((p) => p.slug === slug);
+}
+
+export function saveNewProduct(product: ExtendedProduct): void {
+  // Ensure variants have warehouse stock values
+  const normalizedVariants = product.variants?.map((v) => ({
+    ...v,
+    stock_warehouse_1: v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7),
+    stock_warehouse_2: v.stock_warehouse_2 ?? (v.stock - (v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7))),
+  }));
+
+  const productToSave: ExtendedProduct = {
+    ...product,
+    variants: normalizedVariants,
+  };
+
+  // Sync with mock data array in memory
+  if (!MOCK_PRODUCTS.some((p) => p.product_id === productToSave.product_id || p.slug === productToSave.slug)) {
+    MOCK_PRODUCTS.unshift(productToSave);
+  }
+
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredProducts();
+    const updated = [
+      productToSave,
+      ...list.filter((p) => p.product_id !== productToSave.product_id && p.slug !== productToSave.slug),
+    ];
+    cachedProducts = updated;
+    localStorage.setItem("gieomo_products", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+  } catch (e) {
+    console.error("Error saving new product", e);
+  }
+}
+
+export function updateStoredProduct(product: ExtendedProduct): void {
+  if (!MOCK_PRODUCTS.some((p) => p.product_id === product.product_id)) {
+    MOCK_PRODUCTS.unshift(product);
+  } else {
+    const idx = MOCK_PRODUCTS.findIndex((p) => p.product_id === product.product_id);
+    if (idx !== -1) MOCK_PRODUCTS[idx] = product;
+  }
+
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredProducts();
+    const updated = list.map((p) => (p.product_id === product.product_id ? product : p));
+    cachedProducts = updated;
+    localStorage.setItem("gieomo_products", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+  } catch (e) {
+    console.error("Error updating product", e);
+  }
+}
+
+export function deleteStoredProduct(productId: string): void {
+  const mIdx = MOCK_PRODUCTS.findIndex((p) => p.product_id === productId);
+  if (mIdx !== -1) MOCK_PRODUCTS.splice(mIdx, 1);
+
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredProducts();
+    const updated = list.filter((p) => p.product_id !== productId);
+    cachedProducts = updated;
+    localStorage.setItem("gieomo_products", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+  } catch (e) {
+    console.error("Error deleting product", e);
+  }
+}
+
+// ==========================================
+// WAREHOUSES STORE (QUẢN LÝ KHO HÀNG)
+// ==========================================
+
+export function getStoredWarehouses(): Warehouse[] {
+  if (typeof window === "undefined") return MOCK_WAREHOUSES;
+  if (cachedWarehouses !== null) return cachedWarehouses;
+  try {
+    const raw = localStorage.getItem("gieomo_warehouses");
+    let warehouses: Warehouse[] = raw ? JSON.parse(raw) : [...MOCK_WAREHOUSES];
+
+    let hasAdded = false;
+    for (const mockWh of MOCK_WAREHOUSES) {
+      if (!warehouses.some((w) => w.warehouse_id === mockWh.warehouse_id || w.code === mockWh.code)) {
+        warehouses.push(mockWh);
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded || !raw) {
+      localStorage.setItem("gieomo_warehouses", JSON.stringify(warehouses));
+    }
+    cachedWarehouses = warehouses;
+    return warehouses;
+  } catch (e) {
+    console.error("Error reading gieomo_warehouses from localStorage", e);
+    return MOCK_WAREHOUSES;
+  }
+}
+
+export function saveNewWarehouse(warehouse: Warehouse): void {
+  if (typeof window === "undefined") return;
+  try {
+    let list = getStoredWarehouses();
+    if (warehouse.is_default) {
+      list = list.map((w) => ({ ...w, is_default: false }));
+    }
+    const updated = [
+      warehouse,
+      ...list.filter((w) => w.warehouse_id !== warehouse.warehouse_id && w.code !== warehouse.code),
+    ];
+    cachedWarehouses = updated;
+    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
+
+    // Initialize stock = 0 for this new warehouse across all products
+    try {
+      const prods = getStoredProducts();
+      const updatedProds = prods.map((p) => ({
+        ...p,
+        variants: p.variants?.map((v) => {
+          const stocks = { ...(v.warehouse_stocks || {}) };
+          if (stocks[warehouse.warehouse_id] === undefined) {
+            stocks[warehouse.warehouse_id] = 0;
+          }
+          return {
+            ...v,
+            warehouse_stocks: stocks,
+          };
+        }),
+      }));
+      cachedProducts = updatedProds;
+      localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
+    } catch {
+      // ignore
+    }
+
+    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+  } catch (e) {
+    console.error("Error saving new warehouse", e);
+  }
+}
+
+export function updateStoredWarehouse(warehouse: Warehouse): void {
+  if (typeof window === "undefined") return;
+  try {
+    let list = getStoredWarehouses();
+    if (warehouse.is_default) {
+      list = list.map((w) => ({ ...w, is_default: false }));
+    }
+    const updated = list.map((w) => (w.warehouse_id === warehouse.warehouse_id ? warehouse : w));
+    cachedWarehouses = updated;
+    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+  } catch (e) {
+    console.error("Error updating warehouse", e);
+  }
+}
+
+export function deleteStoredWarehouse(warehouseId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredWarehouses();
+    const updated = list.filter((w) => w.warehouse_id !== warehouseId);
+    if (updated.length > 0 && !updated.some((w) => w.is_default)) {
+      updated[0].is_default = true;
+    }
+    cachedWarehouses = updated;
+    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+  } catch (e) {
+    console.error("Error deleting warehouse", e);
+  }
+}
+
+/**
+ * Update stock for a specific warehouse, variant and product
+ */
+export function updateProductWarehouseStock(
+  productId: string,
+  variantId: string,
+  warehouseId: string,
+  newStock: number
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const products = getStoredProducts();
+    const safeStock = Math.max(0, Math.floor(newStock));
+
+    const updated = products.map((p) => {
+      if (p.product_id !== productId) return p;
+
+      const updatedVariants = p.variants?.map((v) => {
+        if (v.variant_id !== variantId) return v;
+
+        const stocks = { ...(v.warehouse_stocks || {}) };
+        stocks[warehouseId] = safeStock;
+
+        // Legacy compatibility
+        let wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
+        let wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+        if (warehouseId === "wh-1") wh1 = safeStock;
+        if (warehouseId === "wh-2") wh2 = safeStock;
+
+        // Calculate total stock as sum of all known warehouse stocks
+        const allWhs = getStoredWarehouses();
+        let total = 0;
+        for (const wh of allWhs) {
+          if (stocks[wh.warehouse_id] !== undefined) {
+            total += stocks[wh.warehouse_id];
+          } else if (wh.warehouse_id === "wh-1") {
+            total += wh1;
+          } else if (wh.warehouse_id === "wh-2") {
+            total += wh2;
+          }
+        }
+
+        return {
+          ...v,
+          stock: total,
+          stock_warehouse_1: wh1,
+          stock_warehouse_2: wh2,
+          warehouse_stocks: stocks,
+        };
+      });
+
+      const totalProdStock = (updatedVariants || []).reduce((sum, v) => sum + (v.stock || 0), 0);
+
+      return {
+        ...p,
+        stock: totalProdStock,
+        variants: updatedVariants,
+      };
+    });
+
+    cachedProducts = updated;
+    localStorage.setItem("gieomo_products", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+  } catch (e) {
+    console.error("Error updating product warehouse stock", e);
+  }
+}
+
+// === SITE SETTINGS STORE ===
+
+export interface SiteSettings {
+  siteName: string;
+  contactPhone: string;
+  contactEmail: string;
+  flatShippingFee: number;
+  freeShippingThreshold: number;
+  bankName: string;
+  bankNumber: string;
+  bankHolder: string;
+  qrMode: "auto" | "upload";
+  qrImageUrl: string;
+  activePalette: string;
+  coverTheme: string;
+  faviconPreview: string;
+  avatarPreview: string;
+}
+
+export const DEFAULT_SETTINGS: SiteSettings = {
+  siteName: "Gieo Mơ",
+  contactPhone: "0123456789",
+  contactEmail: "gieomo@mammo.vn",
+  flatShippingFee: 25000,
+  freeShippingThreshold: 200000,
+  bankNumber: "03456789999",
+  bankHolder: "CLB MAM MO GIEO MO",
+  bankName: "MB Bank (Quân Đội)",
+  qrMode: "auto",
+  qrImageUrl: "/images/logo_gieo mơ.jpg",
+  activePalette: "soft-green",
+  coverTheme: "emerald",
+  faviconPreview: "/images/logo_gieo mơ.jpg",
+  avatarPreview: "/images/logo_gieo mơ.jpg",
+};
+
+let cachedSettings: SiteSettings | null = null;
+
+export function getStoredSettings(): SiteSettings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  if (cachedSettings !== null) return cachedSettings;
+  try {
+    const raw = localStorage.getItem("gieomo_site_settings");
+    if (!raw) {
+      localStorage.setItem("gieomo_site_settings", JSON.stringify(DEFAULT_SETTINGS));
+      cachedSettings = DEFAULT_SETTINGS;
+      return DEFAULT_SETTINGS;
+    }
+    const parsed = JSON.parse(raw);
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    cachedSettings = merged;
+    return merged;
+  } catch (e) {
+    console.error("Error reading gieomo_site_settings", e);
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export function saveStoredSettings(settings: Partial<SiteSettings>): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getStoredSettings();
+    const updated: SiteSettings = { ...current, ...settings };
+    cachedSettings = updated;
+    localStorage.setItem("gieomo_site_settings", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_settings_updated"));
+  } catch (e) {
+    console.error("Error saving gieomo_site_settings", e);
+  }
+}
+
+// === CATEGORIES STORE ===
+
+let cachedCategories: ProductCategory[] | null = null;
+
+export function getStoredCategories(): ProductCategory[] {
+  if (typeof window === "undefined") return MOCK_CATEGORIES;
+  if (cachedCategories !== null) return cachedCategories;
+  try {
+    const raw = localStorage.getItem("gieomo_categories");
+    let categories: ProductCategory[] = raw ? JSON.parse(raw) : [...MOCK_CATEGORIES];
+
+    let hasAdded = false;
+    for (const mockCat of MOCK_CATEGORIES) {
+      if (!categories.some((c) => c.category_id === mockCat.category_id)) {
+        categories.push(mockCat);
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded || !raw) {
+      localStorage.setItem("gieomo_categories", JSON.stringify(categories));
+    }
+    cachedCategories = categories;
+    return categories;
+  } catch (e) {
+    console.error("Error reading gieomo_categories", e);
+    return MOCK_CATEGORIES;
+  }
+}
+
+export function saveNewCategory(cat: ProductCategory): void {
+  if (typeof window === "undefined") return;
+  try {
+    const categories = getStoredCategories();
+    const updated = [cat, ...categories.filter((c) => c.category_id !== cat.category_id && c.slug !== cat.slug)];
+    cachedCategories = updated;
+    localStorage.setItem("gieomo_categories", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_categories_updated"));
+  } catch (e) {
+    console.error("Error saving new category", e);
+  }
+}
+
+export function updateStoredCategory(cat: ProductCategory): void {
+  if (typeof window === "undefined") return;
+  try {
+    const categories = getStoredCategories();
+    const updated = categories.map((c) => (c.category_id === cat.category_id ? cat : c));
+    cachedCategories = updated;
+    localStorage.setItem("gieomo_categories", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_categories_updated"));
+  } catch (e) {
+    console.error("Error updating category", e);
+  }
+}
+
+export function deleteStoredCategory(categoryId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const categories = getStoredCategories();
+    const updated = categories.filter((c) => c.category_id !== categoryId);
+    cachedCategories = updated;
+    localStorage.setItem("gieomo_categories", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_categories_updated"));
+  } catch (e) {
+    console.error("Error deleting category", e);
+  }
+}
+
+// === COMBOS STORE ===
+
+let cachedCombos: ExtendedCombo[] | null = null;
+
+export function getStoredCombos(): ExtendedCombo[] {
+  if (typeof window === "undefined") return MOCK_COMBOS;
+  if (cachedCombos !== null) return cachedCombos;
+  try {
+    const raw = localStorage.getItem("gieomo_combos");
+    let combos: ExtendedCombo[] = raw ? JSON.parse(raw) : [...MOCK_COMBOS];
+
+    let hasAdded = false;
+    for (const mockCb of MOCK_COMBOS) {
+      if (!combos.some((c) => c.combo_id === mockCb.combo_id)) {
+        combos.push(mockCb);
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded || !raw) {
+      localStorage.setItem("gieomo_combos", JSON.stringify(combos));
+    }
+    cachedCombos = combos;
+    return combos;
+  } catch (e) {
+    console.error("Error reading gieomo_combos", e);
+    return MOCK_COMBOS;
+  }
+}
+
+export function saveNewCombo(combo: ExtendedCombo): void {
+  if (typeof window === "undefined") return;
+  try {
+    const combos = getStoredCombos();
+    const updated = [combo, ...combos.filter((c) => c.combo_id !== combo.combo_id && c.slug !== combo.slug)];
+    cachedCombos = updated;
+    localStorage.setItem("gieomo_combos", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_combos_updated"));
+  } catch (e) {
+    console.error("Error saving new combo", e);
+  }
+}
+
+export function updateStoredCombo(combo: ExtendedCombo): void {
+  if (typeof window === "undefined") return;
+  try {
+    const combos = getStoredCombos();
+    const updated = combos.map((c) => (c.combo_id === combo.combo_id ? combo : c));
+    cachedCombos = updated;
+    localStorage.setItem("gieomo_combos", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_combos_updated"));
+  } catch (e) {
+    console.error("Error updating combo", e);
+  }
+}
+
+export function deleteStoredCombo(comboId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const combos = getStoredCombos();
+    const updated = combos.filter((c) => c.combo_id !== comboId);
+    cachedCombos = updated;
+    localStorage.setItem("gieomo_combos", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_combos_updated"));
+  } catch (e) {
+    console.error("Error deleting combo", e);
+  }
+}
+
 
 

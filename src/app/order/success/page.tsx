@@ -7,7 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
-import { getStoredOrders } from "@/lib/data/orderStore";
+import { getStoredOrders, getStoredSettings } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 import { Copy, Check, ExternalLink, Download } from "lucide-react";
 
@@ -17,11 +17,16 @@ function OrderSuccessContent() {
   const paymentMethod = searchParams.get("payment") || "banking";
   const urlAmount = Number(searchParams.get("amount") || "110000");
 
+  const [settings, setSettings] = useState(() => getStoredSettings());
   const [order, setOrder] = useState<Order | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [hasConfirmedPayment, setHasConfirmedPayment] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [proofImage, setProofImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSettings(getStoredSettings());
+  }, []);
 
   useEffect(() => {
     const orders = getStoredOrders();
@@ -34,14 +39,17 @@ function OrderSuccessContent() {
   const finalAmount = order ? order.final_amount : urlAmount;
 
   const bankAccount = {
-    bankName: "Ngân hàng MB Bank (Quân Đội)",
-    accountNumber: "03456789999",
-    accountHolder: "CLB MAM MO GIEO MO",
+    bankName: settings.bankName || "Ngân hàng MB Bank (Quân Đội)",
+    accountNumber: settings.bankNumber || "03456789999",
+    accountHolder: settings.bankHolder || "CLB MAM MO GIEO MO",
     transferMemo: orderCode,
   };
 
   // VietQR Napas247 Dynamic QR Code with exact amount and order memo
-  const vietQrUrl = `https://img.vietqr.io/image/MB-${bankAccount.accountNumber}-compact2.png?amount=${finalAmount}&addInfo=${orderCode}&accountName=${encodeURIComponent(bankAccount.accountHolder)}`;
+  const vietQrUrl =
+    settings.qrMode === "upload" && settings.qrImageUrl
+      ? settings.qrImageUrl
+      : `https://img.vietqr.io/image/MB-${bankAccount.accountNumber}-compact2.png?amount=${finalAmount}&addInfo=${orderCode}&accountName=${encodeURIComponent(bankAccount.accountHolder)}`;
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);

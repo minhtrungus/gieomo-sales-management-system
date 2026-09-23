@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
-import { MOCK_COMBOS, MOCK_PRODUCTS } from "@/lib/data/mockData";
+import { MOCK_PRODUCTS } from "@/lib/data/mockData";
+import {
+  getStoredProducts,
+  getStoredCombos,
+  saveNewCombo,
+  updateStoredCombo,
+  deleteStoredCombo,
+  type ExtendedCombo,
+} from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Plus, Edit3, Trash2, X, Gift, AlertTriangle } from "lucide-react";
@@ -13,21 +21,39 @@ interface ComboItemSelection {
 }
 
 export default function AdminCombosPage() {
-  const [combos, setCombos] = useState(MOCK_COMBOS);
+  const [combos, setCombos] = useState<ExtendedCombo[]>([]);
+  const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
+
+  useEffect(() => {
+    setCombos(getStoredCombos());
+    setAvailableProducts(getStoredProducts());
+
+    const handleUpdate = () => {
+      setCombos(getStoredCombos());
+      setAvailableProducts(getStoredProducts());
+    };
+
+    window.addEventListener("gieomo_combos_updated", handleUpdate);
+    window.addEventListener("gieomo_products_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("gieomo_combos_updated", handleUpdate);
+      window.removeEventListener("gieomo_products_updated", handleUpdate);
+    };
+  }, []);
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingCombo, setEditingCombo] = useState<(typeof MOCK_COMBOS)[0] | null>(null);
-  const [deletingCombo, setDeletingCombo] = useState<(typeof MOCK_COMBOS)[0] | null>(null);
+  const [editingCombo, setEditingCombo] = useState<ExtendedCombo | null>(null);
+  const [deletingCombo, setDeletingCombo] = useState<ExtendedCombo | null>(null);
 
   // Form states for Create Combo
   const [name, setName] = useState("");
   const [price, setPrice] = useState<number>(180000);
   const [description, setDescription] = useState("");
   const [comboItems, setComboItems] = useState<ComboItemSelection[]>([
-    { product_id: MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
-    { product_id: MOCK_PRODUCTS[1]?.product_id || "prod-2", quantity: 1 },
-    { product_id: MOCK_PRODUCTS[4]?.product_id || "prod-5", quantity: 1 },
+    { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
+    { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
+    { product_id: availableProducts[4]?.product_id || availableProducts[2]?.product_id || "prod-3", quantity: 1 },
   ]);
 
   // Form states for Edit Combo
@@ -37,7 +63,7 @@ export default function AdminCombosPage() {
   const handleAddItemToCreate = () => {
     setComboItems([
       ...comboItems,
-      { product_id: MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
+      { product_id: availableProducts[0]?.product_id || MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
     ]);
   };
 
@@ -51,7 +77,7 @@ export default function AdminCombosPage() {
   const handleAddItemToEdit = () => {
     setEditComboItems([
       ...editComboItems,
-      { product_id: MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
+      { product_id: availableProducts[0]?.product_id || MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
     ]);
   };
 
@@ -61,19 +87,19 @@ export default function AdminCombosPage() {
     setEditComboItems(editComboItems.filter((_, i) => i !== index));
   };
 
-  const openEditModal = (cb: (typeof MOCK_COMBOS)[0]) => {
+  const openEditModal = (cb: ExtendedCombo) => {
     setEditingCombo(cb);
     if (cb.items && cb.items.length > 0) {
       setEditComboItems(
-        cb.items.map((it) => ({
+        cb.items.map((it: any) => ({
           product_id: it.product.product_id,
           quantity: it.quantity,
         }))
       );
     } else {
       setEditComboItems([
-        { product_id: MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
-        { product_id: MOCK_PRODUCTS[1]?.product_id || "prod-2", quantity: 1 },
+        { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
+        { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
       ]);
     }
   };
@@ -93,14 +119,16 @@ export default function AdminCombosPage() {
       .replace(/\s+/g, "-");
 
     const mappedItems = comboItems.map((item) => {
-      const p = MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) || MOCK_PRODUCTS[0];
+      const p = availableProducts.find((prod) => prod.product_id === item.product_id) ||
+        MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) ||
+        MOCK_PRODUCTS[0];
       return {
         product: p,
         quantity: item.quantity,
       };
     });
 
-    const newCb = {
+    const newCb: ExtendedCombo = {
       combo_id: `combo-${Date.now()}`,
       name,
       slug,
@@ -116,13 +144,14 @@ export default function AdminCombosPage() {
       items: mappedItems,
     };
 
-    setCombos([newCb, ...combos]);
+    saveNewCombo(newCb);
+    setCombos(getStoredCombos());
     setIsAddModalOpen(false);
     setName("");
     setDescription("");
     setComboItems([
-      { product_id: MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
-      { product_id: MOCK_PRODUCTS[1]?.product_id || "prod-2", quantity: 1 },
+      { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
+      { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
     ]);
   };
 
@@ -132,29 +161,31 @@ export default function AdminCombosPage() {
     if (!editingCombo) return;
 
     const mappedItems = editComboItems.map((item) => {
-      const p = MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) || MOCK_PRODUCTS[0];
+      const p = availableProducts.find((prod) => prod.product_id === item.product_id) ||
+        MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) ||
+        MOCK_PRODUCTS[0];
       return {
         product: p,
         quantity: item.quantity,
       };
     });
 
-    const updated = {
+    const updated: ExtendedCombo = {
       ...editingCombo,
       items: mappedItems,
       updated_at: new Date().toISOString(),
     };
 
-    setCombos((prev) =>
-      prev.map((c) => (c.combo_id === editingCombo.combo_id ? updated : c))
-    );
+    updateStoredCombo(updated);
+    setCombos(getStoredCombos());
     setEditingCombo(null);
   };
 
   // Delete Combo
   const handleConfirmDelete = () => {
     if (!deletingCombo) return;
-    setCombos((prev) => prev.filter((c) => c.combo_id !== deletingCombo.combo_id));
+    deleteStoredCombo(deletingCombo.combo_id);
+    setCombos(getStoredCombos());
     setDeletingCombo(null);
   };
 
@@ -212,7 +243,7 @@ export default function AdminCombosPage() {
 
                   <td className="py-3.5 px-4">
                     <div className="flex flex-wrap items-center gap-1.5 py-1">
-                      {cb.items?.map((it, idx) => (
+                      {cb.items?.map((it: any, idx: number) => (
                         <span key={idx} className="inline-flex items-center gap-1">
                           <span className="px-2 py-0.5 rounded-lg bg-[#FFF8EE] border border-[#F0E5D8] font-semibold text-[#342A24] text-[11px]">
                             {it.product.name} <strong className="text-[#2D6338]">×{it.quantity}</strong>
@@ -337,7 +368,7 @@ export default function AdminCombosPage() {
                         }}
                         className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
                       >
-                        {MOCK_PRODUCTS.map((p) => (
+                        {availableProducts.map((p) => (
                           <option key={p.product_id} value={p.product_id}>
                             {p.name} ({p.price.toLocaleString("vi-VN")}đ)
                           </option>
@@ -379,7 +410,7 @@ export default function AdminCombosPage() {
                   <span className="font-bold text-[#A89B92] uppercase block">Xem trước hiển thị:</span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {comboItems.map((item, idx) => {
-                      const prod = MOCK_PRODUCTS.find((p) => p.product_id === item.product_id);
+                      const prod = availableProducts.find((p) => p.product_id === item.product_id);
                       return (
                         <span key={idx} className="inline-flex items-center gap-1">
                           <span className="px-2 py-0.5 rounded-lg bg-white border border-[#EADBCC] font-bold text-[#342A24]">
@@ -499,7 +530,7 @@ export default function AdminCombosPage() {
                         }}
                         className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
                       >
-                        {MOCK_PRODUCTS.map((p) => (
+                        {availableProducts.map((p) => (
                           <option key={p.product_id} value={p.product_id}>
                             {p.name} ({p.price.toLocaleString("vi-VN")}đ)
                           </option>

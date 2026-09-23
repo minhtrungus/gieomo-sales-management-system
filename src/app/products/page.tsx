@@ -1,43 +1,73 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/data/mockData";
+import { ExtendedProduct } from "@/lib/data/mockData";
+import { getStoredProducts, getStoredCategories } from "@/lib/data/orderStore";
+import type { ProductCategory } from "@/types/database";
 import { EmptyState } from "@/components/ui/States";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { Search, Sparkles } from "lucide-react";
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<ExtendedProduct[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("featured");
 
+  useEffect(() => {
+    setProducts(getStoredProducts());
+    setCategories(getStoredCategories());
+
+    const handleUpdate = () => setProducts(getStoredProducts());
+    const handleCatUpdate = () => setCategories(getStoredCategories());
+
+    window.addEventListener("gieomo_products_updated", handleUpdate);
+    window.addEventListener("gieomo_categories_updated", handleCatUpdate);
+
+    return () => {
+      window.removeEventListener("gieomo_products_updated", handleUpdate);
+      window.removeEventListener("gieomo_categories_updated", handleCatUpdate);
+    };
+  }, []);
+
   const debouncedSearch = useDebounce(searchQuery, 250);
 
+  // Only active products are visible on the public storefront
+  const activeProducts = useMemo(() => {
+    return products.filter((p) => p.status === "active");
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter((product) => {
-      // Category Filter
-      if (selectedCategory !== "all" && product.category?.slug !== selectedCategory) {
-        return false;
-      }
-      // Search Query
-      if (
-        debouncedSearch.trim() !== "" &&
-        !product.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
-        !product.short_description?.toLowerCase().includes(debouncedSearch.toLowerCase())
-      ) {
-        return false;
-      }
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === "price_asc") return a.price - b.price;
-      if (sortBy === "price_desc") return b.price - a.price;
-      if (sortBy === "newest") return b.sort_order - a.sort_order;
-      return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
-    });
-  }, [selectedCategory, debouncedSearch, sortBy]);
+    return activeProducts
+      .filter((product) => {
+        // Category Filter
+        if (selectedCategory !== "all") {
+          const catSlug = product.category?.slug || (product.category_id === "cat-1" ? "tui-pouch" : product.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
+          if (catSlug !== selectedCategory) {
+            return false;
+          }
+        }
+        // Search Query
+        if (
+          debouncedSearch.trim() !== "" &&
+          !product.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
+          !product.short_description?.toLowerCase().includes(debouncedSearch.toLowerCase())
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "price_asc") return a.price - b.price;
+        if (sortBy === "price_desc") return b.price - a.price;
+        if (sortBy === "newest") return b.sort_order - a.sort_order;
+        return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
+      });
+  }, [activeProducts, selectedCategory, debouncedSearch, sortBy]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
@@ -81,12 +111,12 @@ export default function ProductsPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-3.5 py-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-xs font-bold text-[#342A24] outline-none focus:border-[#FFB98A]"
+                className="px-3.5 py-2 rounded-2xl border border-[#F0E5D8] text-xs sm:text-sm bg-[#FFFDF9] outline-none focus:border-[#FFB98A] text-[#231B16] font-medium"
               >
                 <option value="featured">Nổi bật nhất</option>
+                <option value="price_asc">Giá: Thấp đến cao</option>
+                <option value="price_desc">Giá: Cao đến thấp</option>
                 <option value="newest">Mới nhất</option>
-                <option value="price_asc">Giá: Thấp đến Cao</option>
-                <option value="price_desc">Giá: Cao đến Thấp</option>
               </select>
             </div>
           </div>
@@ -95,21 +125,24 @@ export default function ProductsPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => setSelectedCategory("all")}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === "all"
                   ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
                   : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
               }`}
             >
-              Tất cả ({MOCK_PRODUCTS.length})
+              Tất cả ({activeProducts.length})
             </button>
-            {MOCK_CATEGORIES.map((cat) => {
-              const count = MOCK_PRODUCTS.filter((p) => p.category?.slug === cat.slug).length;
+            {categories.map((cat) => {
+              const count = activeProducts.filter((p) => {
+                const cSlug = p.category?.slug || (p.category_id === "cat-1" ? "tui-pouch" : p.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
+                return cSlug === cat.slug;
+              }).length;
               return (
                 <button
                   key={cat.category_id}
                   onClick={() => setSelectedCategory(cat.slug)}
-                  className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+                  className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === cat.slug
                       ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
                       : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
@@ -130,24 +163,22 @@ export default function ProductsPage() {
             ))}
           </div>
         ) : (
-          <div className="py-16 bg-white rounded-3xl border border-[#F0E5D8] p-6 text-center shadow-soft">
-            <EmptyState
-              icon="🔍"
-              title="Không tìm thấy sản phẩm"
-              description="Thử tìm kiếm với từ khóa khác hoặc bấm nút bên dưới để xem toàn bộ sản phẩm nhé!"
-              action={
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCategory("all");
-                  }}
-                  className="px-5 py-2.5 rounded-full bg-[#BFE9C3] text-[#16381D] font-bold text-xs shadow-xs border border-[#9ed4a3]"
-                >
-                  Xóa bộ lọc
-                </button>
-              }
-            />
-          </div>
+          <EmptyState
+            title="Không tìm thấy sản phẩm"
+            description="Hãy thử thay đổi bộ lọc hoặc tìm kiếm với từ khóa khác xem nhé!"
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory("all");
+                  setSearchQuery("");
+                }}
+                className="mt-3 px-4 py-2 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-colors cursor-pointer"
+              >
+                Xóa bộ lọc
+              </button>
+            }
+          />
         )}
       </main>
 
