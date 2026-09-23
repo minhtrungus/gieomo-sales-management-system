@@ -6,9 +6,9 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
-import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus, updateStoredOrderNotes } from "@/lib/data/orderStore";
+import { getStoredOrders, updateStoredOrderStatus, updateStoredPaymentStatus, updateStoredOrderNotes, updateStoredOrderWarehouse } from "@/lib/data/orderStore";
 import type { OrderStatus, PaymentStatus } from "@/types/database";
-import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -24,6 +24,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [orderStatus, setOrderStatus] = useState<OrderStatus>(order.order_status);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order.payment_status);
   const [internalNote, setInternalNote] = useState(order.internal_note || "");
+  const [warehouseId, setWarehouseId] = useState<string>(
+    order.warehouse_id || (order.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
+  );
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
@@ -37,6 +40,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       setOrderStatus(found.order_status);
       setPaymentStatus(found.payment_status);
       setInternalNote(found.internal_note || "");
+      setWarehouseId(
+        found.warehouse_id ||
+          (found.delivery_type === "pickup_point" && found.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
+      );
     }
   }, [resolvedParams.id]);
 
@@ -44,6 +51,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     updateStoredOrderStatus(order.order_id, orderStatus);
     updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
+    updateStoredOrderWarehouse(order.order_id, warehouseId);
     setIsSavedNotice(true);
     setTimeout(() => setIsSavedNotice(false), 2500);
   };
@@ -147,6 +155,28 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <span className="text-gray-500 block mt-1 text-xs">
                   {order.address_detail}, {order.district}, {order.province}
                 </span>
+              </div>
+            </div>
+
+            {/* Kho xuất hàng điều phối (Fulfillment Warehouse) */}
+            <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-500 block text-[11px]">Kho điều phối xuất đơn hàng này:</span>
+                <span className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs mt-0.5">
+                  <Building className="w-3.5 h-3.5 text-emerald-700" />
+                  {warehouseId === "wh-2" ? "Kho Cơ Sở 2 (Thủ Đức - KTX ĐHQG)" : "Kho Trung Tâm (Quận 3 - Trụ sở Mầm Mơ)"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 whitespace-nowrap">Chuyển kho xuất:</span>
+                <select
+                  value={warehouseId}
+                  onChange={(e) => setWarehouseId(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold outline-none bg-white text-emerald-950 focus:border-emerald-600"
+                >
+                  <option value="wh-1">📍 Kho 1: Trung Tâm (Quận 3)</option>
+                  <option value="wh-2">📍 Kho 2: Cơ Sở 2 (Thủ Đức)</option>
+                </select>
               </div>
             </div>
           </div>

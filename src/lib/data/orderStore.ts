@@ -80,6 +80,17 @@ export function getStoredOrders(): Order[] {
 export function saveNewOrder(newOrder: Order): void {
   if (typeof window === "undefined") return;
   try {
+    // Auto-assign fulfillment warehouse if not specified
+    if (!newOrder.warehouse_id) {
+      if (newOrder.delivery_type === "pickup_point" && newOrder.pickup_point_id === "pp-3") {
+        newOrder.warehouse_id = "wh-2";
+        newOrder.warehouse_name = "Kho Cơ Sở 2 (Thủ Đức)";
+      } else {
+        newOrder.warehouse_id = "wh-1";
+        newOrder.warehouse_name = "Kho Trung Tâm (Quận 3)";
+      }
+    }
+
     const orders = getStoredOrders();
     const updated = [newOrder, ...orders.filter((o) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code)];
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
@@ -187,6 +198,28 @@ export function updateStoredOrderNotes(orderId: string, notes: { customer_note?:
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
     console.error("Error updating order notes", e);
+  }
+}
+
+export function updateStoredOrderWarehouse(orderId: string, warehouseId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const warehouseName = warehouseId === "wh-2" ? "Kho Cơ Sở 2 (Thủ Đức)" : "Kho Trung Tâm (Quận 3)";
+    const updated = orders.map((o) =>
+      o.order_id === orderId || o.order_code === orderId
+        ? {
+            ...o,
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+            updated_at: new Date().toISOString(),
+          }
+        : o
+    );
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error updating order warehouse", e);
   }
 }
 

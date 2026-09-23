@@ -24,7 +24,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "size" | "materials" | "impact">("overview");
 
   const parsedInfo = parseProductDescription(product.description, product.specs, product.impact_story ?? undefined);
 
@@ -239,183 +238,130 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
         </div>
 
 
-        {/* Specs & Impact Structured Section (#2 Auto-Parse) */}
+        {/* Specs & Impact Unified Section (1 trang liền mạch) */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-soft mb-12 space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
-            <div>
-              <h3 className="font-heading font-extrabold text-xl text-emerald-950">
-                Thông tin sản phẩm &amp; Ý nghĩa Mầm Mơ
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Chi tiết quy cách, chất liệu thủ công và giá trị thiện nguyện trong từng sản phẩm.
-              </p>
-            </div>
-
-            {/* Tab Navigation Buttons */}
-            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-cream/70 border border-emerald-100 overflow-x-auto max-w-full">
-              <button
-                type="button"
-                onClick={() => setActiveTab("overview")}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                  activeTab === "overview"
-                    ? "bg-[#2D6338] text-white shadow-xs"
-                    : "text-gray-600 hover:text-emerald-950 hover:bg-white"
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Mô tả chi tiết</span>
-              </button>
-
-              {parsedInfo.sizeGuide && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("size")}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                    activeTab === "size"
-                      ? "bg-[#2D6338] text-white shadow-xs"
-                      : "text-gray-600 hover:text-emerald-950 hover:bg-white"
-                  }`}
-                >
-                  <Ruler className="w-3.5 h-3.5" />
-                  <span>Kích thước &amp; Size</span>
-                </button>
-              )}
-
-              {(parsedInfo.materials || parsedInfo.careGuide) && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("materials")}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                    activeTab === "materials"
-                      ? "bg-[#2D6338] text-white shadow-xs"
-                      : "text-gray-600 hover:text-emerald-950 hover:bg-white"
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Chất liệu &amp; Bảo quản</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("impact")}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                  activeTab === "impact"
-                    ? "bg-[#2D6338] text-white shadow-xs"
-                    : "text-gray-600 hover:text-emerald-950 hover:bg-white"
-                }`}
-              >
-                <Heart className="w-3.5 h-3.5" />
-                <span>Ý nghĩa gây quỹ</span>
-              </button>
-            </div>
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="font-heading font-extrabold text-xl text-emerald-950">
+              Thông tin sản phẩm &amp; Ý nghĩa Mầm Mơ
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Chi tiết quy cách, chất liệu thủ công và giá trị thiện nguyện trong từng sản phẩm.
+            </p>
           </div>
 
-          {/* Tab Content Display */}
-          <div className="pt-2">
-            {/* 1. Tab Overview */}
-            {activeTab === "overview" && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in fade-in">
-                <div className="md:col-span-8 space-y-4">
-                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line space-y-2">
-                    {parsedInfo.overview}
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Cột chính: Mô tả, Kích thước, Chất liệu & Bảo quản */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* 1. Mô tả chi tiết */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-[#2D6338]" />
+                  <span>Mô tả chi tiết</span>
+                </h4>
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
+                  {parsedInfo.overview || product.description}
+                </div>
+              </div>
 
-                  {Object.keys(parsedInfo.extraSpecs).length > 0 && (
-                    <div className="pt-4 border-t border-gray-100">
-                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                        Thông số bổ sung:
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {Object.entries(parsedInfo.extraSpecs).map(([k, v]) => (
-                          <div key={k} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs flex justify-between">
-                            <span className="text-gray-500 font-medium">{k}:</span>
-                            <span className="font-bold text-gray-900">{v}</span>
-                          </div>
-                        ))}
+              {/* 2. Bảng Kích thước & Size (nếu có) */}
+              {parsedInfo.sizeGuide && (
+                <div className="space-y-2">
+                  <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
+                    <Ruler className="w-4 h-4 text-[#2D6338]" />
+                    <span>Kích thước &amp; Bảng thông số</span>
+                  </h4>
+                  <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-2">
+                    <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                      {parsedInfo.sizeGuide}
+                    </div>
+                    <p className="text-[11px] text-gray-500 italic">
+                      * Kích thước thực tế có thể có dung sai nhỏ (±0.5 - 1cm) do đặc thù cắt may thủ công từ vải mộc.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Chất liệu & Bảo quản (nếu có) */}
+              {(parsedInfo.materials || parsedInfo.careGuide) && (
+                <div className="space-y-2">
+                  <h4 className="font-bold text-emerald-950 text-sm uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-[#2D6338]" />
+                    <span>Chất liệu &amp; Hướng dẫn bảo quản</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {parsedInfo.materials && (
+                      <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-1.5">
+                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1">
+                          🧶 Chất liệu vải &amp; Phụ liệu
+                        </span>
+                        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                          {parsedInfo.materials}
+                        </p>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="md:col-span-4 p-5 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-3 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <span className="text-xs font-extrabold text-[#542B07] flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-[#2D6338]" />
-                      Cam kết chất lượng
-                    </span>
-                    <p className="text-xs text-[#7E7068] leading-relaxed">
-                      Sản phẩm được tuyển chọn kỹ lưỡng, đường may thủ công tỉ mỉ và đóng gói cẩn thận kèm thiệp cảm ơn từ Mầm Mơ.
-                    </p>
-                  </div>
-                  <div className="pt-3 border-t border-[#F0E5D8] text-[11px] text-[#2D6338] font-bold">
-                    🌱 100% lợi nhuận dành cho các dự án thiện nguyện
+                    )}
+                    {parsedInfo.careGuide && (
+                      <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-1.5">
+                        <span className="text-xs font-bold text-[#542B07] flex items-center gap-1">
+                          🧼 Giặt &amp; Bảo quản
+                        </span>
+                        <p className="text-xs text-[#542B07]/80 leading-relaxed whitespace-pre-line">
+                          {parsedInfo.careGuide}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 2. Tab Size Guide */}
-            {activeTab === "size" && (
-              <div className="p-6 rounded-2xl bg-gray-50 border border-gray-200/80 space-y-4 animate-in fade-in">
-                <div className="flex items-center gap-2 text-emerald-950 font-bold text-base">
-                  <Ruler className="w-5 h-5 text-[#2D6338]" />
-                  <span>Kích thước &amp; Bảng thông số</span>
-                </div>
-                <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-gray-200">
-                  {parsedInfo.sizeGuide}
-                </div>
-                <p className="text-xs text-gray-500 italic">
-                  * Kích thước thực tế có thể có dung sai nhỏ (±0.5 - 1cm) do đặc thù cắt may thủ công từ vải mộc.
-                </p>
-              </div>
-            )}
-
-            {/* 3. Tab Materials & Care */}
-            {activeTab === "materials" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
-                {parsedInfo.materials && (
-                  <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm">
-                      <Sparkles className="w-4 h-4 text-[#2D6338]" />
-                      <span>Chất liệu vải &amp; Phụ liệu</span>
-                    </div>
-                    <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
-                      {parsedInfo.materials}
-                    </p>
+              {/* 4. Thông số bổ sung / Specs (nếu có) */}
+              {Object.keys(parsedInfo.extraSpecs).length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-bold text-gray-700 text-xs uppercase tracking-wider">
+                    Thông số bổ sung:
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {Object.entries(parsedInfo.extraSpecs).map(([k, v]) => (
+                      <div key={k} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs flex justify-between">
+                        <span className="text-gray-500 font-medium">{k}:</span>
+                        <span className="font-bold text-gray-900">{v}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
+            </div>
 
-                {parsedInfo.careGuide && (
-                  <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-3">
-                    <div className="flex items-center gap-2 text-[#542B07] font-bold text-sm">
-                      <span>🧼</span>
-                      <span>Hướng dẫn giặt &amp; Bảo quản</span>
-                    </div>
-                    <p className="text-xs text-[#542B07]/80 leading-relaxed whitespace-pre-line">
-                      {parsedInfo.careGuide}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. Tab Impact Meaning */}
-            {activeTab === "impact" && (
-              <div className="p-6 rounded-2xl bg-soft-green/30 border border-soft-green/60 space-y-4 animate-in fade-in">
+            {/* Cột phụ: Ý nghĩa gây quỹ & Cam kết chất lượng */}
+            <div className="lg:col-span-4 space-y-4 flex flex-col justify-start">
+              {/* Box Ý nghĩa gây quỹ */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-soft-green/30 border border-soft-green/60 space-y-3">
                 <div className="flex items-center gap-2 text-emerald-950 font-bold text-base">
                   <span>🌱</span>
-                  <span>Hành trình gieo mầm hy vọng cùng Mầm Mơ</span>
+                  <span>Ý nghĩa từ Gieo Mơ</span>
                 </div>
-                <p className="text-sm text-emerald-950/80 leading-relaxed">
-                  {parsedInfo.impactStory || "100% lợi nhuận thu được từ mỗi sản phẩm bạn mua sẽ được quy đổi thành tập vở, áo ấm và học bổng cho các em nhỏ tại các điểm trường khó khăn."}
+                <p className="text-xs sm:text-sm text-emerald-950/85 leading-relaxed whitespace-pre-line">
+                  {parsedInfo.impactStory || product.impact_story || "100% lợi nhuận thu được từ mỗi sản phẩm bạn mua sẽ được quy đổi thành tập vở, áo ấm và học bổng cho các em nhỏ tại các điểm trường khó khăn."}
                 </p>
-                <div className="pt-2 flex items-center justify-between text-xs font-bold text-emerald-900 border-t border-emerald-200/50">
+                <div className="pt-2 border-t border-emerald-200/50 text-xs font-bold text-emerald-900 flex items-center justify-between">
                   <span>✨ &quot;Little Pieces, Bigger Dreams&quot;</span>
-                  <span>Cảm ơn bạn đã đồng hành cùng Mầm!</span>
+                  <span>Mầm Mơ</span>
                 </div>
               </div>
-            )}
+
+              {/* Box Cam kết chất lượng */}
+              <div className="p-5 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2">
+                <span className="text-xs font-extrabold text-[#542B07] flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-[#2D6338]" />
+                  Cam kết chất lượng
+                </span>
+                <p className="text-xs text-[#7E7068] leading-relaxed">
+                  Sản phẩm được tuyển chọn kỹ lưỡng, đường may thủ công tỉ mỉ và đóng gói cẩn thận kèm thiệp cảm ơn từ Mầm Mơ.
+                </p>
+                <div className="pt-2 border-t border-[#F0E5D8] text-[11px] text-[#2D6338] font-bold">
+                  🌱 100% lợi nhuận dành cho các dự án thiện nguyện
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

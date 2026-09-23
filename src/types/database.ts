@@ -128,6 +128,16 @@ export interface Product {
   media?: ProductMedia[];
 }
 
+export interface Warehouse {
+  warehouse_id: string;
+  code: string;
+  name: string;
+  address: string;
+  phone: string;
+  manager_name: string;
+  is_default?: boolean;
+}
+
 export interface ProductVariant {
   variant_id: string;
   product_id: string;
@@ -137,6 +147,8 @@ export interface ProductVariant {
   compare_at_price: number | null;
   cost_price: number | null;
   stock: number;
+  stock_warehouse_1?: number; // Tồn Kho 1 (Trung Tâm - Q3)
+  stock_warehouse_2?: number; // Tồn Kho 2 (Cơ Sở 2 - Thủ Đức)
   sort_order?: number;
   weight_gram: number | null;
   status: ProductStatus;
@@ -236,6 +248,8 @@ export interface Order {
   cancel_reason?: string | null;
   customer_note?: string | null;
   internal_note?: string | null;
+  warehouse_id?: string | null;
+  warehouse_name?: string | null;
   created_at: string;
   confirmed_at?: string | null;
   completed_at?: string | null;

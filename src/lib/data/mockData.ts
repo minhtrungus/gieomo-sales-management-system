@@ -1,4 +1,25 @@
-import type { Product, ProductCategory, ProductVariant, Combo, Voucher, Order, OrderItem } from "@/types/database";
+import type { Product, ProductCategory, ProductVariant, Combo, Voucher, Order, OrderItem, Warehouse } from "@/types/database";
+
+export const MOCK_WAREHOUSES: Warehouse[] = [
+  {
+    warehouse_id: "wh-1",
+    code: "KHO-Q3",
+    name: "Kho Trung Tâm (Quận 3, TP.HCM)",
+    address: "Trụ sở Mầm Mơ, 128 Nguyễn Đình Chiểu, Phường Võ Thị Sáu, Quận 3, TP.HCM",
+    phone: "0901234567",
+    manager_name: "Mai Lan (Trưởng Kho)",
+    is_default: true,
+  },
+  {
+    warehouse_id: "wh-2",
+    code: "KHO-THUDUC",
+    name: "Kho Cơ Sở 2 (Thủ Đức, TP.HCM)",
+    address: "Khu B KTX ĐHQG TP.HCM, Phường Linh Trung, TP. Thủ Đức",
+    phone: "0912345678",
+    manager_name: "Thế Vinh (Phụ trách cơ sở 2)",
+    is_default: false,
+  },
+];
 
 export interface ExtendedProduct extends Product {
   category?: ProductCategory;

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { MOCK_CATEGORIES } from "@/lib/data/mockData";
+import { MOCK_CATEGORIES, MOCK_PRODUCTS } from "@/lib/data/mockData";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 export default function AdminNewProductPage() {
@@ -15,7 +15,11 @@ export default function AdminNewProductPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [shortDescription, setShortDescription] = useState("");
-  const [description, setDescription] = useState("");
+  // 4 Khung chi tiết sản phẩm
+  const [descOverview, setDescOverview] = useState("");
+  const [descSize, setDescSize] = useState("");
+  const [descMaterials, setDescMaterials] = useState("");
+  const [descImpact, setDescImpact] = useState("");
   const [categoryId, setCategoryId] = useState("cat-1");
   const [price, setPrice] = useState<number>(0);
   const [compareAtPrice, setCompareAtPrice] = useState<number | "">("");
@@ -54,6 +58,46 @@ export default function AdminNewProductPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const fullDescription = [
+      descOverview.trim(),
+      descSize.trim() ? `\n\n## Kích thước\n${descSize.trim()}` : "",
+      descMaterials.trim() ? `\n\n## Chất liệu\n${descMaterials.trim()}` : "",
+      descImpact.trim() ? `\n\n## Ý nghĩa\n${descImpact.trim()}` : "",
+    ].filter(Boolean).join("");
+
+    const newProd = {
+      product_id: `prod-${Date.now()}`,
+      category_id: categoryId,
+      name,
+      slug,
+      short_description: shortDescription,
+      description: fullDescription,
+      price,
+      compare_at_price: compareAtPrice ? Number(compareAtPrice) : null,
+      cost_price: costPrice ? Number(costPrice) : null,
+      featured,
+      status: status as "active" | "draft",
+      images: ["/images/products/pounch_1.png"],
+      impact_story: descImpact || undefined,
+      variants: variants.map((v, i) => ({
+        variant_id: `var-${Date.now()}-${i}`,
+        product_id: `prod-${Date.now()}`,
+        name: v.name,
+        sku: v.sku,
+        stock: v.stock,
+        price: null,
+        compare_at_price: null,
+        cost_price: null,
+        weight_gram: 100,
+        status: "active" as const,
+        sort_order: i + 1,
+        created_at: new Date().toISOString(),
+      })),
+      created_at: new Date().toISOString(),
+    };
+
+    MOCK_PRODUCTS.unshift(newProd as any);
     router.push("/admin/products");
   };
 
@@ -106,17 +150,73 @@ export default function AdminNewProductPage() {
               required
             />
 
-            <div>
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
-                Mô tả chi tiết sản phẩm & Ý nghĩa gây quỹ:
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Mô tả chất liệu, hoa văn, mục đích gây quỹ..."
-                rows={4}
-                className="w-full p-3 rounded-2xl border border-gray-200 text-xs outline-none focus:border-soft-green"
-              />
+            {/* 4 Khung Mô tả & Thông tin chuyên sâu */}
+            <div className="space-y-4 pt-2 border-t border-gray-100">
+              <div>
+                <label className="text-xs font-extrabold text-emerald-950 uppercase tracking-wider block">
+                  Nội dung chi tiết sản phẩm (4 Khung chuyên sâu)
+                </label>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Điền vào 4 khung dưới đây để hệ thống hiển thị thông tin mạch lạc trên trang chi tiết sản phẩm.
+                </p>
+              </div>
+
+              {/* Khung 1: Mô tả chung */}
+              <div className="p-3.5 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1.5">
+                <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <span>📋 Khung 1: Mô tả chung sản phẩm *</span>
+                </label>
+                <textarea
+                  value={descOverview}
+                  onChange={(e) => setDescOverview(e.target.value)}
+                  placeholder="Giới thiệu câu chuyện, đặc điểm thiết kế, phong cách chiếc pouch..."
+                  rows={3}
+                  className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                  required
+                />
+              </div>
+
+              {/* Khung 2: Kích thước & Size */}
+              <div className="p-3.5 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1.5">
+                <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <span>📏 Khung 2: Kích thước &amp; Bảng Size</span>
+                </label>
+                <textarea
+                  value={descSize}
+                  onChange={(e) => setDescSize(e.target.value)}
+                  placeholder="Ví dụ: Kích thước: 18cm x 12cm x đáy 4cm. Đựng vừa các loại bút, thước kẻ 15cm..."
+                  rows={2}
+                  className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                />
+              </div>
+
+              {/* Khung 3: Chất liệu & Bảo quản */}
+              <div className="p-3.5 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1.5">
+                <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <span>🧶 Khung 3: Chất liệu &amp; Hướng dẫn bảo quản</span>
+                </label>
+                <textarea
+                  value={descMaterials}
+                  onChange={(e) => setDescMaterials(e.target.value)}
+                  placeholder="Ví dụ: Vải nỉ canvas dệt mộc, lót dù trượt nước. Giặt tay nhẹ nhàng bằng xà phòng loãng..."
+                  rows={2}
+                  className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                />
+              </div>
+
+              {/* Khung 4: Ý nghĩa gây quỹ */}
+              <div className="p-3.5 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-1.5">
+                <label className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <span>💖 Khung 4: Ý nghĩa gây quỹ Mầm Mơ</span>
+                </label>
+                <textarea
+                  value={descImpact}
+                  onChange={(e) => setDescImpact(e.target.value)}
+                  placeholder="Ví dụ: 100% lợi nhuận thu được từ sản phẩm này sẽ được quy đổi thành tập vở và học bổng cho các em nhỏ..."
+                  rows={2}
+                  className="w-full p-2.5 rounded-xl border border-emerald-200 text-xs outline-none focus:border-emerald-600 bg-white"
+                />
+              </div>
             </div>
           </div>
 
