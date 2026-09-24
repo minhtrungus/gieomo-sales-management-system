@@ -1,9 +1,30 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
 import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: {
+    absolute: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
+  },
+  description:
+    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
+  alternates: {
+    canonical: "https://www.gieomo.store",
+  },
+  openGraph: {
+    title: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
+    description:
+      "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
+    url: "https://www.gieomo.store",
+    siteName: "Gieo Mơ",
+    locale: "vi_VN",
+    type: "website",
+  },
+};
 
 export default function HomePage() {
 

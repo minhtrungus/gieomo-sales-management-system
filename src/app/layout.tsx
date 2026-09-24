@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Montserrat } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
+import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import "./globals.css";
 
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "G-P3MJB88K1K";
@@ -19,19 +20,44 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   title: {
-    default: "Gieo Mơ — Mỗi món hàng, một điều tốt đẹp",
+    default: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
     template: "%s | Gieo Mơ",
   },
   description:
-    "Gieo Mơ là cửa hàng gây quỹ của Mầm Mơ. Mỗi sản phẩm bạn mua là một mảnh ghép nhỏ góp phần tạo nên giấc mơ lớn cho cộng đồng.",
-  keywords: ["Gieo Mơ", "Mầm Mơ", "gây quỹ", "handmade", "may vá", "từ thiện"],
+    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
+  keywords: [
+    "Gieo Mơ",
+    "gieo mo",
+    "Mầm Mơ",
+    "mam mo",
+    "Tổ chức thiện nguyện Mầm Mơ",
+    "Chiến dịch Mầm Mơ",
+    "Tạp hoá Gây quỹ Mầm Mơ",
+    "Bán hàng gây quỹ",
+    "gây quỹ Mầm Mơ",
+    "đồ handmade gây quỹ",
+    "thiện nguyện",
+    "tình nguyện",
+    "cộng đồng",
+    "Sản phẩm Handmade",
+    "may vá thủ công",
+    "túi pouch",
+    "túi handmade",
+    "kẹp tóc handmade",
+    "phụ kiện handmade",
+    "quà tặng",
+    "quà lưu niệm",
+    "set quà tặng ý nghĩa",
+    "Little Pieces Bigger Dreams",
+  ],
   openGraph: {
-    title: "Gieo Mơ — Little Pieces, Bigger Dreams",
+    title: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
     description:
-      "Cửa hàng gây quỹ của Mầm Mơ. Những mảnh ghép nhỏ, một giấc mơ lớn.",
+      "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
     type: "website",
     locale: "vi_VN",
     siteName: "Gieo Mơ",
+    url: "https://www.gieomo.store",
   },
   robots: {
     index: true,
@@ -54,6 +80,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="vi" className={`${montserrat.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
+        <OrganizationJsonLd />
         {children}
         {GA_MEASUREMENT_ID && (
           <>

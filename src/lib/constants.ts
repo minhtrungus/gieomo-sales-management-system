@@ -1,6 +1,32 @@
 import type { OrderStatus, PaymentStatus, DeliveryStatus } from "@/types/database";
 
-export const DEFAULT_SITE_URL = "https://gieomo.store";
+export const DEFAULT_SITE_URL = "https://www.gieomo.store";
+
+/**
+ * Official store schema configuration and social media profiles (Mầm Mơ).
+ */
+export const OFFICIAL_STORE_CONFIG = {
+  name: "Gieo Mơ",
+  alternateName: "Tạp hoá Gây quỹ Mầm Mơ",
+  url: "https://www.gieomo.store",
+  logo: "https://www.gieomo.store/images/logo_gieo%20m%C6%A1.jpg",
+  description:
+    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ với các sản phẩm may vá handmade độc bản. Mỗi sản phẩm bạn rước về là một điều ước được gieo cho các em nhỏ vùng cao.",
+  socialLinks: {
+    facebook:
+      process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://www.facebook.com/mammo.project",
+    tiktok:
+      process.env.NEXT_PUBLIC_TIKTOK_URL || "https://www.tiktok.com/@mammo.project",
+    instagram:
+      process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://www.instagram.com/mammo.project",
+  },
+} as const;
+
+export const OFFICIAL_SAME_AS: string[] = [
+  OFFICIAL_STORE_CONFIG.socialLinks.facebook,
+  OFFICIAL_STORE_CONFIG.socialLinks.tiktok,
+  OFFICIAL_STORE_CONFIG.socialLinks.instagram,
+];
 
 /**
  * Returns the canonical base URL of the site, preventing vercel.app domain leaks.
