@@ -114,6 +114,24 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 }
 
 /**
+ * Fetch a single product by slug from Supabase or fallback to mock data
+ */
+export async function getProductBySlugServer(slug: string): Promise<ExtendedProduct | null> {
+  try {
+    const products = await getProductsServer(true);
+    const found = products.find((p) => p.slug === slug);
+    if (found) return found;
+
+    const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
+    return MOCK_PRODUCTS.find((p) => p.slug === slug) ?? null;
+  } catch (err) {
+    console.warn("[getProductBySlugServer] Error:", err);
+    const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
+    return MOCK_PRODUCTS.find((p) => p.slug === slug) ?? null;
+  }
+}
+
+/**
  * Toggle product status: 'active' | 'draft'
  */
 export async function toggleProductStatusServer(
