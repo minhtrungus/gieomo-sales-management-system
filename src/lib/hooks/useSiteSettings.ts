@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getStoredSettings, syncSettingsFromServer, type SiteSettings } from "@/lib/data/orderStore";
+import { getStoredSettings, syncSettingsFromServer, type SiteSettings, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
 
 export function useSiteSettings(): SiteSettings {
-  const [settings, setSettings] = useState<SiteSettings>(() => getStoredSettings());
+  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
-    syncSettingsFromServer();
     setSettings(getStoredSettings());
+    syncSettingsFromServer();
 
     const handleUpdate = () => {
       setSettings(getStoredSettings());

@@ -7,7 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
-import { getStoredOrders, getStoredSettings } from "@/lib/data/orderStore";
+import { getStoredOrders, getStoredSettings, DEFAULT_SETTINGS, type SiteSettings } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 import { Copy, Check, ExternalLink, Download } from "lucide-react";
 
@@ -17,7 +17,7 @@ function OrderSuccessContent() {
   const paymentMethod = searchParams.get("payment") || "banking";
   const urlAmount = Number(searchParams.get("amount") || "110000");
 
-  const [settings, setSettings] = useState(() => getStoredSettings());
+  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [order, setOrder] = useState<Order | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [hasConfirmedPayment, setHasConfirmedPayment] = useState(false);

@@ -150,7 +150,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-[#2F4234] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/80 font-normal">
           <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-center sm:text-left">
-            <p>© {new Date().getFullYear()} Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
+            <p suppressHydrationWarning>© {new Date().getFullYear()} Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
             <span className="hidden sm:inline text-white/30">•</span>
             <span className="text-[11px] text-white/60 tracking-wide">
               Made with ❤️ by <span className="font-semibold text-white/90 hover:text-[#FFE7A8] transition-colors">mtus</span>
