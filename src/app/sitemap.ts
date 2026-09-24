@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 import { getProductsServer } from "@/lib/services/productService";
+import { getSiteUrl } from "@/lib/constants";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://gieomo.com";
+  const baseUrl = getSiteUrl();
 
   // Static routes
   const staticRoutes: MetadataRoute.Sitemap = [

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
+import { getSiteUrl } from "@/lib/constants";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -13,6 +14,7 @@ const montserrat = Montserrat({
 // For now we use Montserrat as primary and will add Boldonse for display text later.
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: {
     default: "Gieo Mơ — Mỗi món hàng, một điều tốt đẹp",
     template: "%s | Gieo Mơ",
