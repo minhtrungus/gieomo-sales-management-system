@@ -35,7 +35,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   qrImageUrl: "/images/logo_gieo mơ.jpg",
   activePalette: "soft-green",
   coverTheme: "emerald",
-  faviconPreview: "/images/logo_gieo mơ.jpg",
+  faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
   shippingNote: "Giao hàng trong 3-5 ngày làm việc tại TP.HCM. Các tỉnh khác 5-7 ngày.",
   paymentNote: "Chuyển khoản ngân hàng hoặc thanh toán khi nhận hàng (COD).",

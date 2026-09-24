@@ -1454,7 +1454,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   qrImageUrl: "/images/logo_gieo mơ.jpg",
   activePalette: "soft-green",
   coverTheme: "emerald",
-  faviconPreview: "/images/logo_gieo mơ.jpg",
+  faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
 };
 

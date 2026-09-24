@@ -26,7 +26,7 @@ export default function AdminSettingsPage() {
   // Branding Customization State
   const [activePalette, setActivePalette] = useState("soft-green");
   const [coverTheme, setCoverTheme] = useState("emerald");
-  const [faviconPreview, setFaviconPreview] = useState<string>("/images/logo_gieo mơ.jpg");
+  const [faviconPreview, setFaviconPreview] = useState<string>("/icon.png");
   const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [isSaving, setIsSaving] = useState(false);
 
