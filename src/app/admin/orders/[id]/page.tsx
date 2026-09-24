@@ -294,24 +294,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   </p>
                 </div>
               )}
-
-              {/* Internal Note (#22) */}
-              <div className="sm:col-span-2 pt-2 border-t border-gray-100 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-700 font-bold block text-xs flex items-center gap-1.5">
-                    <span>🔒</span>
-                    Ghi chú nội bộ Ban Tổ Chức (Chỉ admin thấy):
-                  </span>
-                  <span className="text-[10px] text-gray-400">Không hiển thị cho khách tra cứu</span>
-                </div>
-                <textarea
-                  rows={2}
-                  value={internalNote}
-                  onChange={(e) => setInternalNote(e.target.value)}
-                  placeholder="Ghi chú điều phối: Đã xác nhận qua Zalo, khách hẹn nhận sau 17h..."
-                  className="w-full p-3 rounded-xl border border-gray-200 text-xs outline-none focus:border-[#BFE9C3] bg-[#FFF8EE]/40 resize-none"
-                />
-              </div>
             </div>
           </div>
 

@@ -75,21 +75,46 @@ function OrderSuccessContent() {
     setIsConfirmModalOpen(false);
   };
 
+  const isPaid = order?.payment_status === "paid" || hasConfirmedPayment;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-center">
-      {/* Celebration Icon */}
-      <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
-        🎉
-      </div>
-
-      <div className="space-y-2">
-        <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
-          Đặt hàng thành công!
-        </h1>
-        <p className="text-gray-600 text-sm sm:text-base">
-          Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!
-        </p>
-      </div>
+      {/* Status Header */}
+      {paymentMethod === "banking" && !isPaid ? (
+        <>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
+            💳
+          </div>
+          <div className="space-y-2">
+            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1">
+              ⏳ ĐANG CHỜ CHUYỂN KHOẢN VIETQR
+            </div>
+            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+              Đơn hàng đang chờ thanh toán
+            </h1>
+            <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto">
+              Vui lòng quét mã VietQR bên dưới để hoàn tất giao dịch. Sau khi nhận được chuyển khoản, hệ thống sẽ tự động xác nhận đặt hàng thành công!
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
+            🎉
+          </div>
+          <div className="space-y-2">
+            <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1">
+              ✓ ĐÃ XÁC NHẬN ĐƠN HÀNG
+            </div>
+            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+              Đặt hàng thành công!
+            </h1>
+            <p className="text-gray-600 text-sm sm:text-base">
+              Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Summary Box */}
       <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-5">
@@ -132,16 +157,16 @@ function OrderSuccessContent() {
               <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-[#F0E5D8]">
                 <span className="font-semibold text-gray-800 text-xs">
                   {order?.delivery_type === "home_delivery"
-                    ? `${order.address_detail}, ${order.district}, ${order.province}`
+                    ? `${order.address_detail}, ${order.province}`
                     : order?.delivery_type === "pickup_point"
                     ? `Nhận tại điểm hẹn: ${order.address_detail}`
-                    : "Tự đến lấy tại văn phòng BTC Mầm Mơ"}
+                    : (order?.address_detail || "Giao qua tay thành viên Mầm Mơ")}
                 </span>
                 <button
                   type="button"
                   onClick={() =>
                     handleCopy(
-                      `${order?.recipient_name || order?.buyer_name} - ${order?.recipient_phone || order?.buyer_phone} - ${order?.address_detail}, ${order?.district}, ${order?.province}`,
+                      `${order?.recipient_name || order?.buyer_name} - ${order?.recipient_phone || order?.buyer_phone} - ${order?.address_detail}, ${order?.province}`,
                       "address"
                     )
                   }
@@ -215,53 +240,54 @@ function OrderSuccessContent() {
               </span>
             </div>
 
-            {/* Collapsible Bank Details — Secondary */}
-            <details className="group rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] overflow-hidden">
-              <summary className="p-4 cursor-pointer flex items-center justify-between text-xs font-bold text-[#5C4D44] hover:bg-[#FFF8EE] transition-colors list-none">
-                <span>🏦 Xem chi tiết thông tin chuyển khoản thủ công</span>
-                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              <div className="p-4 pt-0 space-y-3 text-xs border-t border-[#F0E5D8]">
-                <div className="pt-3">
-                  <span className="text-gray-500 block">Ngân hàng:</span>
-                  <span className="font-bold text-gray-900 text-sm">{bankAccount.bankName}</span>
-                </div>
+            {/* Direct Bank Details — Always Visible & Open, Only Memo is Copyable */}
+            <div className="rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] p-4 space-y-3 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-[#F0E5D8]">
+                <span className="font-bold text-[#5C4D44] text-xs">🏦 Thông tin chuyển khoản thủ công:</span>
+                <span className="text-[11px] text-gray-400">MB Bank (Quân Đội)</span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <span className="text-gray-500 block">Số tài khoản:</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono font-extrabold text-emerald-900 text-base">{bankAccount.accountNumber}</span>
-                    <button type="button" onClick={() => handleCopy(bankAccount.accountNumber, "stk")} className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
-                      {copiedItem === "stk" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedItem === "stk" ? "Đã chép" : "Chép"}</span>
-                    </button>
-                  </div>
+                  <span className="text-gray-500 block">Ngân hàng:</span>
+                  <span className="font-bold text-gray-900 text-xs">{bankAccount.bankName}</span>
                 </div>
                 <div>
                   <span className="text-gray-500 block">Chủ tài khoản:</span>
-                  <span className="font-bold text-gray-900">{bankAccount.accountHolder}</span>
+                  <span className="font-bold text-gray-900 text-xs">{bankAccount.accountHolder}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">Số tài khoản:</span>
+                  <span className="font-mono font-bold text-emerald-950 text-sm">{bankAccount.accountNumber}</span>
                 </div>
                 <div>
                   <span className="text-gray-500 block">Số tiền cần chuyển:</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-extrabold text-emerald-950 text-base">{finalAmount.toLocaleString("vi-VN")}đ</span>
-                    <button type="button" onClick={() => handleCopy(String(finalAmount), "amount")} className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-[#BFE9C3] text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
-                      {copiedItem === "amount" ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedItem === "amount" ? "Đã chép" : "Chép"}</span>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Nội dung chuyển khoản (Bắt buộc):</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200 inline-block">{bankAccount.transferMemo}</span>
-                    <button type="button" onClick={() => handleCopy(bankAccount.transferMemo, "memo")} className="px-2 py-0.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors">
-                      {copiedItem === "memo" ? <Check className="w-3 h-3 text-red-700" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedItem === "memo" ? "Đã chép" : "Chép"}</span>
-                    </button>
-                  </div>
+                  <span className="font-extrabold text-emerald-950 text-sm">{finalAmount.toLocaleString("vi-VN")}đ</span>
                 </div>
               </div>
-            </details>
+
+              <div className="pt-2 border-t border-[#F0E5D8]">
+                <span className="text-gray-600 font-bold block mb-1">
+                  Nội dung chuyển khoản (Bắt buộc):
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 text-sm tracking-wider inline-block">
+                    {bankAccount.transferMemo}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
+                    className="px-3 py-1.5 rounded-xl bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95 shadow-2xs"
+                  >
+                    {copiedItem === "memo" ? <Check className="w-3.5 h-3.5 text-red-700" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedItem === "memo" ? "Đã chép mã" : "Sao chép mã"}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
+                  💡 <em>Quét mã QR là cách nhanh và chuẩn xác nhất, App ngân hàng sẽ tự điền STK, số tiền và nội dung đơn cho bạn.</em>
+                </p>
+              </div>
+            </div>
 
             {/* Customer Payment Confirmation CTA */}
             <div className="pt-4 border-t border-gray-100">

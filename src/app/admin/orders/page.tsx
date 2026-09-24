@@ -107,13 +107,22 @@ export default function AdminOrdersPage() {
           </p>
         </div>
 
-        <Link
-          href="/admin/orders/create"
-          className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tạo đơn tại quầy / Bán trực tiếp</span>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            href="/admin/orders/pos"
+            className="px-4 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
+          >
+            <span>⚡ Bán trực tiếp tại sự kiện</span>
+          </Link>
+
+          <Link
+            href="/admin/orders/create"
+            className="px-4 py-2.5 rounded-full bg-white hover:bg-gray-50 text-[#5C4D44] font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all border border-[#F0E5D8] active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>📝 Nhập đơn đặt hộ</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -210,8 +219,24 @@ export default function AdminOrdersPage() {
                     </td>
 
                     <td className="py-2.5 px-2.5">
-                      <span className="font-semibold text-gray-900 block text-xs">{ord.buyer_name}</span>
-                      <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-gray-900 block text-xs">
+                          {ord.buyer_name || "Khách tại quầy"}
+                        </span>
+                        {ord.source_type === "event_sale" && (
+                          <span className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 font-extrabold text-[9px] border border-amber-300">
+                            ⚡ Sự kiện
+                          </span>
+                        )}
+                        {ord.source_type === "admin_manual" && (
+                          <span className="px-1.5 py-0.2 rounded-md bg-blue-100 text-blue-900 font-extrabold text-[9px] border border-blue-200">
+                            📝 Đặt hộ
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {ord.buyer_phone || (ord.source_type === "event_sale" ? "Mua tại quầy" : "—")}
+                      </span>
                     </td>
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
@@ -236,29 +261,35 @@ export default function AdminOrdersPage() {
                     </td>
 
                     <td className="py-2.5 px-2.5 max-w-[170px]">
-                      <div
-                        onClick={(e) => handleCopyAddress(e, ord)}
-                        className="group/addr cursor-pointer p-1 -m-1 rounded-lg hover:bg-[#FFF8EE] border border-transparent hover:border-[#ebd089] transition-all"
-                        title="Nhấn để sao chép thông tin người nhận & địa chỉ giao hàng"
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-bold text-gray-800 text-[10px] block">
-                            {ord.delivery_type === "home_delivery" ? "🏠 Giao tận nơi" : "📍 Điểm nhận"}
-                          </span>
-                          {copiedAddressId === ord.order_id ? (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-[#16381D] bg-[#BFE9C3] px-1 py-0.2 rounded border border-[#9ed4a3]">
-                              <Check className="w-2.5 h-2.5" /> Đã chép
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] text-[#7E7068] group-hover/addr:text-[#2D6338] bg-gray-50 group-hover/addr:bg-emerald-50 px-1 py-0.2 rounded border border-gray-200 group-hover/addr:border-emerald-200 transition-colors">
-                              <Copy className="w-2.5 h-2.5" /> Chép
-                            </span>
-                          )}
+                      {ord.source_type === "event_sale" ? (
+                        <div className="p-1 text-[10.5px] font-semibold text-emerald-800 bg-emerald-50 rounded-lg border border-emerald-200">
+                          ⚡ Giao tại chỗ (Sự kiện)
                         </div>
-                        <span className="text-[10.5px] text-gray-600 truncate block mt-0.5" title={`${ord.address_detail}, ${ord.district}, ${ord.province}`}>
-                          {ord.address_detail}, {ord.district}
-                        </span>
-                      </div>
+                      ) : (
+                        <div
+                          onClick={(e) => handleCopyAddress(e, ord)}
+                          className="group/addr cursor-pointer p-1 -m-1 rounded-lg hover:bg-[#FFF8EE] border border-transparent hover:border-[#ebd089] transition-all"
+                          title="Nhấn để sao chép thông tin người nhận & địa chỉ giao hàng"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-gray-800 text-[10px] block">
+                              {ord.delivery_type === "home_delivery" ? "🏠 Giao tận nơi" : "📍 Điểm nhận"}
+                            </span>
+                            {copiedAddressId === ord.order_id ? (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-[#16381D] bg-[#BFE9C3] px-1 py-0.2 rounded border border-[#9ed4a3]">
+                                <Check className="w-2.5 h-2.5" /> Đã chép
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] text-[#7E7068] group-hover/addr:text-[#2D6338] bg-gray-50 group-hover/addr:bg-emerald-50 px-1 py-0.2 rounded border border-gray-200 group-hover/addr:border-emerald-200 transition-colors">
+                                <Copy className="w-2.5 h-2.5" /> Chép
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10.5px] text-gray-600 truncate block mt-0.5" title={`${ord.address_detail || ""}, ${ord.province || ""}`}>
+                            {ord.address_detail || "—"}
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">

@@ -31,7 +31,7 @@ function CheckoutContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [differentRecipient, setDifferentRecipient] = useState(false);
-  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "pickup_point" | "member_delivery" | "self_pickup">("home_delivery");
+  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "pickup_point" | "member_delivery">("home_delivery");
   const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"banking" | "cod">("banking");
 
@@ -127,8 +127,6 @@ function CheckoutContent() {
     handleInputChange("voucher_code", found.code);
   };
 
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-
   const handleInputChange = (field: string, val: string) => {
     setFormData((prev) => ({ ...prev, [field]: val }));
     if (errors[field]) {
@@ -138,7 +136,7 @@ function CheckoutContent() {
 
   const handleValidateForm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0) return;
+    if (items.length === 0 || isSubmitting) return;
 
     setErrors({});
 
@@ -149,7 +147,7 @@ function CheckoutContent() {
       receiver_name: differentRecipient ? formData.recipient_name : formData.buyer_name,
       receiver_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
       delivery_type: deliveryType,
-      shipping_address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.district}, ${formData.province}` : undefined,
+      shipping_address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.province}` : undefined,
       pickup_point_id: deliveryType === "pickup_point" ? formData.pickup_point_id || "pp-1" : undefined,
       payment_method: paymentMethod,
       customer_note: formData.note || undefined,
@@ -168,8 +166,7 @@ function CheckoutContent() {
         else if (path === "receiver_name") formattedErrors["recipient_name"] = issue.message;
         else if (path === "receiver_phone") formattedErrors["recipient_phone"] = issue.message;
         else if (path === "shipping_address") {
-          if (!formData.address_detail.trim()) formattedErrors["address_detail"] = "Vui lòng nhập số nhà, tên đường";
-          if (!formData.district.trim()) formattedErrors["district"] = "Vui lòng nhập quận / huyện";
+          if (!formData.address_detail.trim()) formattedErrors["address_detail"] = "Vui lòng nhập địa chỉ chi tiết nhận hàng";
         } else if (path === "pickup_point_id") {
           formattedErrors["pickup_point_id"] = issue.message;
         } else if (path) {
@@ -182,11 +179,8 @@ function CheckoutContent() {
 
     // Extra check for delivery address detail
     if (deliveryType === "home_delivery") {
-      const addrErrors: Record<string, string> = {};
-      if (!formData.address_detail.trim()) addrErrors["address_detail"] = "Vui lòng nhập địa chỉ chi tiết (số nhà, đường)";
-      if (!formData.district.trim()) addrErrors["district"] = "Vui lòng nhập quận / huyện";
-      if (Object.keys(addrErrors).length > 0) {
-        setErrors(addrErrors);
+      if (!formData.address_detail.trim()) {
+        setErrors({ address_detail: "Vui lòng nhập địa chỉ nhận hàng (Số nhà, đường, phường/xã...)" });
         return;
       }
     }
@@ -196,13 +190,8 @@ function CheckoutContent() {
       return;
     }
 
-    // Validated! Open confirmation modal
-    setIsConfirmModalOpen(true);
-  };
-
-  const handleFinalSubmit = () => {
+    // Validated! Directly create order and go straight to QR / payment screen
     setIsSubmitting(true);
-    setIsConfirmModalOpen(false);
 
     // Generate Order Code
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -247,10 +236,8 @@ function CheckoutContent() {
           ? formData.address_detail
           : deliveryType === "pickup_point"
           ? (pickupPoints.find((p) => p.pickup_point_id === formData.pickup_point_id)?.name || "Điểm hẹn nhận hàng")
-          : deliveryType === "member_delivery"
-          ? `Giao qua tay thành viên: ${formData.introducer_info}`
-          : "Tự đến lấy tại văn phòng BTC",
-      district: deliveryType === "home_delivery" ? formData.district : "TP. Hồ Chí Minh",
+          : `Giao qua tay thành viên: ${formData.introducer_info}`,
+      district: "",
       province: formData.province || "TP. Hồ Chí Minh",
       payment_method: paymentMethod,
       payment_status: "pending",
@@ -311,7 +298,7 @@ function CheckoutContent() {
           fullName: formData.buyer_name,
           phone: formData.buyer_phone,
           email: formData.buyer_email || "",
-          address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.district}, ${formData.province}` : "Nhận tại điểm Mầm Mơ",
+          address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.province}` : "Nhận tại điểm Mầm Mơ",
           totalOrders: 1,
           totalSpent: finalAmount,
           createdAt: new Date().toISOString(),
@@ -322,11 +309,9 @@ function CheckoutContent() {
       // ignore
     }
 
-    // Simulate order submission API call
-    setTimeout(() => {
-      clearCart();
-      router.push(`/order/success?code=${randomCode}&payment=${paymentMethod}&amount=${finalAmount}`);
-    }, 600);
+    // Navigate straight to the payment / QR code screen without intermediate modals or delay
+    clearCart();
+    router.push(`/order/success?code=${randomCode}&payment=${paymentMethod}&amount=${finalAmount}`);
   };
 
   if (items.length === 0) {
@@ -393,13 +378,6 @@ function CheckoutContent() {
                 error={errors.buyer_email}
               />
 
-              <Input
-                label="Bạn quen ai trong CLB Mầm Mơ? / Mã người giới thiệu (nếu có)"
-                placeholder="Ví dụ: Mai Lan, MAM-LAN, hoặc để trống..."
-                value={formData.introducer_info}
-                onChange={(e) => handleInputChange("introducer_info", e.target.value)}
-              />
-
               <div className="pt-2">
                 <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-700">
                   <input
@@ -441,12 +419,11 @@ function CheckoutContent() {
                 <span>2.</span> Hình thức nhận hàng
               </h2>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {[
                   { id: "home_delivery", label: "Giao tận nơi", desc: "Nội thành 25k (Freeship >200k)" },
                   { id: "pickup_point", label: "Điểm tập kết", desc: "Điểm hẹn Mầm Mơ (0đ)" },
                   { id: "member_delivery", label: "Qua người quen", desc: "Thành viên giao tay (0đ)" },
-                  { id: "self_pickup", label: "Tự đến lấy", desc: "Tại văn phòng BTC (0đ)" },
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -466,28 +443,21 @@ function CheckoutContent() {
 
               {deliveryType === "home_delivery" && (
                 <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Select
-                      label="Tỉnh / Thành phố *"
-                      value={formData.province}
-                      onChange={(e) => handleInputChange("province", e.target.value)}
-                      options={[
-                        { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
-                        { value: "Hà Nội", label: "Hà Nội" },
-                        { value: "Đà Nẵng", label: "Đà Nẵng" },
-                        { value: "Tỉnh khác", label: "Các tỉnh thành khác" },
-                      ]}
-                    />
-                    <Input
-                      label="Quận / Huyện *"
-                      placeholder="Ví dụ: Quận 1"
-                      value={formData.district}
-                      onChange={(e) => handleInputChange("district", e.target.value)}
-                      error={errors.district}
-                    />
-                  </div>
+                  <Select
+                    label="Tỉnh / Thành phố *"
+                    value={formData.province}
+                    onChange={(e) => handleInputChange("province", e.target.value)}
+                    options={[
+                      { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
+                      { value: "Hà Nội", label: "Hà Nội" },
+                      { value: "Đà Nẵng", label: "Đà Nẵng" },
+                      { value: "Bình Dương", label: "Bình Dương" },
+                      { value: "Đồng Nai", label: "Đồng Nai" },
+                      { value: "Tỉnh khác", label: "Các tỉnh thành khác" },
+                    ]}
+                  />
                   <Input
-                    label="Địa chỉ chi tiết (Số nhà, tên đường, phường) *"
+                    label="Địa chỉ chi tiết nhận hàng (Số nhà, tên đường, phường/xã...) *"
                     placeholder="Ví dụ: 123 Nguyễn Huệ, Phường Bến Nghé"
                     value={formData.address_detail}
                     onChange={(e) => handleInputChange("address_detail", e.target.value)}
@@ -807,86 +777,6 @@ function CheckoutContent() {
             </div>
           </div>
         </form>
-
-        {/* MODAL: XÁC NHẬN ĐẶT HÀNG */}
-        {isConfirmModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-            <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">📦</span>
-                  <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                    Xác nhận đặt đơn hàng
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsConfirmModalOpen(false)}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs text-[#5C4D44] bg-[#FFF8EE] p-4 rounded-2xl border border-[#F0E5D8]">
-                <div className="flex justify-between">
-                  <span className="text-[#7E7068]">Người nhận:</span>
-                  <span className="font-bold text-[#342A24]">
-                    {differentRecipient ? formData.recipient_name : formData.buyer_name} ({differentRecipient ? formData.recipient_phone : formData.buyer_phone})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#7E7068]">Hình thức nhận:</span>
-                  <span className="font-semibold text-[#342A24]">
-                    {deliveryType === "home_delivery" ? "Giao tận nơi" : deliveryType === "pickup_point" ? "Điểm hẹn Mầm Mơ" : "Tự đến lấy"}
-                  </span>
-                </div>
-                {deliveryType === "home_delivery" && (
-                  <div className="flex justify-between">
-                    <span className="text-[#7E7068]">Địa chỉ:</span>
-                    <span className="font-semibold text-[#342A24] text-right max-w-[200px] truncate">
-                      {formData.address_detail}, {formData.district}
-                    </span>
-                  </div>
-                )}
-                {formData.introducer_info && (
-                  <div className="flex justify-between">
-                    <span className="text-[#7E7068]">Người giới thiệu:</span>
-                    <span className="font-bold text-[#2D6338]">🌱 {formData.introducer_info}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-[#7E7068]">Thanh toán:</span>
-                  <span className="font-bold text-[#2D6338]">
-                    {paymentMethod === "banking" ? "Chuyển khoản VietQR" : "Tiền mặt khi nhận (COD)"}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-[#F0E5D8] flex justify-between items-center text-sm">
-                  <span className="font-bold text-[#231B16]">Tổng thanh toán:</span>
-                  <MoneyDisplay amount={finalAmount} className="text-xl font-extrabold text-[#1B3622]" />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsConfirmModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  Kiểm tra lại
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinalSubmit}
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
-                >
-                  {isSubmitting ? "Đang xử lý..." : "Hoàn tất đặt đơn ➔"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       <Footer />

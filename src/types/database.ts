@@ -37,6 +37,7 @@ export type OrderSource =
   | "member_referral"
   | "social_media"
   | "admin_manual"
+  | "event_sale"
   | "other";
 
 export type ProductStatus = "active" | "draft" | "archived";
