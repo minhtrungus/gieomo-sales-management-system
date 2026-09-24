@@ -1438,6 +1438,11 @@ export interface SiteSettings {
   coverTheme: string;
   faviconPreview: string;
   avatarPreview: string;
+  facebookUrl?: string;
+  tiktokUrl?: string;
+  instagramUrl?: string;
+  zaloUrl?: string;
+  youtubeUrl?: string;
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -1456,6 +1461,11 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   coverTheme: "emerald",
   faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
+  facebookUrl: "https://www.facebook.com/BanHangGieoMo",
+  tiktokUrl: "https://www.tiktok.com/@vuongquocmam",
+  instagramUrl: "https://www.instagram.com/mam.mer.oii",
+  zaloUrl: "",
+  youtubeUrl: "",
 };
 
 let cachedSettings: SiteSettings | null = null;

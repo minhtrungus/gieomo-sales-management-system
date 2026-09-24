@@ -14,11 +14,11 @@ export const OFFICIAL_STORE_CONFIG = {
     "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ với các sản phẩm may vá handmade độc bản. Mỗi sản phẩm bạn rước về là một điều ước được gieo cho các em nhỏ vùng cao.",
   socialLinks: {
     facebook:
-      process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://www.facebook.com/mammo.project",
+      process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://www.facebook.com/BanHangGieoMo",
     tiktok:
-      process.env.NEXT_PUBLIC_TIKTOK_URL || "https://www.tiktok.com/@mammo.project",
+      process.env.NEXT_PUBLIC_TIKTOK_URL || "https://www.tiktok.com/@vuongquocmam",
     instagram:
-      process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://www.instagram.com/mammo.project",
+      process.env.NEXT_PUBLIC_INSTAGRAM_URL || "https://www.instagram.com/mam.mer.oii",
   },
 } as const;
 

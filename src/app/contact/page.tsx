@@ -116,6 +116,75 @@ export default function ContactPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Social Channels */}
+              <div className="pt-4 border-t border-emerald-900/80 space-y-2">
+                <span className="text-[11px] text-emerald-300 font-bold block uppercase tracking-wide">
+                  Kết nối qua Mạng xã hội:
+                </span>
+                <div className="flex items-center flex-wrap gap-2">
+                  {settings.facebookUrl && (
+                    <a
+                      href={settings.facebookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-full bg-emerald-900/80 hover:bg-emerald-800 text-white text-[11px] font-semibold border border-emerald-700/60 inline-flex items-center gap-1.5 transition-colors"
+                      title="Facebook Mầm Mơ"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1877F2]" />
+                      Facebook
+                    </a>
+                  )}
+                  {settings.tiktokUrl && (
+                    <a
+                      href={settings.tiktokUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-full bg-emerald-900/80 hover:bg-emerald-800 text-white text-[11px] font-semibold border border-emerald-700/60 inline-flex items-center gap-1.5 transition-colors"
+                      title="TikTok Mầm Mơ"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                      TikTok
+                    </a>
+                  )}
+                  {settings.instagramUrl && (
+                    <a
+                      href={settings.instagramUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-full bg-emerald-900/80 hover:bg-emerald-800 text-white text-[11px] font-semibold border border-emerald-700/60 inline-flex items-center gap-1.5 transition-colors"
+                      title="Instagram Mầm Mơ"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#E1306C]" />
+                      Instagram
+                    </a>
+                  )}
+                  {settings.zaloUrl && (
+                    <a
+                      href={settings.zaloUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-full bg-emerald-900/80 hover:bg-emerald-800 text-white text-[11px] font-semibold border border-emerald-700/60 inline-flex items-center gap-1.5 transition-colors"
+                      title="Zalo Mầm Mơ"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#0068FF]" />
+                      Zalo Chat
+                    </a>
+                  )}
+                  {settings.youtubeUrl && (
+                    <a
+                      href={settings.youtubeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-full bg-emerald-900/80 hover:bg-emerald-800 text-white text-[11px] font-semibold border border-emerald-700/60 inline-flex items-center gap-1.5 transition-colors"
+                      title="YouTube Mầm Mơ"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FF0000]" />
+                      YouTube
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="pt-6 border-t border-emerald-900 text-xs text-soft-pink font-medium">

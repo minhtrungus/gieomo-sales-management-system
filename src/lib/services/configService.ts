@@ -19,6 +19,11 @@ export interface SiteSettings {
   avatarPreview: string;
   shippingNote?: string;
   paymentNote?: string;
+  facebookUrl?: string;
+  tiktokUrl?: string;
+  instagramUrl?: string;
+  zaloUrl?: string;
+  youtubeUrl?: string;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -39,6 +44,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   avatarPreview: "/images/logo_gieo mơ.jpg",
   shippingNote: "Giao hàng trong 3-5 ngày làm việc tại TP.HCM. Các tỉnh khác 5-7 ngày.",
   paymentNote: "Chuyển khoản ngân hàng hoặc thanh toán khi nhận hàng (COD).",
+  facebookUrl: "https://www.facebook.com/BanHangGieoMo",
+  tiktokUrl: "https://www.tiktok.com/@vuongquocmam",
+  instagramUrl: "https://www.instagram.com/mam.mer.oii",
+  zaloUrl: "",
+  youtubeUrl: "",
 };
 
 // Map DB rows to SiteSettings object
@@ -66,6 +76,11 @@ export function rowsToSettings(rows: { config_key: string; config_value: string 
     avatarPreview: map.avatar_preview || DEFAULT_SITE_SETTINGS.avatarPreview,
     shippingNote: map.shipping_note || DEFAULT_SITE_SETTINGS.shippingNote,
     paymentNote: map.payment_note || DEFAULT_SITE_SETTINGS.paymentNote,
+    facebookUrl: map.facebook_url !== undefined ? map.facebook_url : DEFAULT_SITE_SETTINGS.facebookUrl,
+    tiktokUrl: map.tiktok_url !== undefined ? map.tiktok_url : DEFAULT_SITE_SETTINGS.tiktokUrl,
+    instagramUrl: map.instagram_url !== undefined ? map.instagram_url : DEFAULT_SITE_SETTINGS.instagramUrl,
+    zaloUrl: map.zalo_url !== undefined ? map.zalo_url : DEFAULT_SITE_SETTINGS.zaloUrl,
+    youtubeUrl: map.youtube_url !== undefined ? map.youtube_url : DEFAULT_SITE_SETTINGS.youtubeUrl,
   };
 }
 
@@ -89,6 +104,11 @@ export function settingsToRows(settings: Partial<SiteSettings>): { config_key: s
     avatarPreview: "avatar_preview",
     shippingNote: "shipping_note",
     paymentNote: "payment_note",
+    facebookUrl: "facebook_url",
+    tiktokUrl: "tiktok_url",
+    instagramUrl: "instagram_url",
+    zaloUrl: "zalo_url",
+    youtubeUrl: "youtube_url",
   };
 
   const rows: { config_key: string; config_value: string }[] = [];
