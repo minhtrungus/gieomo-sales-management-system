@@ -45,8 +45,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="vi" className={`${montserrat.variable} h-full`}>
-      <body className="min-h-full flex flex-col antialiased">{children}</body>
+    <html lang="vi" className={`${montserrat.variable} h-full`} suppressHydrationWarning>
+      <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>{children}</body>
     </html>
   );
 }
