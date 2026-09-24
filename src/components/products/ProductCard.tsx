@@ -44,10 +44,11 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
   };
 
   return (
-    <div className="group relative flex flex-col bg-white rounded-3xl border border-[#F0E5D8] overflow-hidden shadow-soft hover:shadow-card-hover transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1">
-      {/* Stretched Link covering the whole card for instant, clean navigation */}
+    <div className="group relative flex flex-col bg-white rounded-3xl border border-[#F0E5D8] overflow-hidden shadow-soft hover:shadow-card-hover transition-transform duration-200 hover:-translate-y-0.5 will-change-transform">
+      {/* Stretched Link covering the whole card for instant, clean navigation with prefetch */}
       <Link
         href={`/products/${product.slug}`}
+        prefetch={true}
         className="absolute inset-0 z-10"
         aria-label={`Xem chi tiết ${product.name}`}
       />

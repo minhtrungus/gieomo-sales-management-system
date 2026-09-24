@@ -36,6 +36,17 @@ export default function ProductsPage() {
 
   const debouncedSearch = useDebounce(searchQuery, 250);
 
+  // Deduplicate categories by slug to ensure 100% duplicate-free UI
+  const uniqueCategories = useMemo(() => {
+    const map = new Map<string, ProductCategory>();
+    for (const cat of categories) {
+      if (!map.has(cat.slug)) {
+        map.set(cat.slug, cat);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [categories]);
+
   // Only active products are visible on the public storefront
   const activeProducts = useMemo(() => {
     return products.filter((p) => p.status === "active");
@@ -46,13 +57,10 @@ export default function ProductsPage() {
       .filter((product) => {
         // Category Filter
         if (selectedCategory !== "all") {
-          const cat = categories.find((c) => c.slug === selectedCategory || c.category_id === selectedCategory);
-          const matchCategory =
-            product.category?.slug === selectedCategory ||
-            product.category?.category_id === selectedCategory ||
-            product.category_id === selectedCategory ||
-            (cat ? product.category_id === cat.category_id : false);
-          if (!matchCategory) {
+          const cSlug =
+            product.category?.slug ||
+            (product.category_id === "cat-1" ? "tui-pouch" : product.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
+          if (cSlug !== selectedCategory) {
             return false;
           }
         }
@@ -138,14 +146,14 @@ export default function ProductsPage() {
             >
               Tất cả ({activeProducts.length})
             </button>
-            {categories.map((cat) => {
+            {uniqueCategories.map((cat) => {
               const count = activeProducts.filter((p) => {
                 const cSlug = p.category?.slug || (p.category_id === "cat-1" ? "tui-pouch" : p.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
                 return cSlug === cat.slug;
               }).length;
               return (
                 <button
-                  key={cat.category_id}
+                  key={cat.slug}
                   onClick={() => setSelectedCategory(cat.slug)}
                   className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === cat.slug

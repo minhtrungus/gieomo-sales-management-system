@@ -1015,27 +1015,43 @@ export function syncProductsFromServer(): void {
     .then((data) => {
       if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
         const current = getStoredProducts();
-        const merged = [...current];
+        const map = new Map<string, ExtendedProduct>();
+
+        for (const p of current) {
+          const key = p.slug || p.product_id;
+          map.set(key, p);
+        }
 
         for (const sProd of data.products) {
-          const idx = merged.findIndex(
-            (p) => p.product_id === sProd.product_id || p.slug === sProd.slug
-          );
-          if (idx >= 0) {
-            merged[idx] = {
-              ...merged[idx],
+          const key = sProd.slug || sProd.product_id;
+          const existing = map.get(key);
+          if (existing) {
+            const isFallbackOnly = sProd.images?.length === 1 && sProd.images[0] === "/images/products/pounch_1.png" && sProd.slug !== "pouch-mam-mo";
+            const existingHasImages = Boolean(existing.images && existing.images.length > 0);
+            const serverHasImages = Boolean(sProd.images && sProd.images.length > 0);
+            const validImages = isFallbackOnly
+              ? (existingHasImages ? existing.images : sProd.images)
+              : (serverHasImages ? sProd.images : existing.images);
+            const validThumbnail = isFallbackOnly
+              ? (existing.thumbnail || sProd.thumbnail)
+              : (sProd.thumbnail || existing.thumbnail);
+
+            map.set(key, {
+              ...existing,
               ...sProd,
-              images: sProd.images?.length > 0 ? sProd.images : merged[idx].images,
-              specs: merged[idx].specs || sProd.specs,
-              impact_story: sProd.impact_story || merged[idx].impact_story,
-              badge: merged[idx].badge || sProd.badge,
-              badge_label: merged[idx].badge_label || sProd.badge_label,
-            };
+              images: validImages,
+              thumbnail: validThumbnail,
+              specs: existing.specs || sProd.specs,
+              impact_story: sProd.impact_story || existing.impact_story,
+              badge: existing.badge || sProd.badge,
+              badge_label: existing.badge_label || sProd.badge_label,
+            });
           } else {
-            merged.push(sProd);
+            map.set(key, sProd);
           }
         }
 
+        const merged = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         cachedProducts = merged;
         localStorage.setItem("gieomo_products", JSON.stringify(merged));
         window.dispatchEvent(new Event("gieomo_products_updated"));
@@ -1054,21 +1070,38 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
-    let products: ExtendedProduct[] = raw ? JSON.parse(raw) : [...MOCK_PRODUCTS];
+    const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [...MOCK_PRODUCTS];
 
-    let hasAdded = false;
-    for (const mockP of MOCK_PRODUCTS) {
-      if (!products.some((p) => p.product_id === mockP.product_id || p.slug === mockP.slug)) {
-        products.push(mockP);
-        hasAdded = true;
+    const map = new Map<string, ExtendedProduct>();
+
+    // Add products and ensure valid images (repairing any previously corrupted single fallback pouch image)
+    for (const p of products) {
+      const key = p.slug || p.product_id;
+      if (!map.has(key)) {
+        const mockMatch = MOCK_PRODUCTS.find((m) => m.slug === p.slug || m.product_id === p.product_id);
+        if (mockMatch && p.slug !== "pouch-mam-mo" && p.images?.length === 1 && p.images[0] === "/images/products/pounch_1.png") {
+          p.images = mockMatch.images;
+          p.thumbnail = mockMatch.thumbnail;
+        }
+        map.set(key, p);
       }
     }
 
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_products", JSON.stringify(products));
+    // Ensure all seed products are present
+    for (const mockP of MOCK_PRODUCTS) {
+      const key = mockP.slug || mockP.product_id;
+      if (!map.has(key)) {
+        map.set(key, mockP);
+      }
     }
-    cachedProducts = products;
-    return products;
+
+    const uniqueProducts = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    if (uniqueProducts.length !== products.length || !raw) {
+      localStorage.setItem("gieomo_products", JSON.stringify(uniqueProducts));
+    }
+    cachedProducts = uniqueProducts;
+    return uniqueProducts;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
     return MOCK_PRODUCTS;
@@ -1502,15 +1535,20 @@ export function syncCategoriesFromServer(): void {
     .then((data) => {
       if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
         const current = getStoredCategories();
-        const merged = [...current];
-        for (const cat of data.categories) {
-          const idx = merged.findIndex((m) => m.category_id === cat.category_id || m.slug === cat.slug);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], ...cat };
-          } else {
-            merged.push(cat);
-          }
+        const map = new Map<string, ProductCategory>();
+
+        // Add current categories first keyed by slug
+        for (const cat of current) {
+          map.set(cat.slug, cat);
         }
+
+        // Merge or insert server categories
+        for (const cat of data.categories) {
+          const existing = map.get(cat.slug);
+          map.set(cat.slug, existing ? { ...existing, ...cat } : cat);
+        }
+
+        const merged = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         cachedCategories = merged;
         localStorage.setItem("gieomo_categories", JSON.stringify(merged));
         window.dispatchEvent(new Event("gieomo_categories_updated"));
@@ -1527,21 +1565,30 @@ export function getStoredCategories(): ProductCategory[] {
   if (cachedCategories !== null) return cachedCategories;
   try {
     const raw = localStorage.getItem("gieomo_categories");
-    let categories: ProductCategory[] = raw ? JSON.parse(raw) : [...MOCK_CATEGORIES];
+    const categories: ProductCategory[] = raw ? JSON.parse(raw) : [...MOCK_CATEGORIES];
 
-    let hasAdded = false;
-    for (const mockCat of MOCK_CATEGORIES) {
-      if (!categories.some((c) => c.category_id === mockCat.category_id)) {
-        categories.push(mockCat);
-        hasAdded = true;
+    // Deduplicate any corrupted/duplicated entries by slug
+    const map = new Map<string, ProductCategory>();
+    for (const c of categories) {
+      if (!map.has(c.slug)) {
+        map.set(c.slug, c);
       }
     }
 
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_categories", JSON.stringify(categories));
+    // Ensure mock categories are present by slug if not in store
+    for (const mockCat of MOCK_CATEGORIES) {
+      if (!map.has(mockCat.slug)) {
+        map.set(mockCat.slug, mockCat);
+      }
     }
-    cachedCategories = categories;
-    return categories;
+
+    const uniqueCategories = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    if (uniqueCategories.length !== categories.length || !raw) {
+      localStorage.setItem("gieomo_categories", JSON.stringify(uniqueCategories));
+    }
+    cachedCategories = uniqueCategories;
+    return uniqueCategories;
   } catch (e) {
     console.error("Error reading gieomo_categories", e);
     return MOCK_CATEGORIES;

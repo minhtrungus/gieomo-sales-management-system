@@ -2,6 +2,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { ProductVariant } from "@/types/database";
 
+const DEFAULT_PRODUCT_IMAGES: Record<string, string> = {
+  "pouch-mam-mo": "/images/products/pounch_1.png",
+  "kep-toc-nut-ao": "/images/products/kep-toc-1.jpg",
+  "tui-tote-gieo-mo": "/images/products/tote-gieo-mo-1.jpg",
+  "bo-kim-chi-mam-mo": "/images/products/bo-kim-chi-1.jpg",
+  "sticker-pack-mam-mo": "/images/products/sticker-pack-1.jpg",
+};
+
 /**
  * Fetch all products from Supabase with categories and variants
  */
@@ -53,11 +61,12 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((m: any) => m.url);
       
+      const fallbackImage = (p.slug && DEFAULT_PRODUCT_IMAGES[p.slug]) || "/images/products/pounch_1.png";
       const images = mediaImages.length > 0
         ? mediaImages
         : p.thumbnail
         ? [p.thumbnail]
-        : ["/images/products/pounch_1.png"];
+        : [fallbackImage];
 
       // Map variants with warehouse calculations
       const variants: ProductVariant[] = (p.variants || []).map((v: any) => {

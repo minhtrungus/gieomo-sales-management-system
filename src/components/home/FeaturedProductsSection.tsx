@@ -40,6 +40,7 @@ export function FeaturedProductsSection() {
 
         <Link
           href="/products"
+          prefetch={true}
           className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#2D6338] hover:text-[#1B3622] transition-colors group"
         >
           <span>Xem tất cả sản phẩm</span>

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/store/cart";
 import dynamic from "next/dynamic";
-import { ShoppingBag, Search, Menu, X, Sparkles } from "lucide-react";
+import { ShoppingBag, Search, Menu, X } from "lucide-react";
+
+const emptySubscribe = () => () => {};
+const useMounted = () => useSyncExternalStore(emptySubscribe, () => true, () => false);
 
 const CartDrawer = dynamic(
   () => import("@/components/cart/CartDrawer").then((mod) => mod.CartDrawer),
@@ -17,15 +20,11 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   const itemCount = useCartStore((state) =>
     state.items.reduce((sum, item) => sum + item.quantity, 0)
   );
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const navLinks = [
     { href: "/", label: "Trang chủ" },
@@ -37,10 +36,10 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE]/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE] shadow-2xs">
         <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6">
           {/* Brand Logo with Real Artwork */}
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" prefetch={true} className="flex items-center gap-3 group">
             <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFB98A] shadow-xs group-hover:scale-105 group-hover:rotate-3 transition-transform bg-white shrink-0">
               <Image
                 src="/images/logo_gieo mơ.jpg"
@@ -72,6 +71,7 @@ export function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={true}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
                     isActive
                       ? "bg-[#BFE9C3] text-[#1B3622] shadow-xs"
@@ -89,6 +89,7 @@ export function Navbar() {
             {/* Search link */}
             <Link
               href="/products"
+              prefetch={true}
               className="p-2.5 text-[#5C4D44] hover:text-[#231B16] hover:bg-[#FFF4E5] rounded-full transition-colors hidden sm:flex border border-transparent hover:border-[#F0E5D8]"
               title="Tìm kiếm sản phẩm"
             >

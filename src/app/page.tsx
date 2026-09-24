@@ -59,6 +59,7 @@ export default function HomePage() {
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-2">
                   <Link
                     href="/products"
+                    prefetch={true}
                     className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-[transform,background-color,box-shadow] active:scale-95 border border-[#9ed4a3]"
                   >
                     <span>Khám phá sản phẩm handmade</span>
@@ -213,6 +214,7 @@ export default function HomePage() {
             <div className="pt-2">
               <Link
                 href="/products"
+                prefetch={true}
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-[transform,background-color] active:scale-95"
               >
                 <span>Rước quà handmade ngay ➔</span>

@@ -62,7 +62,8 @@
    =========================== */
 
 html {
-  scroll-behavior: smooth;
+  /* Let native OS/browser physics handle wheel & touch scrolling smoothly without frame drops */
+  text-rendering: optimizeLegibility;
 }
 
 body {
