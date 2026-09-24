@@ -1,7 +1,22 @@
+import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import Link from "next/link";
 import { QrCode, Banknote, ShieldCheck, CheckCircle2 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Hướng dẫn thanh toán an toàn | Gieo Mơ",
+  description:
+    "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 3 giây hoặc thanh toán tiền mặt khi nhận hàng (COD).",
+  alternates: {
+    canonical: "/policy/payment",
+  },
+  openGraph: {
+    title: "Hướng dẫn thanh toán an toàn | Gieo Mơ",
+    description:
+      "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 3 giây hoặc thanh toán tiền mặt khi nhận hàng (COD).",
+  },
+};
 
 export default function PaymentPolicyPage() {
   return (

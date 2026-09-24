@@ -1,7 +1,22 @@
+import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Lock, Shield, EyeOff, UserCheck } from "lucide-react";
 import { getSystemSettingsServer } from "@/lib/services/configService";
+
+export const metadata: Metadata = {
+  title: "Chính sách bảo mật thông tin | Gieo Mơ",
+  description:
+    "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
+  alternates: {
+    canonical: "/policy/privacy",
+  },
+  openGraph: {
+    title: "Chính sách bảo mật thông tin | Gieo Mơ",
+    description:
+      "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
+  },
+};
 
 export default async function PrivacyPolicyPage() {
   const settings = await getSystemSettingsServer();
