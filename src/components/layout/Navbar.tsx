@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/store/cart";
 import dynamic from "next/dynamic";
 import { ShoppingBag, Search, Menu, X } from "lucide-react";
-
-const emptySubscribe = () => () => {};
-const useMounted = () => useSyncExternalStore(emptySubscribe, () => true, () => false);
 
 const CartDrawer = dynamic(
   () => import("@/components/cart/CartDrawer").then((mod) => mod.CartDrawer),
@@ -20,7 +17,12 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
-  const mounted = useMounted();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   const itemCount = useCartStore((state) =>
     state.items.reduce((sum, item) => sum + item.quantity, 0)

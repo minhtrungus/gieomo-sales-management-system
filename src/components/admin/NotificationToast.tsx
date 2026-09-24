@@ -39,7 +39,7 @@ export function NotificationToastContainer() {
         return (
           <div
             key={toast.id}
-            className="pointer-events-auto bg-white/95 backdrop-blur-md border border-[#F0E5D8] rounded-2xl shadow-2xl p-4 flex items-start gap-3.5 transform transition-all duration-300 animate-in slide-in-from-top-4 fade-in"
+            className="pointer-events-auto bg-white border border-[#F0E5D8] rounded-2xl shadow-xl p-4 flex items-start gap-3.5 transform transition-all duration-300 animate-in slide-in-from-top-4 fade-in"
           >
             <div className="w-10 h-10 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] flex items-center justify-center shrink-0 shadow-xs">
               {getIcon(notif.type)}

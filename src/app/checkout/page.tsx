@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
-import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers } from "@/lib/data/orderStore";
+import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 
 function CheckoutContent() {
@@ -20,7 +20,7 @@ function CheckoutContent() {
   const { items, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
 
-  const [siteSettings, setSiteSettings] = useState(() => getStoredSettings());
+  const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
 
   useEffect(() => {
     setSiteSettings(getStoredSettings());

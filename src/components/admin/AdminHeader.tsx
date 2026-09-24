@@ -120,7 +120,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-[#F0E5D8] px-4 sm:px-6 flex items-center justify-between shadow-2xs">
+    <header className="sticky top-0 z-30 h-16 bg-white border-b border-[#F0E5D8] px-4 sm:px-6 flex items-center justify-between shadow-2xs">
       {/* Left side: Mobile Menu + Dynamic Breadcrumbs & Page Title */}
       <div className="flex items-center gap-3">
         <button

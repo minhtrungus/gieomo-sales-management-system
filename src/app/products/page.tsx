@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
-import { ExtendedProduct } from "@/lib/data/mockData";
+import { MOCK_CATEGORIES, ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts, getStoredCategories } from "@/lib/data/orderStore";
 import type { ProductCategory } from "@/types/database";
 import { EmptyState } from "@/components/ui/States";
@@ -13,7 +13,7 @@ import { Search, Sparkles } from "lucide-react";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
+  const [categories, setCategories] = useState<ProductCategory[]>(MOCK_CATEGORIES);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("featured");
@@ -144,7 +144,7 @@ export default function ProductsPage() {
                   : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
               }`}
             >
-              Tất cả ({activeProducts.length})
+              Tất cả <span suppressHydrationWarning>({activeProducts.length})</span>
             </button>
             {uniqueCategories.map((cat) => {
               const count = activeProducts.filter((p) => {
@@ -161,7 +161,7 @@ export default function ProductsPage() {
                       : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
                   }`}
                 >
-                  {cat.name} ({count})
+                  {cat.name} <span suppressHydrationWarning>({count})</span>
                 </button>
               );
             })}

@@ -56,7 +56,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       {isOpen && (
         <div
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden transition-opacity"
         />
       )}
 
@@ -104,6 +104,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 onClick={onClose}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   isActive
