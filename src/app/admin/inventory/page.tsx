@@ -110,6 +110,7 @@ export default function AdminInventoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>("all");
+  const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all");
   const [activeLogTab, setActiveLogTab] = useState<"inflow" | "transfer">("inflow");
 
   // ==========================================
@@ -430,7 +431,7 @@ export default function AdminInventoryPage() {
   };
 
   // Flatten rows with all warehouse stocks (Memoized)
-  const inventoryRows = useMemo(() => {
+  const allInventoryRows = useMemo(() => {
     return products
       .flatMap((p) =>
         (p.variants || []).map((v) => {
@@ -467,19 +468,57 @@ export default function AdminInventoryPage() {
       });
   }, [products, warehouses, debouncedSearch]);
 
+  // Filtered rows based on selected warehouse and stock availability
+  const inventoryRows = useMemo(() => {
+    return allInventoryRows.filter((row) => {
+      if (selectedWarehouseFilter !== "all") {
+        const whStock = row.stocks[selectedWarehouseFilter] ?? 0;
+        if (stockAvailabilityFilter === "in_stock" && whStock <= 0) return false;
+        if (stockAvailabilityFilter === "low_stock" && (whStock <= 0 || whStock >= 10)) return false;
+        if (stockAvailabilityFilter === "out_of_stock" && whStock > 0) return false;
+      } else {
+        if (stockAvailabilityFilter === "in_stock" && row.stockTotal <= 0) return false;
+        if (stockAvailabilityFilter === "low_stock" && (row.stockTotal <= 0 || row.stockTotal >= 20)) return false;
+        if (stockAvailabilityFilter === "out_of_stock" && row.stockTotal > 0) return false;
+      }
+      return true;
+    });
+  }, [allInventoryRows, selectedWarehouseFilter, stockAvailabilityFilter]);
+
+  const selectedWarehouseObj = useMemo(() => {
+    return warehouses.find((w) => w.warehouse_id === selectedWarehouseFilter) || null;
+  }, [warehouses, selectedWarehouseFilter]);
+
+  const displayedWarehouses = useMemo(() => {
+    if (selectedWarehouseFilter === "all") return warehouses;
+    return warehouses.filter((w) => w.warehouse_id === selectedWarehouseFilter);
+  }, [warehouses, selectedWarehouseFilter]);
+
   // Calculate summary metrics across all warehouses
   const { totalStockAll } = useMemo(() => {
     let all = 0;
-    for (const r of inventoryRows) {
+    for (const r of allInventoryRows) {
       all += r.stockTotal;
     }
     return { totalStockAll: all };
-  }, [inventoryRows]);
+  }, [allInventoryRows]);
 
   const selectedProductVariants =
     products.find((p) => p.product_id === selectedProductId)?.variants || [];
   const transferProductVariants =
     products.find((p) => p.product_id === transferProductId)?.variants || [];
+
+  const filteredInflowLogs = useMemo(() => {
+    if (selectedWarehouseFilter === "all") return inflowLogs;
+    return inflowLogs.filter((l) => l.warehouseId === selectedWarehouseFilter);
+  }, [inflowLogs, selectedWarehouseFilter]);
+
+  const filteredTransferLogs = useMemo(() => {
+    if (selectedWarehouseFilter === "all" || !selectedWarehouseObj) return transferLogs;
+    return transferLogs.filter(
+      (l) => l.fromWarehouse === selectedWarehouseObj.name || l.toWarehouse === selectedWarehouseObj.name
+    );
+  }, [transferLogs, selectedWarehouseFilter, selectedWarehouseObj]);
 
   return (
     <div className="space-y-6 text-xs">
@@ -634,32 +673,89 @@ export default function AdminInventoryPage() {
             <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-cream/70 border border-[#F0E5D8] w-full sm:w-auto overflow-x-auto">
               <button
                 type="button"
-                onClick={() => setSelectedWarehouseFilter("all")}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap cursor-pointer ${
+                onClick={() => {
+                  setSelectedWarehouseFilter("all");
+                  setStockAvailabilityFilter("all");
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap cursor-pointer text-xs ${
                   selectedWarehouseFilter === "all"
                     ? "bg-[#2D6338] text-white shadow-xs"
                     : "text-gray-600 hover:text-emerald-950 hover:bg-white"
                 }`}
               >
-                🏢 Tất cả các kho ({inventoryRows.length})
+                🏢 Tất cả các kho ({allInventoryRows.length})
               </button>
 
-              {warehouses.map((wh) => (
-                <button
-                  key={wh.warehouse_id}
-                  type="button"
-                  onClick={() => setSelectedWarehouseFilter(wh.warehouse_id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap cursor-pointer ${
-                    selectedWarehouseFilter === wh.warehouse_id
-                      ? "bg-[#2D6338] text-white shadow-xs"
-                      : "text-gray-600 hover:text-emerald-950 hover:bg-white"
-                  }`}
-                >
-                  📍 {wh.code}
-                </button>
-              ))}
+              {warehouses.map((wh) => {
+                const whCount = allInventoryRows.filter((r) => (r.stocks[wh.warehouse_id] ?? 0) > 0).length;
+                return (
+                  <button
+                    key={wh.warehouse_id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedWarehouseFilter(wh.warehouse_id);
+                      setStockAvailabilityFilter("all");
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap cursor-pointer text-xs ${
+                      selectedWarehouseFilter === wh.warehouse_id
+                        ? "bg-[#2D6338] text-white shadow-xs"
+                        : "text-gray-600 hover:text-emerald-950 hover:bg-white"
+                    }`}
+                  >
+                    📍 {wh.code} ({whCount})
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {/* Active Warehouse Filter Banner */}
+          {selectedWarehouseFilter !== "all" && selectedWarehouseObj && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <span className="text-xl">📍</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-[#16381D] text-xs sm:text-sm">
+                      Đang xem kiểm kê tại: {selectedWarehouseObj.name} ({selectedWarehouseObj.code})
+                    </span>
+                    {selectedWarehouseObj.is_default && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        Kho chính mặc định
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    {selectedWarehouseObj.address} • Phụ trách: {selectedWarehouseObj.manager_name} ({selectedWarehouseObj.phone})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <select
+                  value={stockAvailabilityFilter}
+                  onChange={(e) => setStockAvailabilityFilter(e.target.value as any)}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold text-emerald-950 bg-white cursor-pointer outline-none"
+                >
+                  <option value="all">Tất cả sản phẩm ({allInventoryRows.length})</option>
+                  <option value="in_stock">Chỉ sản phẩm có tồn (&gt;0)</option>
+                  <option value="low_stock">Sắp hết hàng (&lt;10)</option>
+                  <option value="out_of_stock">Đã hết hàng tại kho (0)</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedWarehouseFilter("all");
+                    setStockAvailabilityFilter("all");
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-900 font-bold hover:bg-emerald-100 cursor-pointer transition-colors text-xs shadow-2xs"
+                >
+                  ✕ Bỏ lọc kho
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Stock Sync Alert Banner */}
           {stockSyncWarning && (
@@ -688,7 +784,9 @@ export default function AdminInventoryPage() {
               <div className="flex items-center gap-2">
                 <span className="text-base">📦</span>
                 <h2 className="font-heading font-extrabold text-sm text-[#231B16]">
-                  Bảng kiểm kê tồn kho theo phân loại ({inventoryRows.length} mục)
+                  {selectedWarehouseFilter === "all"
+                    ? `Bảng kiểm kê tồn kho theo phân loại (${inventoryRows.length} mục)`
+                    : `Kiểm kê tồn kho tại ${selectedWarehouseObj?.name || selectedWarehouseFilter} (${inventoryRows.length} mục)`}
                 </h2>
               </div>
             </div>
@@ -699,84 +797,116 @@ export default function AdminInventoryPage() {
                   <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
                     <th className="py-3 px-4">Sản phẩm &amp; Phân loại</th>
                     <th className="py-3 px-3">Mã SKU</th>
-                    {warehouses.map((wh) => (
+                    {displayedWarehouses.map((wh) => (
                       <th key={wh.warehouse_id} className="py-3 px-3 text-center whitespace-nowrap">
                         {wh.name} {wh.is_default && <span className="text-emerald-700 font-bold text-[10px] block">(Mặc định)</span>}
                       </th>
                     ))}
-                    <th className="py-3 px-3 text-center">Tổng tồn</th>
-                    <th className="py-3 px-3 text-right">Trạng thái kho</th>
+                    {selectedWarehouseFilter === "all" ? (
+                      <>
+                        <th className="py-3 px-3 text-center">Tổng tồn tất cả kho</th>
+                        <th className="py-3 px-3 text-right">Trạng thái kho tổng</th>
+                      </>
+                    ) : (
+                      <th className="py-3 px-3 text-right">Trạng thái tại kho này</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
                   {inventoryRows.length === 0 ? (
                     <tr>
-                      <td colSpan={4 + warehouses.length} className="py-12 text-center text-gray-500">
-                        Không tìm thấy sản phẩm hoặc biến thể phù hợp.
+                      <td colSpan={3 + displayedWarehouses.length} className="py-12 text-center text-gray-500">
+                        {selectedWarehouseFilter !== "all"
+                          ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
+                          : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
                       </td>
                     </tr>
                   ) : (
-                    inventoryRows.map((row) => (
-                      <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
-                        <td className="py-3 px-4">
-                          <span className="font-bold text-[#342A24] block">{row.productName}</span>
-                          <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
-                        </td>
-                        <td className="py-3 px-3 font-mono font-bold text-gray-600 text-[11px]">
-                          {row.sku}
-                        </td>
+                    inventoryRows.map((row) => {
+                      const curWhStock = selectedWarehouseFilter !== "all" ? (row.stocks[selectedWarehouseFilter] ?? 0) : row.stockTotal;
+                      return (
+                        <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-[#342A24] block">{row.productName}</span>
+                            <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-gray-600 text-[11px]">
+                            {row.sku}
+                          </td>
 
-                        {/* Dynamic Warehouse Stocks */}
-                        {warehouses.map((wh) => {
-                          const curStock = row.stocks[wh.warehouse_id] ?? 0;
-                          return (
-                            <td key={wh.warehouse_id} className="py-3 px-3 text-center">
-                              <div className="inline-flex items-center gap-1.5 p-1 rounded-xl bg-gray-50 border border-gray-200">
-                                <button
-                                  onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, -1)}
-                                  className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                  title="Giảm 1"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </button>
-                                <span className={`font-bold w-9 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
-                                  {curStock}
-                                </span>
-                                <button
-                                  onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, 1)}
-                                  className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                  title="Tăng 1"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </td>
-                          );
-                        })}
+                          {/* Dynamic Warehouse Stocks */}
+                          {displayedWarehouses.map((wh) => {
+                            const curStock = row.stocks[wh.warehouse_id] ?? 0;
+                            return (
+                              <td key={wh.warehouse_id} className="py-3 px-3 text-center">
+                                <div className="inline-flex items-center gap-1.5 p-1 rounded-xl bg-gray-50 border border-gray-200">
+                                  <button
+                                    onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, -1)}
+                                    className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                    title="Giảm 1"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <span className={`font-bold w-9 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
+                                    {curStock}
+                                  </span>
+                                  <button
+                                    onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, 1)}
+                                    className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                    title="Tăng 1"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </td>
+                            );
+                          })}
 
-                        {/* Total Stock */}
-                        <td className="py-3 px-3 text-center font-extrabold text-sm text-[#231B16]">
-                          {row.stockTotal}
-                        </td>
+                          {selectedWarehouseFilter === "all" ? (
+                            <>
+                              {/* Total Stock */}
+                              <td className="py-3 px-3 text-center font-extrabold text-sm text-[#231B16]">
+                                {row.stockTotal}
+                              </td>
 
-                        {/* Status */}
-                        <td className="py-3 px-3 text-right">
-                          {row.stockTotal === 0 ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
-                              Hết hàng
-                            </span>
-                          ) : row.stockTotal < 20 ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
-                              Sắp hết ({row.stockTotal})
-                            </span>
+                              {/* Status */}
+                              <td className="py-3 px-3 text-right">
+                                {row.stockTotal === 0 ? (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
+                                    Hết hàng
+                                  </span>
+                                ) : row.stockTotal < 20 ? (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
+                                    Sắp hết ({row.stockTotal})
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
+                                    Đủ hàng
+                                  </span>
+                                )}
+                              </td>
+                            </>
                           ) : (
-                            <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
-                              Đủ hàng
-                            </span>
+                            /* Single Warehouse Status */
+                            <td className="py-3 px-3 text-right">
+                              {curWhStock === 0 ? (
+                                <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
+                                  Hết hàng tại kho
+                                </span>
+                              ) : curWhStock < 10 ? (
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
+                                  Sắp hết ({curWhStock})
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
+                                  Đủ hàng ({curWhStock})
+                                </span>
+                              )}
+                            </td>
                           )}
-                        </td>
-                      </tr>
-                    ))
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -941,7 +1071,7 @@ export default function AdminInventoryPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                📥 Phiếu nhập kho ({inflowLogs.length})
+                📥 Phiếu nhập kho ({filteredInflowLogs.length})
               </button>
               <button
                 type="button"
@@ -952,10 +1082,25 @@ export default function AdminInventoryPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                🔄 Phiếu điều chuyển ({transferLogs.length})
+                🔄 Phiếu điều chuyển ({filteredTransferLogs.length})
               </button>
             </div>
           </div>
+
+          {selectedWarehouseFilter !== "all" && selectedWarehouseObj && (
+            <div className="mx-4 p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs">
+              <span className="font-bold text-emerald-950">
+                📍 Đang lọc nhật ký liên quan đến: {selectedWarehouseObj.name} ({selectedWarehouseObj.code})
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedWarehouseFilter("all")}
+                className="px-2.5 py-1 rounded-xl bg-white border border-emerald-300 text-emerald-900 font-bold hover:bg-emerald-100 cursor-pointer text-xs"
+              >
+                ✕ Xem tất cả kho
+              </button>
+            </div>
+          )}
 
           {activeLogTab === "inflow" ? (
             <div className="overflow-x-auto">
@@ -973,31 +1118,39 @@ export default function AdminInventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
-                  {inflowLogs.map((log) => (
-                    <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
-                        {log.receiptCode}
-                      </td>
-                      <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
-                      <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.warehouseName}</td>
-                      <td className="py-2.5 px-2.5">
-                        <span className="font-bold text-[#342A24] block">{log.productName}</span>
-                        <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
-                      </td>
-                      <td className="py-2.5 px-2.5 text-center font-extrabold text-emerald-700">
-                        +{log.quantityAdded}
-                      </td>
-                      <td className="py-2.5 px-2.5 text-center font-bold text-gray-800">
-                        {log.stockAfter}
-                      </td>
-                      <td className="py-2.5 px-2.5 font-medium text-gray-700">{log.approvedBy}</td>
-                      <td className="py-2.5 px-3 text-right">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã nhập kho
-                        </span>
+                  {filteredInflowLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-gray-500">
+                        Chưa có phiếu nhập kho nào {selectedWarehouseFilter !== "all" ? `cho kho ${selectedWarehouseObj?.name}` : ""}.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredInflowLogs.map((log) => (
+                      <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+                          {log.receiptCode}
+                        </td>
+                        <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
+                        <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.warehouseName}</td>
+                        <td className="py-2.5 px-2.5">
+                          <span className="font-bold text-[#342A24] block">{log.productName}</span>
+                          <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
+                        </td>
+                        <td className="py-2.5 px-2.5 text-center font-extrabold text-emerald-700">
+                          +{log.quantityAdded}
+                        </td>
+                        <td className="py-2.5 px-2.5 text-center font-bold text-gray-800">
+                          {log.stockAfter}
+                        </td>
+                        <td className="py-2.5 px-2.5 font-medium text-gray-700">{log.approvedBy}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã nhập kho
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1017,29 +1170,37 @@ export default function AdminInventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
-                  {transferLogs.map((log) => (
-                    <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
-                        {log.transferCode}
-                      </td>
-                      <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
-                      <td className="py-2.5 px-2.5">
-                        <span className="font-bold text-[#342A24] block">{log.productName}</span>
-                        <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
-                      </td>
-                      <td className="py-2.5 px-2.5 font-bold text-red-700">{log.fromWarehouse}</td>
-                      <td className="py-2.5 px-2.5 font-bold text-emerald-800">➔ {log.toWarehouse}</td>
-                      <td className="py-2.5 px-2.5 font-black text-xs text-emerald-950">
-                        {log.quantity} chiếc
-                      </td>
-                      <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.approvedBy}</td>
-                      <td className="py-2.5 px-3 text-right">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 text-[10px] font-extrabold border border-blue-200">
-                          <Check className="w-2.5 h-2.5" /> Hoàn tất
-                        </span>
+                  {filteredTransferLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-gray-500">
+                        Chưa có phiếu điều chuyển nào {selectedWarehouseFilter !== "all" ? `liên quan đến ${selectedWarehouseObj?.name}` : ""}.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredTransferLogs.map((log) => (
+                      <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+                          {log.transferCode}
+                        </td>
+                        <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
+                        <td className="py-2.5 px-2.5">
+                          <span className="font-bold text-[#342A24] block">{log.productName}</span>
+                          <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
+                        </td>
+                        <td className="py-2.5 px-2.5 font-bold text-red-700">{log.fromWarehouse}</td>
+                        <td className="py-2.5 px-2.5 font-bold text-emerald-800">➔ {log.toWarehouse}</td>
+                        <td className="py-2.5 px-2.5 font-black text-xs text-emerald-950">
+                          {log.quantity} chiếc
+                        </td>
+                        <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.approvedBy}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 text-[10px] font-extrabold border border-blue-200">
+                            <Check className="w-2.5 h-2.5" /> Hoàn tất
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1051,8 +1212,8 @@ export default function AdminInventoryPage() {
           MODAL: THÊM KHO HÀNG MỚI
           ======================================================== */}
       {isAddWarehouseOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -1169,8 +1330,8 @@ export default function AdminInventoryPage() {
           MODAL: SỬA KHO HÀNG
           ======================================================== */}
       {editingWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
                 Chỉnh sửa Kho: {editingWarehouse.name}
@@ -1289,8 +1450,8 @@ export default function AdminInventoryPage() {
           MODAL: XÁC NHẬN XÓA KHO
           ======================================================== */}
       {deletingWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center">
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
@@ -1325,8 +1486,8 @@ export default function AdminInventoryPage() {
           MODAL 1: ĐIỀU CHUYỂN HÀNG GIỮA CÁC KHO
           ======================================================== */}
       {isTransferOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-cream border border-emerald-300 flex items-center justify-center text-emerald-900">
@@ -1484,8 +1645,8 @@ export default function AdminInventoryPage() {
           MODAL 2: TẠO PHIẾU NHẬP KHO (BULK INFLOW)
           ======================================================== */}
       {isBulkImportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -1625,8 +1786,8 @@ export default function AdminInventoryPage() {
           MODAL: XEM CHI TIẾT THÔNG TIN 1 KHO HÀNG
           ======================================================== */}
       {viewingWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <Building className="w-5 h-5 text-[#2D6338]" />

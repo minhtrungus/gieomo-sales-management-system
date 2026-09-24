@@ -46,7 +46,6 @@ export default function AdminProductsPage() {
   // Modal States
   const [editingProduct, setEditingProduct] = useState<ExtendedProduct | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<ExtendedProduct | null>(null);
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
   // Các khung chi tiết khi sửa sản phẩm (tách ở quản trị)
   const [editOverview, setEditOverview] = useState("");
@@ -56,15 +55,6 @@ export default function AdminProductsPage() {
   const [editExtraSpecs, setEditExtraSpecs] = useState("");
   const [editImpact, setEditImpact] = useState("");
   const [editFeatured, setEditFeatured] = useState(false);
-
-  // Quick Add Form States
-  const [addName, setAddName] = useState("");
-  const [addPrice, setAddPrice] = useState<number>(85000);
-  const [addCostPrice, setAddCostPrice] = useState<number>(35000);
-  const [addStock, setAddStock] = useState<number>(20);
-  const [addCategory, setAddCategory] = useState("cat-1");
-  const [addImageUrl, setAddImageUrl] = useState("/images/products/pounch_1.png");
-  const [addFeatured, setAddFeatured] = useState(true);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -174,75 +164,7 @@ export default function AdminProductsPage() {
     setDeletingProduct(null);
   };
 
-  // Handle Quick Add Product
-  const handleQuickAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addName) return;
 
-    const slug = addName
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[đĐ]/g, "d")
-      .replace(/[^a-z0-9\s-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-");
-
-    const categoryObj = categories.find((c) => c.category_id === addCategory) || categories[0];
-    const prodId = `prod-${Date.now()}`;
-    const wh1Stock = Math.ceil(addStock * 0.7);
-    const wh2Stock = addStock - wh1Stock;
-
-    const newProd: ExtendedProduct = {
-      product_id: prodId,
-      name: addName,
-      slug,
-      short_description: `Sản phẩm ${addName} handmade gây quỹ Mầm Mơ`,
-      description: `Chi tiết sản phẩm ${addName}`,
-      price: addPrice,
-      compare_at_price: null,
-      cost_price: addCostPrice,
-      status: "active",
-      featured: addFeatured,
-      sort_order: products.length + 1,
-      weight_gram: 100,
-      thumbnail: addImageUrl,
-      category_id: addCategory,
-      category: categoryObj,
-      images: [addImageUrl],
-      variants: [
-        {
-          variant_id: `var-${Date.now()}`,
-          product_id: prodId,
-          name: "Mặc định",
-          sku: `GM-${slug.toUpperCase().slice(0, 8)}`,
-          stock: addStock,
-          stock_warehouse_1: wh1Stock,
-          stock_warehouse_2: wh2Stock,
-          price: null,
-          compare_at_price: null,
-          cost_price: null,
-          weight_gram: 100,
-          status: "active",
-          sort_order: 1,
-          created_at: new Date().toISOString(),
-        },
-      ],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    saveNewProduct(newProd);
-    setProducts(getStoredProducts());
-    setIsQuickAddOpen(false);
-
-    // Reset Form
-    setAddName("");
-    setAddPrice(85000);
-    setAddCostPrice(35000);
-    setAddStock(20);
-    setAddFeatured(true);
-  };
 
   return (
     <div className="space-y-6">
@@ -263,23 +185,13 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setIsQuickAddOpen(true)}
-            className="px-4 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm nhanh sản phẩm</span>
-          </button>
-
-          <Link
-            href="/admin/products/new"
-            className="px-4 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Thêm chi tiết (Có upload)</span>
-          </Link>
-        </div>
+        <Link
+          href="/admin/products/new"
+          className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Thêm sản phẩm</span>
+        </Link>
       </div>
 
       {/* Search & Category Filter */}
@@ -455,8 +367,8 @@ export default function AdminProductsPage() {
           MODAL 1: CHỈNH SỬA SẢN PHẨM (EDIT MODAL - 4 KHUNG & 2 KHO)
           ======================================================== */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -747,8 +659,8 @@ export default function AdminProductsPage() {
           MODAL 2: XÓA SẢN PHẨM (DELETE CONFIRMATION)
           ======================================================== */}
       {deletingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center">
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
@@ -775,142 +687,6 @@ export default function AdminProductsPage() {
                 Đồng ý xóa ➔
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          MODAL 3: THÊM NHANH SẢN PHẨM (QUICK ADD MODAL)
-          ======================================================== */}
-      {isQuickAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                  Thêm nhanh sản phẩm mới
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsQuickAddOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleQuickAdd} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Tên sản phẩm *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Pouch Vải Mầm Xanh"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Giá bán (VNĐ) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={addPrice}
-                    onChange={(e) => setAddPrice(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Giá vốn (Cost price)</label>
-                  <input
-                    type="number"
-                    value={addCostPrice}
-                    onChange={(e) => setAddCostPrice(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Danh mục *</label>
-                  <select
-                    value={addCategory}
-                    onChange={(e) => setAddCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.category_id} value={c.category_id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Số lượng tồn kho ban đầu *</label>
-                  <input
-                    type="number"
-                    required
-                    value={addStock}
-                    onChange={(e) => setAddStock(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Ảnh sản phẩm mẫu</label>
-                <select
-                  value={addImageUrl}
-                  onChange={(e) => setAddImageUrl(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24]"
-                >
-                  <option value="/images/products/pounch_1.png">Pouch 1 (Hồng pastel)</option>
-                  <option value="/images/products/pounch_2.jpg">Pouch 2 (Xanh pastel)</option>
-                  <option value="/images/products/kep_toc.jpg">Kẹp tóc Nút Áo</option>
-                  <option value="/images/products/so_tay.jpg">Sổ tay May Vá</option>
-                  <option value="/images/products/set_combo_1.jpg">Set Combo 1</option>
-                </select>
-              </div>
-
-              <div className="pt-1 pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={addFeatured}
-                    onChange={(e) => setAddFeatured(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-xs font-bold text-[#342A24]">
-                    ⭐ Hiển thị nổi bật trên Trang chủ (Hero Showcase)
-                  </span>
-                </label>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsQuickAddOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3]"
-                >
-                  Thêm sản phẩm ➔
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

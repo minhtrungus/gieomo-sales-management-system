@@ -143,34 +143,46 @@ export default function AdminCustomersPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase">
+                <th className="py-3 px-3 w-12 text-center">STT</th>
                 <th className="py-3 px-4">Họ tên</th>
                 <th className="py-3 px-4">Số điện thoại / Email</th>
                 <th className="py-3 px-4">Địa chỉ giao hàng</th>
-                <th className="py-3 px-4">Số đơn đã đặt</th>
+                <th className="py-3 px-4 text-center">Số đơn đã đặt</th>
                 <th className="py-3 px-4 text-right">Tổng tiền ủng hộ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredCustomers.map((c) => (
-                <tr key={c.customerId} className="hover:bg-emerald-50/30 transition-colors">
-                  <td className="py-3.5 px-4 font-bold text-gray-900">
-                    {c.fullName}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span className="font-mono text-gray-900 block">{c.phone}</span>
-                    <span className="text-[11px] text-gray-500 block">{c.email}</span>
-                  </td>
-                  <td className="py-3.5 px-4 text-gray-600 max-w-[250px] truncate">
-                    {c.address}
-                  </td>
-                  <td className="py-3.5 px-4 font-bold text-emerald-950">
-                    {c.totalOrders} đơn
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <MoneyDisplay amount={c.totalSpent} className="font-extrabold text-emerald-950" />
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-10 text-center text-gray-400">
+                    Không tìm thấy khách hàng nào phù hợp.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCustomers.map((c, idx) => (
+                  <tr key={c.customerId} className="hover:bg-emerald-50/30 transition-colors">
+                    <td className="py-3.5 px-3 text-center text-gray-400 font-semibold">
+                      {idx + 1}
+                    </td>
+                    <td className="py-3.5 px-4 font-bold text-gray-900">
+                      {c.fullName}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="font-mono text-gray-900 block">{c.phone}</span>
+                      <span className="text-[11px] text-gray-500 block">{c.email}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-gray-600 max-w-[250px] truncate">
+                      {c.address}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-emerald-950">
+                      {c.totalOrders} đơn
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <MoneyDisplay amount={c.totalSpent} className="font-extrabold text-emerald-950" />
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
