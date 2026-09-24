@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { getStoredCategories, saveNewCategory, saveNewProduct } from "@/lib/data/orderStore";
+import { uploadAsset } from "@/lib/services/uploadService";
 import type { ProductCategory } from "@/types/database";
-import { ArrowLeft, Plus, Trash2, FolderPlus, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, FolderPlus, X, Upload, Loader2 } from "lucide-react";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
@@ -32,6 +34,8 @@ export default function AdminNewProductPage() {
   const [costPrice, setCostPrice] = useState<number | "">("");
   const [status, setStatus] = useState("active");
   const [featured, setFeatured] = useState(false);
+  const [imageUrl, setImageUrl] = useState("/images/products/pounch_1.png");
+  const [isUploading, setIsUploading] = useState(false);
 
   // Load stored categories
   useEffect(() => {
@@ -131,8 +135,8 @@ export default function AdminNewProductPage() {
       featured,
       status: status as "active" | "draft",
       sort_order: 1,
-      thumbnail: "/images/products/pounch_1.png",
-      images: ["/images/products/pounch_1.png"],
+      thumbnail: imageUrl,
+      images: [imageUrl],
       impact_story: descImpact || undefined,
       variants: variants.map((v, i) => {
         const st = Number(v.stock) || 0;
@@ -437,6 +441,61 @@ export default function AdminNewProductPage() {
               />
               <span className="text-xs font-bold text-gray-800">Sản phẩm nổi bật (Hero/Featured)</span>
             </label>
+
+            {/* Ảnh sản phẩm & Tải lên */}
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              <label className="text-xs font-bold text-gray-800 block">Hình ảnh sản phẩm *</label>
+              <div className="flex items-center gap-3">
+                <div className="relative w-16 h-16 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center">
+                  <Image src={imageUrl} alt="" fill className="object-cover" />
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold cursor-pointer border border-emerald-200 transition-colors">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Đang tải lên...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Tải ảnh từ máy</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setIsUploading(true);
+                        try {
+                          const res = await uploadAsset(file, "product-media");
+                          if (res.success && res.url) {
+                            setImageUrl(res.url);
+                          }
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      }}
+                    />
+                  </label>
+                  <select
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    className="w-full p-1.5 rounded-lg border border-gray-200 text-[11px] text-gray-700 bg-white"
+                  >
+                    <option value="/images/products/pounch_1.png">Mẫu: Pouch Hồng pastel</option>
+                    <option value="/images/products/pounch_2.jpg">Mẫu: Pouch Xanh pastel</option>
+                    <option value="/images/products/kep_toc.jpg">Mẫu: Kẹp tóc Nút Áo</option>
+                    <option value="/images/products/so_tay.jpg">Mẫu: Sổ tay May Vá</option>
+                    <option value="/images/products/set_combo_1.jpg">Mẫu: Set Combo 1</option>
+                  </select>
+                </div>
+              </div>
+            </div>
 
             <Button type="submit" variant="primary" fullWidth size="lg">
               Lưu sản phẩm mới ➔

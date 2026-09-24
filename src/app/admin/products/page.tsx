@@ -12,11 +12,13 @@ import {
   saveNewProduct,
   updateStoredProduct,
   deleteStoredProduct,
+  toggleStoredProductStatus,
+  toggleStoredProductFeatured,
   getStoredCategories,
 } from "@/lib/data/orderStore";
 import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
-import { Plus, Search, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye } from "lucide-react";
+import { Plus, Search, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -53,6 +55,7 @@ export default function AdminProductsPage() {
   const [editCare, setEditCare] = useState("");
   const [editExtraSpecs, setEditExtraSpecs] = useState("");
   const [editImpact, setEditImpact] = useState("");
+  const [editFeatured, setEditFeatured] = useState(false);
 
   // Quick Add Form States
   const [addName, setAddName] = useState("");
@@ -61,6 +64,7 @@ export default function AdminProductsPage() {
   const [addStock, setAddStock] = useState<number>(20);
   const [addCategory, setAddCategory] = useState("cat-1");
   const [addImageUrl, setAddImageUrl] = useState("/images/products/pounch_1.png");
+  const [addFeatured, setAddFeatured] = useState(true);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -82,11 +86,17 @@ export default function AdminProductsPage() {
   const handleToggleStatus = (productId: string) => {
     const target = products.find((p) => p.product_id === productId);
     if (!target) return;
-    const updated: ExtendedProduct = {
-      ...target,
-      status: target.status === "active" ? "draft" : "active",
-    };
-    updateStoredProduct(updated);
+    const newStatus = target.status === "active" ? "draft" : "active";
+    toggleStoredProductStatus(productId, newStatus);
+    setProducts(getStoredProducts());
+  };
+
+  // Toggle featured status for homepage
+  const handleToggleFeatured = (productId: string) => {
+    const target = products.find((p) => p.product_id === productId);
+    if (!target) return;
+    const newFeatured = !target.featured;
+    toggleStoredProductFeatured(productId, newFeatured);
     setProducts(getStoredProducts());
   };
 
@@ -103,6 +113,7 @@ export default function AdminProductsPage() {
         .join("\n")
     );
     setEditImpact(parsed.impactStory || p.impact_story || "");
+    setEditFeatured(p.featured ?? false);
     setEditingProduct(p);
   };
 
@@ -147,6 +158,7 @@ export default function AdminProductsPage() {
       description: fullDescription,
       impact_story: editImpact.trim() || undefined,
       specs: newSpecs,
+      featured: editFeatured,
     };
 
     updateStoredProduct(updated);
@@ -191,7 +203,7 @@ export default function AdminProductsPage() {
       compare_at_price: null,
       cost_price: addCostPrice,
       status: "active",
-      featured: false,
+      featured: addFeatured,
       sort_order: products.length + 1,
       weight_gram: 100,
       thumbnail: addImageUrl,
@@ -229,6 +241,7 @@ export default function AdminProductsPage() {
     setAddPrice(85000);
     setAddCostPrice(35000);
     setAddStock(20);
+    setAddFeatured(true);
   };
 
   return (
@@ -240,8 +253,14 @@ export default function AdminProductsPage() {
             Quản lý sản phẩm & Hàng hóa
           </h1>
           <p className="text-xs text-[#7E7068] mt-0.5">
-            Xem danh sách, thêm mới, sửa giá, kiểm soát tồn kho và cập nhật trạng thái sản phẩm.
+            Xem danh sách, thêm mới, sửa giá, kiểm soát tồn kho và cập nhật trạng thái sản phẩm đồng bộ cơ sở dữ liệu.
           </p>
+          <div className="mt-2 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3 py-1.5 inline-flex items-center gap-2">
+            <span>💡</span>
+            <span>
+              Sản phẩm <strong>&quot;Đang bán&quot;</strong> sẽ hiển thị trên trang Tất cả sản phẩm. Bật thêm <strong>&quot;⭐ Nổi bật&quot;</strong> để đưa sản phẩm lên khu vực nổi bật trên Trang chủ.
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -314,7 +333,8 @@ export default function AdminProductsPage() {
                 <th className="py-2.5 px-2.5">Danh mục</th>
                 <th className="py-2.5 px-2.5">Giá bán / Giá vốn</th>
                 <th className="py-2.5 px-2.5">Tổng tồn kho</th>
-                <th className="py-2.5 px-2.5">Trạng thái</th>
+                <th className="py-2.5 px-2.5">Bán hàng</th>
+                <th className="py-2.5 px-2.5">Trang chủ</th>
                 <th className="py-2.5 px-3 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -369,12 +389,29 @@ export default function AdminProductsPage() {
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <button
                         onClick={() => handleToggleStatus(p.product_id)}
-                        className="cursor-pointer"
-                        title="Bấm để đổi trạng thái"
+                        className="cursor-pointer transition-transform active:scale-95"
+                        title="Bấm để chuyển đổi Đang bán / Nháp"
                       >
                         <Badge variant={p.status === "active" ? "brand" : "default"} className="text-[10px] px-2 py-0.5">
                           {p.status === "active" ? "Đang bán" : "Nháp"}
                         </Badge>
+                      </button>
+                    </td>
+
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <button
+                        onClick={() => handleToggleFeatured(p.product_id)}
+                        className="cursor-pointer transition-transform active:scale-95"
+                        title="Bấm để bật/tắt hiển thị Nổi bật trên Trang chủ"
+                      >
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border transition-colors ${
+                          p.featured
+                            ? "bg-amber-100 text-amber-900 border-amber-300"
+                            : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
+                        }`}>
+                          <Star className={`w-3 h-3 ${p.featured ? "text-amber-600 fill-amber-500" : "text-gray-400"}`} />
+                          <span>{p.featured ? "Nổi bật" : "Thường"}</span>
+                        </span>
                       </button>
                     </td>
 
@@ -527,6 +564,18 @@ export default function AdminProductsPage() {
                     <option value="active">Đang bán (Active)</option>
                     <option value="draft">Bản nháp (Draft)</option>
                   </select>
+
+                  <label className="flex items-center gap-2 cursor-pointer pt-2">
+                    <input
+                      type="checkbox"
+                      checked={editFeatured}
+                      onChange={(e) => setEditFeatured(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-[11px] font-bold text-[#342A24]">
+                      ⭐ Hiển thị nổi bật trên Trang chủ (Hero)
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -830,6 +879,20 @@ export default function AdminProductsPage() {
                   <option value="/images/products/so_tay.jpg">Sổ tay May Vá</option>
                   <option value="/images/products/set_combo_1.jpg">Set Combo 1</option>
                 </select>
+              </div>
+
+              <div className="pt-1 pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addFeatured}
+                    onChange={(e) => setAddFeatured(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-xs font-bold text-[#342A24]">
+                    ⭐ Hiển thị nổi bật trên Trang chủ (Hero Showcase)
+                  </span>
+                </label>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2.5">

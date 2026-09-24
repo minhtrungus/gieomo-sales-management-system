@@ -59,6 +59,11 @@ let cachedPayments: PaymentRecord[] | null = null;
 let cachedVouchers: Voucher[] | null = null;
 let cachedProducts: ExtendedProduct[] | null = null;
 let cachedWarehouses: Warehouse[] | null = null;
+let hasSyncedProductsWithServer = false;
+let hasSyncedCategoriesWithServer = false;
+let hasSyncedVouchersWithServer = false;
+let hasSyncedPickupPointsWithServer = false;
+let hasSyncedContactMessagesWithServer = false;
 
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return MOCK_ORDERS;
@@ -513,8 +518,35 @@ export const SEED_PICKUP_POINTS: PickupPoint[] = [
   },
 ];
 
+export function syncPickupPointsFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedPickupPointsWithServer) return;
+  hasSyncedPickupPointsWithServer = true;
+  fetch("/api/pickup-points")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.pickup_points) && data.pickup_points.length > 0) {
+        const current = getStoredPickupPoints();
+        const merged = [...current];
+        for (const p of data.pickup_points) {
+          const idx = merged.findIndex((m) => m.pickup_point_id === p.pickup_point_id || m.name === p.name);
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...p };
+          } else {
+            merged.push(p);
+          }
+        }
+        localStorage.setItem("gieomo_pickup_points", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_pickup_points_updated"));
+      }
+    })
+    .catch((err) => console.warn("Could not sync pickup points from server:", err));
+}
+
 export function getStoredPickupPoints(): PickupPoint[] {
   if (typeof window === "undefined") return SEED_PICKUP_POINTS;
+  if (!hasSyncedPickupPointsWithServer) {
+    syncPickupPointsFromServer();
+  }
   try {
     const raw = localStorage.getItem("gieomo_pickup_points");
     if (!raw) {
@@ -540,6 +572,13 @@ export function saveStoredPickupPoint(point: PickupPoint): void {
     }
     localStorage.setItem("gieomo_pickup_points", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_pickup_points_updated"));
+
+    // Sync to Supabase DB in background
+    fetch("/api/pickup-points", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(point),
+    }).catch((err) => console.warn("Could not persist pickup point to server:", err));
   } catch (e) {
     console.error("Error saving pickup point", e);
   }
@@ -580,8 +619,35 @@ const SEED_CONTACT_MESSAGES: ContactMessage[] = [
   },
 ];
 
+export function syncContactMessagesFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedContactMessagesWithServer) return;
+  hasSyncedContactMessagesWithServer = true;
+  fetch("/api/contact/messages")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
+        const current = getStoredContactMessages();
+        const merged = [...current];
+        for (const m of data.messages) {
+          const idx = merged.findIndex((c) => c.id === m.id);
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...m };
+          } else {
+            merged.unshift(m);
+          }
+        }
+        localStorage.setItem("gieomo_contact_messages", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_messages_updated"));
+      }
+    })
+    .catch((err) => console.warn("Could not sync contact messages from server:", err));
+}
+
 export function getStoredContactMessages(): ContactMessage[] {
   if (typeof window === "undefined") return SEED_CONTACT_MESSAGES;
+  if (!hasSyncedContactMessagesWithServer) {
+    syncContactMessagesFromServer();
+  }
   try {
     const raw = localStorage.getItem("gieomo_contact_messages");
     if (!raw) {
@@ -643,6 +709,13 @@ export function updateContactMessageStatus(id: string, status: "unread" | "read"
     const updated = list.map((m) => (m.id === id ? { ...m, status } : m));
     localStorage.setItem("gieomo_contact_messages", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_messages_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/contact/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    }).catch((err) => console.warn("Could not update contact message status on server:", err));
   } catch (e) {
     console.error("Error updating contact message status", e);
   }
@@ -813,9 +886,37 @@ export function updateOrderShipper(
 // VOUCHERS STORE (BÁN HÀNG & QUẢN TRỊ ƯU ĐÃI)
 // ==========================================
 
+export function syncVouchersFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedVouchersWithServer) return;
+  hasSyncedVouchersWithServer = true;
+  fetch("/api/vouchers")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.vouchers) && data.vouchers.length > 0) {
+        const current = getStoredVouchers();
+        const merged = [...current];
+        for (const v of data.vouchers) {
+          const idx = merged.findIndex((m) => m.voucher_id === v.voucher_id || m.code === v.code);
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...v };
+          } else {
+            merged.push({ ...v, visibility: v.visibility || "public" });
+          }
+        }
+        cachedVouchers = merged;
+        localStorage.setItem("gieomo_vouchers", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+      }
+    })
+    .catch((err) => console.warn("Could not sync vouchers from server:", err));
+}
+
 export function getStoredVouchers(): Voucher[] {
   if (typeof window === "undefined") {
     return MOCK_VOUCHERS.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+  }
+  if (!hasSyncedVouchersWithServer) {
+    syncVouchersFromServer();
   }
   if (cachedVouchers !== null) return cachedVouchers;
   try {
@@ -843,31 +944,47 @@ export function getStoredVouchers(): Voucher[] {
 }
 
 export function saveNewVoucher(voucher: Voucher): void {
+  const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
   try {
     const list = getStoredVouchers();
     const updated = [
-      { ...voucher, visibility: voucher.visibility || "public" },
+      voucherToSave,
       ...list.filter((v) => v.voucher_id !== voucher.voucher_id && v.code !== voucher.code),
     ];
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/vouchers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(voucherToSave),
+    }).catch((err) => console.warn("Could not persist voucher to server:", err));
   } catch (e) {
     console.error("Error saving new voucher", e);
   }
 }
 
 export function updateStoredVoucher(voucher: Voucher): void {
+  const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
   try {
     const list = getStoredVouchers();
     const updated = list.map((v) =>
-      v.voucher_id === voucher.voucher_id ? { ...voucher, visibility: voucher.visibility || "public" } : v
+      v.voucher_id === voucher.voucher_id ? voucherToSave : v
     );
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/vouchers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(voucherToSave),
+    }).catch((err) => console.warn("Could not update voucher on server:", err));
   } catch (e) {
     console.error("Error updating voucher", e);
   }
@@ -890,8 +1007,50 @@ export function deleteStoredVoucher(voucherId: string): void {
 // PRODUCTS STORE (TOÀN BỘ SẢN PHẨM & CỬA HÀNG)
 // ==========================================
 
+export function syncProductsFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedProductsWithServer) return;
+  hasSyncedProductsWithServer = true;
+  fetch("/api/products?admin=true")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
+        const current = getStoredProducts();
+        const merged = [...current];
+
+        for (const sProd of data.products) {
+          const idx = merged.findIndex(
+            (p) => p.product_id === sProd.product_id || p.slug === sProd.slug
+          );
+          if (idx >= 0) {
+            merged[idx] = {
+              ...merged[idx],
+              ...sProd,
+              images: sProd.images?.length > 0 ? sProd.images : merged[idx].images,
+              specs: merged[idx].specs || sProd.specs,
+              impact_story: sProd.impact_story || merged[idx].impact_story,
+              badge: merged[idx].badge || sProd.badge,
+              badge_label: merged[idx].badge_label || sProd.badge_label,
+            };
+          } else {
+            merged.push(sProd);
+          }
+        }
+
+        cachedProducts = merged;
+        localStorage.setItem("gieomo_products", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_products_updated"));
+      }
+    })
+    .catch((err) => {
+      console.warn("Could not sync products from server:", err);
+    });
+}
+
 export function getStoredProducts(): ExtendedProduct[] {
   if (typeof window === "undefined") return MOCK_PRODUCTS;
+  if (!hasSyncedProductsWithServer) {
+    syncProductsFromServer();
+  }
   if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
@@ -949,6 +1108,13 @@ export function saveNewProduct(product: ExtendedProduct): void {
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_products_updated"));
+
+    // Sync to Supabase DB in background
+    fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(productToSave),
+    }).catch((err) => console.warn("Could not persist new product to server:", err));
   } catch (e) {
     console.error("Error saving new product", e);
   }
@@ -969,8 +1135,61 @@ export function updateStoredProduct(product: ExtendedProduct): void {
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_products_updated"));
+
+    // Sync to Supabase DB in background
+    fetch("/api/products", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: product.product_id, product }),
+    }).catch((err) => console.warn("Could not update product on server:", err));
   } catch (e) {
     console.error("Error updating product", e);
+  }
+}
+
+export function toggleStoredProductStatus(productId: string, newStatus: "active" | "draft"): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredProducts();
+    const target = list.find((p) => p.product_id === productId);
+    if (!target) return;
+    const updated: ExtendedProduct = {
+      ...target,
+      status: newStatus,
+    };
+    updateStoredProduct(updated);
+
+    // Call dedicated PATCH endpoint
+    fetch("/api/products", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: productId, status: newStatus }),
+    }).catch((err) => console.warn("Could not toggle status on server:", err));
+  } catch (e) {
+    console.error("Error toggling product status", e);
+  }
+}
+
+export function toggleStoredProductFeatured(productId: string, newFeatured: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredProducts();
+    const target = list.find((p) => p.product_id === productId);
+    if (!target) return;
+    const updated: ExtendedProduct = {
+      ...target,
+      featured: newFeatured,
+    };
+    updateStoredProduct(updated);
+
+    // Call dedicated PATCH endpoint
+    fetch("/api/products", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: productId, featured: newFeatured }),
+    }).catch((err) => console.warn("Could not toggle featured on server:", err));
+  } catch (e) {
+    console.error("Error toggling product featured", e);
   }
 }
 
@@ -985,6 +1204,11 @@ export function deleteStoredProduct(productId: string): void {
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_products_updated"));
+
+    // Sync deletion to Supabase
+    fetch(`/api/products?id=${encodeURIComponent(productId)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete product on server:", err));
   } catch (e) {
     console.error("Error deleting product", e);
   }
@@ -1270,8 +1494,36 @@ export function saveStoredSettings(settings: Partial<SiteSettings>): void {
 
 let cachedCategories: ProductCategory[] | null = null;
 
+export function syncCategoriesFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedCategoriesWithServer) return;
+  hasSyncedCategoriesWithServer = true;
+  fetch("/api/categories")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
+        const current = getStoredCategories();
+        const merged = [...current];
+        for (const cat of data.categories) {
+          const idx = merged.findIndex((m) => m.category_id === cat.category_id || m.slug === cat.slug);
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...cat };
+          } else {
+            merged.push(cat);
+          }
+        }
+        cachedCategories = merged;
+        localStorage.setItem("gieomo_categories", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_categories_updated"));
+      }
+    })
+    .catch((err) => console.warn("Could not sync categories from server:", err));
+}
+
 export function getStoredCategories(): ProductCategory[] {
   if (typeof window === "undefined") return MOCK_CATEGORIES;
+  if (!hasSyncedCategoriesWithServer) {
+    syncCategoriesFromServer();
+  }
   if (cachedCategories !== null) return cachedCategories;
   try {
     const raw = localStorage.getItem("gieomo_categories");
@@ -1304,6 +1556,13 @@ export function saveNewCategory(cat: ProductCategory): void {
     cachedCategories = updated;
     localStorage.setItem("gieomo_categories", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cat),
+    }).catch((err) => console.warn("Could not persist category to server:", err));
   } catch (e) {
     console.error("Error saving new category", e);
   }
@@ -1317,6 +1576,13 @@ export function updateStoredCategory(cat: ProductCategory): void {
     cachedCategories = updated;
     localStorage.setItem("gieomo_categories", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cat),
+    }).catch((err) => console.warn("Could not update category on server:", err));
   } catch (e) {
     console.error("Error updating category", e);
   }

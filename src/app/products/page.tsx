@@ -46,8 +46,13 @@ export default function ProductsPage() {
       .filter((product) => {
         // Category Filter
         if (selectedCategory !== "all") {
-          const catSlug = product.category?.slug || (product.category_id === "cat-1" ? "tui-pouch" : product.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
-          if (catSlug !== selectedCategory) {
+          const cat = categories.find((c) => c.slug === selectedCategory || c.category_id === selectedCategory);
+          const matchCategory =
+            product.category?.slug === selectedCategory ||
+            product.category?.category_id === selectedCategory ||
+            product.category_id === selectedCategory ||
+            (cat ? product.category_id === cat.category_id : false);
+          if (!matchCategory) {
             return false;
           }
         }
