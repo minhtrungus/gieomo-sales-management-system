@@ -1,6 +1,6 @@
 import type { OrderStatus, PaymentStatus, DeliveryStatus } from "@/types/database";
 
-export const DEFAULT_SITE_URL = "https://www.gieomo.store";
+export const DEFAULT_SITE_URL = "https://gieomo.store";
 
 /**
  * Official store schema configuration and social media profiles (Mầm Mơ).
@@ -8,8 +8,8 @@ export const DEFAULT_SITE_URL = "https://www.gieomo.store";
 export const OFFICIAL_STORE_CONFIG = {
   name: "Gieo Mơ",
   alternateName: "Tạp hoá Gây quỹ Mầm Mơ",
-  url: "https://www.gieomo.store",
-  logo: "https://www.gieomo.store/images/logo_gieo%20m%C6%A1.jpg",
+  url: "https://gieomo.store",
+  logo: "https://gieomo.store/images/logo_gieo%20m%C6%A1.jpg",
   description:
     "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ với các sản phẩm may vá handmade độc bản. Mỗi sản phẩm bạn rước về là một điều ước được gieo cho các em nhỏ vùng cao.",
   socialLinks: {
@@ -29,12 +29,12 @@ export const OFFICIAL_SAME_AS: string[] = [
 ];
 
 /**
- * Returns the canonical base URL of the site, preventing vercel.app domain leaks.
+ * Returns the canonical base URL of the site, preventing vercel.app domain leaks and ensuring non-www.
  */
 export function getSiteUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (envUrl && !envUrl.includes("vercel.app")) {
-    return envUrl.replace(/\/$/, "");
+    return envUrl.replace(/\/$/, "").replace(/^https?:\/\/www\./, "https://");
   }
   if (process.env.NODE_ENV === "development" && envUrl?.includes("localhost")) {
     return envUrl.replace(/\/$/, "");

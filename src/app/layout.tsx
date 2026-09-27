@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "vi_VN",
     siteName: "Gieo Mơ",
-    url: "https://www.gieomo.store",
+    url: "https://gieomo.store",
   },
   robots: {
     index: true,

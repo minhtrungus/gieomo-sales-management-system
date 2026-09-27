@@ -13,13 +13,13 @@ export const metadata: Metadata = {
   description:
     "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
   alternates: {
-    canonical: "https://www.gieomo.store",
+    canonical: "https://gieomo.store",
   },
   openGraph: {
     title: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
     description:
       "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
-    url: "https://www.gieomo.store",
+    url: "https://gieomo.store",
     siteName: "Gieo Mơ",
     locale: "vi_VN",
     type: "website",
