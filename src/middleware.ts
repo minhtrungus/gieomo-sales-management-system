@@ -7,13 +7,13 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
 
-  // Enforce 301 redirect from www.gieomo.store to non-www https://gieomo.store
+  // Enforce 308 permanent redirect from www.gieomo.store to non-www https://gieomo.store
   if (host.startsWith("www.gieomo.store")) {
     const url = request.nextUrl.clone();
     url.host = "gieomo.store";
     url.protocol = "https";
     url.port = "";
-    return NextResponse.redirect(url, 301);
+    return NextResponse.redirect(url, 308);
   }
 
   return NextResponse.next();

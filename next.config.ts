@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
           },
         ],
         destination: "https://gieomo.store/:path*",
-        statusCode: 301,
+        permanent: true,
       },
     ];
   },

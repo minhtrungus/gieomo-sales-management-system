@@ -19,6 +19,9 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
+  alternates: {
+    canonical: "./",
+  },
   title: {
     default: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
     template: "%s | Gieo Mơ",
