@@ -141,16 +141,19 @@ function TrackContent() {
     // 2. Query Supabase database via API
     try {
       const res = await fetch(`/api/orders?code=${encodeURIComponent(upperQuery)}`);
-      const data = await res.json();
-      if (data?.success && data?.orders && data.orders.length > 0) {
-        const dbOrder = mapServerOrder(data.orders[0]);
-        setMatchedOrders([dbOrder]);
-        setSelectedOrder(dbOrder);
-        setDeviceOrders((prev) => [dbOrder, ...prev.filter((p) => p.order_code !== dbOrder.order_code)]);
-        return;
+      if (res.ok) {
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        if (data?.success && data?.orders && data.orders.length > 0) {
+          const dbOrder = mapServerOrder(data.orders[0]);
+          setMatchedOrders([dbOrder]);
+          setSelectedOrder(dbOrder);
+          setDeviceOrders((prev) => [dbOrder, ...prev.filter((p) => p.order_code !== dbOrder.order_code)]);
+          return;
+        }
       }
-    } catch (e) {
-      console.warn("Could not query server orders:", e);
+    } catch {
+      // Graceful fallback to local device orders
     }
 
     setMatchedOrders([]);
@@ -212,19 +215,22 @@ function TrackContent() {
     // 2. Query Supabase DB by phone
     try {
       const res = await fetch(`/api/orders?phone=${encodeURIComponent(cleanPhone)}`);
-      const data = await res.json();
-      if (data?.success && data?.orders && data.orders.length > 0) {
-        const mappedOrders = data.orders.map(mapServerOrder);
-        const serverResults = filterByNameAndPhone(mappedOrders);
-        if (serverResults.length > 0) {
-          setMatchedOrders(serverResults);
-          if (serverResults.length === 1) setSelectedOrder(serverResults[0]);
-          else setSelectedOrder(null);
-          return;
+      if (res.ok) {
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        if (data?.success && data?.orders && data.orders.length > 0) {
+          const mappedOrders = data.orders.map(mapServerOrder);
+          const serverResults = filterByNameAndPhone(mappedOrders);
+          if (serverResults.length > 0) {
+            setMatchedOrders(serverResults);
+            if (serverResults.length === 1) setSelectedOrder(serverResults[0]);
+            else setSelectedOrder(null);
+            return;
+          }
         }
       }
-    } catch (e) {
-      console.warn("Could not query server orders by phone:", e);
+    } catch {
+      // Graceful fallback
     }
 
     setMatchedOrders([]);

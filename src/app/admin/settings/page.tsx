@@ -63,7 +63,13 @@ export default function AdminSettingsPage() {
 
     // Fetch fresh from Supabase via API
     fetch("/api/settings")
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) return null;
+        const text = await res.text();
+        return text ? JSON.parse(text) : null;
+      })
       .then((data) => {
         if (data?.success && data?.settings) {
           const fresh = data.settings;

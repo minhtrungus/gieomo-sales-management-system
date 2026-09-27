@@ -518,11 +518,28 @@ export const SEED_PICKUP_POINTS: PickupPoint[] = [
   },
 ];
 
+/**
+ * Safely fetches and parses JSON without throwing SyntaxError on empty, aborted, or non-JSON responses.
+ * Especially crucial when search engine crawlers (like Googlebot) abort background fetches or block /api routes.
+ */
+async function safeFetchJson<T = any>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) return null;
+    const text = await res.text();
+    if (!text || !text.trim()) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 export function syncPickupPointsFromServer(): void {
   if (typeof window === "undefined" || hasSyncedPickupPointsWithServer) return;
   hasSyncedPickupPointsWithServer = true;
-  fetch("/api/pickup-points")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; pickup_points: PickupPoint[] }>("/api/pickup-points")
     .then((data) => {
       if (data?.success && Array.isArray(data.pickup_points) && data.pickup_points.length > 0) {
         const current = getStoredPickupPoints();
@@ -539,7 +556,9 @@ export function syncPickupPointsFromServer(): void {
         window.dispatchEvent(new Event("gieomo_pickup_points_updated"));
       }
     })
-    .catch((err) => console.warn("Could not sync pickup points from server:", err));
+    .catch(() => {
+      // Graceful fallback to cached/seed data
+    });
 }
 
 export function getStoredPickupPoints(): PickupPoint[] {
@@ -622,8 +641,7 @@ const SEED_CONTACT_MESSAGES: ContactMessage[] = [
 export function syncContactMessagesFromServer(): void {
   if (typeof window === "undefined" || hasSyncedContactMessagesWithServer) return;
   hasSyncedContactMessagesWithServer = true;
-  fetch("/api/contact/messages")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; messages: ContactMessage[] }>("/api/contact/messages")
     .then((data) => {
       if (data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
         const current = getStoredContactMessages();
@@ -640,7 +658,9 @@ export function syncContactMessagesFromServer(): void {
         window.dispatchEvent(new Event("gieomo_messages_updated"));
       }
     })
-    .catch((err) => console.warn("Could not sync contact messages from server:", err));
+    .catch(() => {
+      // Graceful fallback
+    });
 }
 
 export function getStoredContactMessages(): ContactMessage[] {
@@ -889,8 +909,7 @@ export function updateOrderShipper(
 export function syncVouchersFromServer(): void {
   if (typeof window === "undefined" || hasSyncedVouchersWithServer) return;
   hasSyncedVouchersWithServer = true;
-  fetch("/api/vouchers")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; vouchers: Voucher[] }>("/api/vouchers")
     .then((data) => {
       if (data?.success && Array.isArray(data.vouchers) && data.vouchers.length > 0) {
         const current = getStoredVouchers();
@@ -908,7 +927,9 @@ export function syncVouchersFromServer(): void {
         window.dispatchEvent(new Event("gieomo_vouchers_updated"));
       }
     })
-    .catch((err) => console.warn("Could not sync vouchers from server:", err));
+    .catch(() => {
+      // Graceful fallback
+    });
 }
 
 export function getStoredVouchers(): Voucher[] {
@@ -1010,8 +1031,7 @@ export function deleteStoredVoucher(voucherId: string): void {
 export function syncProductsFromServer(): void {
   if (typeof window === "undefined" || hasSyncedProductsWithServer) return;
   hasSyncedProductsWithServer = true;
-  fetch("/api/products?admin=true")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; products: ExtendedProduct[] }>("/api/products?admin=true")
     .then((data) => {
       if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
         const current = getStoredProducts();
@@ -1057,8 +1077,8 @@ export function syncProductsFromServer(): void {
         window.dispatchEvent(new Event("gieomo_products_updated"));
       }
     })
-    .catch((err) => {
-      console.warn("Could not sync products from server:", err);
+    .catch(() => {
+      // Graceful fallback to cached/mock products
     });
 }
 
@@ -1474,8 +1494,7 @@ let hasSyncedSettingsWithServer = false;
 export function syncSettingsFromServer(): void {
   if (typeof window === "undefined" || hasSyncedSettingsWithServer) return;
   hasSyncedSettingsWithServer = true;
-  fetch("/api/settings")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; settings: Partial<SiteSettings> }>("/api/settings")
     .then((data) => {
       if (data?.success && data?.settings) {
         cachedSettings = { ...DEFAULT_SETTINGS, ...data.settings };
@@ -1483,8 +1502,8 @@ export function syncSettingsFromServer(): void {
         window.dispatchEvent(new Event("gieomo_settings_updated"));
       }
     })
-    .catch((err) => {
-      console.warn("Could not sync settings from server:", err);
+    .catch(() => {
+      // Graceful fallback to default/cached settings
     });
 }
 
@@ -1540,8 +1559,7 @@ let cachedCategories: ProductCategory[] | null = null;
 export function syncCategoriesFromServer(): void {
   if (typeof window === "undefined" || hasSyncedCategoriesWithServer) return;
   hasSyncedCategoriesWithServer = true;
-  fetch("/api/categories")
-    .then((res) => res.json())
+  safeFetchJson<{ success: boolean; categories: ProductCategory[] }>("/api/categories")
     .then((data) => {
       if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
         const current = getStoredCategories();
@@ -1564,7 +1582,9 @@ export function syncCategoriesFromServer(): void {
         window.dispatchEvent(new Event("gieomo_categories_updated"));
       }
     })
-    .catch((err) => console.warn("Could not sync categories from server:", err));
+    .catch(() => {
+      // Graceful fallback to cached/mock categories
+    });
 }
 
 export function getStoredCategories(): ProductCategory[] {
