@@ -40,28 +40,61 @@ export default function ProductsPage() {
   const uniqueCategories = useMemo(() => {
     const map = new Map<string, ProductCategory>();
     for (const cat of categories) {
-      if (!map.has(cat.slug)) {
+      if (cat.slug && !map.has(cat.slug)) {
         map.set(cat.slug, cat);
       }
     }
     return Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [categories]);
 
+  // Helper to determine product category slug cleanly without hardcoded fallbacks
+  const getProductCategorySlug = (product: ExtendedProduct): string | null => {
+    if (product.category?.slug) return product.category.slug;
+    if (product.category_id) {
+      const matched = categories.find((c) => c.category_id === product.category_id);
+      if (matched?.slug) return matched.slug;
+    }
+    return null;
+  };
+
   // Only active products are visible on the public storefront
   const activeProducts = useMemo(() => {
     return products.filter((p) => p.status === "active");
   }, [products]);
 
+  // Products with no category
+  const uncategorizedCount = useMemo(() => {
+    return activeProducts.filter((p) => !getProductCategorySlug(p)).length;
+  }, [activeProducts, categories]);
+
+  // If selected category does not exist, or system has no categories -> fallback to "all" (mặc định hiển thị tất cả)
+  useEffect(() => {
+    if (selectedCategory !== "all") {
+      if (selectedCategory === "uncategorized") {
+        if (uncategorizedCount === 0) setSelectedCategory("all");
+      } else {
+        const exists = uniqueCategories.some((c) => c.slug === selectedCategory);
+        if (!exists) {
+          setSelectedCategory("all");
+        }
+      }
+    }
+  }, [uniqueCategories, selectedCategory, uncategorizedCount]);
+
   const filteredProducts = useMemo(() => {
     return activeProducts
       .filter((product) => {
-        // Category Filter
-        if (selectedCategory !== "all") {
-          const cSlug =
-            product.category?.slug ||
-            (product.category_id === "cat-1" ? "tui-pouch" : product.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
-          if (cSlug !== selectedCategory) {
-            return false;
+        // Category Filter:
+        // Nếu không có danh mục trong hệ thống, hoặc chọn "Tất cả",
+        // hoặc sản phẩm không thuộc danh mục nào -> mặc định hiển thị tất cả
+        if (selectedCategory !== "all" && uniqueCategories.length > 0) {
+          const cSlug = getProductCategorySlug(product);
+          if (selectedCategory === "uncategorized") {
+            if (cSlug) return false;
+          } else {
+            if (!cSlug || cSlug !== selectedCategory) {
+              return false;
+            }
           }
         }
         // Search Query
@@ -80,7 +113,7 @@ export default function ProductsPage() {
         if (sortBy === "newest") return b.sort_order - a.sort_order;
         return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
       });
-  }, [activeProducts, selectedCategory, debouncedSearch, sortBy]);
+  }, [activeProducts, selectedCategory, uniqueCategories, debouncedSearch, sortBy, categories]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
@@ -111,7 +144,7 @@ export default function ProductsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm pouch, kẹp tóc, móc khóa..."
+                placeholder="Bạn tìm gì nèee..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-[#F0E5D8] focus:border-[#FFB98A] text-xs sm:text-sm outline-none transition-all bg-[#FFFDF9]"
               />
             </div>
@@ -147,10 +180,7 @@ export default function ProductsPage() {
               Tất cả <span suppressHydrationWarning>({activeProducts.length})</span>
             </button>
             {uniqueCategories.map((cat) => {
-              const count = activeProducts.filter((p) => {
-                const cSlug = p.category?.slug || (p.category_id === "cat-1" ? "tui-pouch" : p.category_id === "cat-2" ? "phu-kien-may-va" : "qua-tang");
-                return cSlug === cat.slug;
-              }).length;
+              const count = activeProducts.filter((p) => getProductCategorySlug(p) === cat.slug).length;
               return (
                 <button
                   key={cat.slug}
@@ -165,6 +195,18 @@ export default function ProductsPage() {
                 </button>
               );
             })}
+            {uncategorizedCount > 0 && uniqueCategories.length > 0 && (
+              <button
+                onClick={() => setSelectedCategory("uncategorized")}
+                className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === "uncategorized"
+                    ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
+                    : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
+                }`}
+              >
+                Khác / Chưa phân loại <span suppressHydrationWarning>({uncategorizedCount})</span>
+              </button>
+            )}
           </div>
         </div>
 

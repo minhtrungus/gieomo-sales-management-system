@@ -59,7 +59,7 @@ export default function HomePage() {
                 {/* Floating Campaign Badge - Crisp bg without backdrop-filter to prevent layer invalidation */}
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float">
                   <Sparkles className="w-3.5 h-3.5 text-[#FFB98A]" />
-                  <span>Dự án gây quỹ của Mầm Mơ</span>
+                  <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
                 </div>
 
                 {/* Main Headline */}

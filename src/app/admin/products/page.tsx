@@ -58,10 +58,35 @@ export default function AdminProductsPage() {
   const [editImagesText, setEditImagesText] = useState("");
   const [editVariants, setEditVariants] = useState<any[]>([]);
 
+  // Count uncategorized products in admin
+  const uncategorizedCount = useMemo(() => {
+    return products.filter((p) => {
+      const prodCatId = p.category?.category_id || p.category_id;
+      return !prodCatId || !categories.some((c) => c.category_id === prodCatId);
+    }).length;
+  }, [products, categories]);
+
+  // If selected category does not exist, fallback to "all" (mặc định hiển thị tất cả)
+  useEffect(() => {
+    if (selectedCategory !== "all" && selectedCategory !== "uncategorized") {
+      const exists = categories.some((c) => c.category_id === selectedCategory);
+      if (!exists) {
+        setSelectedCategory("all");
+      }
+    }
+  }, [categories, selectedCategory]);
+
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      if (selectedCategory !== "all" && p.category?.category_id !== selectedCategory) {
-        return false;
+      if (selectedCategory !== "all") {
+        const prodCatId = p.category?.category_id || p.category_id;
+        if (selectedCategory === "uncategorized") {
+          if (prodCatId && categories.some((c) => c.category_id === prodCatId)) {
+            return false;
+          }
+        } else if (prodCatId !== selectedCategory) {
+          return false;
+        }
       }
       if (
         searchQuery.trim() !== "" &&
@@ -72,7 +97,7 @@ export default function AdminProductsPage() {
       }
       return true;
     });
-  }, [products, selectedCategory, searchQuery]);
+  }, [products, selectedCategory, searchQuery, categories]);
 
   // Toggle active/draft status
   const handleToggleStatus = (productId: string) => {
@@ -253,6 +278,18 @@ export default function AdminProductsPage() {
               {cat.name}
             </button>
           ))}
+          {uncategorizedCount > 0 && (
+            <button
+              onClick={() => setSelectedCategory("uncategorized")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                selectedCategory === "uncategorized"
+                  ? "bg-amber-100 text-amber-950 border border-amber-300 font-extrabold"
+                  : "bg-amber-50/80 text-amber-800 hover:bg-amber-100 border border-amber-200"
+              }`}
+            >
+              Chưa phân loại ({uncategorizedCount})
+            </button>
+          )}
           <Link
             href="/admin/categories"
             className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
