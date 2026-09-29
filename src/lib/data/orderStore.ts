@@ -15,44 +15,7 @@ export interface PaymentRecord {
   createdAt: string;
 }
 
-const SEED_PAYMENTS: PaymentRecord[] = [
-  {
-    paymentId: "pay-369817",
-    orderCode: "GM-369817",
-    amount: 110000,
-    paymentMethod: "banking",
-    transactionCode: "MB-3698170",
-    status: "pending",
-    createdAt: "Vừa xong",
-  },
-  {
-    paymentId: "pay-1",
-    orderCode: "GM-260901",
-    amount: 145000,
-    paymentMethod: "banking",
-    transactionCode: "MB-8891231",
-    status: "paid",
-    createdAt: "14:30 21/09/2026",
-  },
-  {
-    paymentId: "pay-2",
-    orderCode: "GM-260902",
-    amount: 85000,
-    paymentMethod: "banking",
-    transactionCode: "MB-8891235",
-    status: "pending",
-    createdAt: "09:15 22/09/2026",
-  },
-  {
-    paymentId: "pay-3",
-    orderCode: "GM-260904",
-    amount: 145000,
-    paymentMethod: "banking",
-    transactionCode: "MB-8891240",
-    status: "pending",
-    createdAt: "15:20 22/09/2026",
-  },
-];
+const SEED_PAYMENTS: PaymentRecord[] = [];
 
 let cachedOrders: Order[] | null = null;
 let cachedPayments: PaymentRecord[] | null = null;
@@ -66,30 +29,11 @@ let hasSyncedPickupPointsWithServer = false;
 let hasSyncedContactMessagesWithServer = false;
 
 export function getStoredOrders(): Order[] {
-  if (typeof window === "undefined") return MOCK_ORDERS;
+  if (typeof window === "undefined") return [];
   if (cachedOrders !== null) return cachedOrders;
   try {
-    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_orders");
-    if (isCleaned) {
-      const orders: Order[] = raw ? JSON.parse(raw) : [];
-      cachedOrders = orders;
-      return orders;
-    }
-    let orders: Order[] = raw ? JSON.parse(raw) : [...MOCK_ORDERS];
-
-    // Ensure all seed orders (GM-369817, Mai Lan's 15 orders, etc.) are present
-    let hasAdded = false;
-    for (const mockOrd of MOCK_ORDERS) {
-      if (!orders.some((o) => o.order_code === mockOrd.order_code)) {
-        orders.push(mockOrd);
-        hasAdded = true;
-      }
-    }
-
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_orders", JSON.stringify(orders));
-    }
+    const orders: Order[] = raw ? JSON.parse(raw) : [];
     cachedOrders = orders;
     return orders;
   } catch (e) {
@@ -445,24 +389,11 @@ export function updateStoredOrderWarehouse(orderId: string, warehouseId: string)
 }
 
 export function getStoredPayments(): PaymentRecord[] {
-  if (typeof window === "undefined") return SEED_PAYMENTS;
+  if (typeof window === "undefined") return [];
   if (cachedPayments !== null) return cachedPayments;
   try {
-    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_payments");
-    if (isCleaned) {
-      const payments: PaymentRecord[] = raw ? JSON.parse(raw) : [];
-      cachedPayments = payments;
-      return payments;
-    }
-    let payments: PaymentRecord[] = raw ? JSON.parse(raw) : [...SEED_PAYMENTS];
-    const targetPay = SEED_PAYMENTS.find((p) => p.orderCode === "GM-369817");
-    if (targetPay && !payments.some((p) => p.orderCode === "GM-369817")) {
-      payments = [targetPay, ...payments];
-      localStorage.setItem("gieomo_payments", JSON.stringify(payments));
-    } else if (!raw) {
-      localStorage.setItem("gieomo_payments", JSON.stringify(payments));
-    }
+    const payments: PaymentRecord[] = raw ? JSON.parse(raw) : [];
     cachedPayments = payments;
     return payments;
   } catch (e) {
@@ -629,26 +560,7 @@ export function deleteStoredPickupPoint(pointId: string): void {
 
 // === CONTACT MESSAGES STORE ===
 
-const SEED_CONTACT_MESSAGES: ContactMessage[] = [
-  {
-    id: "msg-1",
-    name: "Đặng Thị Thảo",
-    email: "thaodang@gmail.com",
-    phone: "0908123456",
-    message: "Chào Mầm Mơ, mình là cựu sinh viên muốn tài trợ thêm 20 túi vải cho các em học sinh ở điểm trường miền núi. Bên mình có hỗ trợ xuất hoá đơn hoặc giấy chứng nhận đóng góp không ạ?",
-    status: "unread",
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-  {
-    id: "msg-2",
-    name: "Vũ Hải Nam",
-    email: "hainam.vu@company.vn",
-    phone: "0918765432",
-    message: "Doanh nghiệp của mình muốn đặt 50 set combo quà tặng cuối năm cho nhân viên, vui lòng liên hệ lại mình qua SĐT nhé!",
-    status: "read",
-    created_at: new Date(Date.now() - 3600000 * 28).toISOString(),
-  },
-];
+const SEED_CONTACT_MESSAGES: ContactMessage[] = [];
 
 export function syncContactMessagesFromServer(): void {
   if (typeof window === "undefined" || hasSyncedContactMessagesWithServer) return;
@@ -676,19 +588,15 @@ export function syncContactMessagesFromServer(): void {
 }
 
 export function getStoredContactMessages(): ContactMessage[] {
-  if (typeof window === "undefined") return SEED_CONTACT_MESSAGES;
+  if (typeof window === "undefined") return [];
   if (!hasSyncedContactMessagesWithServer) {
     syncContactMessagesFromServer();
   }
   try {
     const raw = localStorage.getItem("gieomo_contact_messages");
-    if (!raw) {
-      localStorage.setItem("gieomo_contact_messages", JSON.stringify(SEED_CONTACT_MESSAGES));
-      return SEED_CONTACT_MESSAGES;
-    }
-    return JSON.parse(raw);
+    return raw ? JSON.parse(raw) : [];
   } catch {
-    return SEED_CONTACT_MESSAGES;
+    return [];
   }
 }
 
@@ -1870,73 +1778,18 @@ export function isAdminAuthenticated(): boolean {
 // ==========================================
 // PRODUCT REVIEWS STORE (Masked phone, Verified badge, Admin delete)
 // ==========================================
-const SEED_REVIEWS: ProductReview[] = [
-  {
-    review_id: "rev-1",
-    product_id: "prod-1",
-    author_name: "Nguyễn Thu Hà",
-    phone_masked: "0908***812",
-    rating: 5,
-    comment: "Pouch may cẩn thận từng đường kim mũi chỉ luôn á! Vải dày dặn, hoạ tiết thêu hạt mơ siêu dễ thương. Cảm ơn các bạn Mầm Mơ rất nhiều, chúc dự án lan toả thật nhiều giá trị!",
-    images: ["/images/products/pounch_1.png"],
-    is_verified_buyer: true,
-    created_at: "2026-09-15T14:30:00.000Z",
-  },
-  {
-    review_id: "rev-2",
-    product_id: "prod-1",
-    author_name: "Trần Minh Quân",
-    phone_masked: "0932***556",
-    rating: 5,
-    comment: "Đóng gói chỉn chu, có thiệp cảm ơn viết tay ấm áp. Mua làm quà tặng bạn thân ai cũng khen xinh!",
-    images: [],
-    is_verified_buyer: true,
-    created_at: "2026-09-18T09:15:00.000Z",
-  },
-  {
-    review_id: "rev-3",
-    product_id: "prod-2",
-    author_name: "Lê Bảo Trâm",
-    phone_masked: "0971***334",
-    rating: 5,
-    comment: "Kẹp tóc nút áo xinh xỉu, kẹp chắc không bị tuột tóc. Nhận hàng là muốn mua thêm mấy màu nữa để mix đồ luôn.",
-    images: ["/images/products/kep_toc.jpg"],
-    is_verified_buyer: true,
-    created_at: "2026-09-20T16:45:00.000Z",
-  },
-  {
-    review_id: "rev-4",
-    product_id: "prod-3",
-    author_name: "Hoàng Mai Linh",
-    phone_masked: "0912***908",
-    rating: 5,
-    comment: "Túi vải Canvas chất vải dày dặn đựng được cả laptop và sách vở. Cảm giác đeo chiếc túi mang ý nghĩa gây quỹ làm mình thấy vui cả ngày.",
-    images: ["/images/products/tui_1.png"],
-    is_verified_buyer: true,
-    created_at: "2026-09-22T11:20:00.000Z",
-  },
-];
+const SEED_REVIEWS: ProductReview[] = [];
 
 let cachedReviews: ProductReview[] | null = null;
 
 export function getStoredReviews(productId?: string): ProductReview[] {
-  if (typeof window === "undefined") {
-    return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
+  if (typeof window === "undefined") return [];
+  if (cachedReviews !== null) {
+    return productId ? cachedReviews.filter((r) => r.product_id === productId) : cachedReviews;
   }
   try {
-    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_product_reviews");
-    if (isCleaned) {
-      const list: ProductReview[] = raw ? JSON.parse(raw) : [];
-      cachedReviews = list;
-      return productId ? list.filter((r) => r.product_id === productId) : list;
-    }
-    if (!raw) {
-      localStorage.setItem("gieomo_product_reviews", JSON.stringify(SEED_REVIEWS));
-      cachedReviews = SEED_REVIEWS;
-      return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
-    }
-    const list: ProductReview[] = JSON.parse(raw);
+    const list: ProductReview[] = raw ? JSON.parse(raw) : [];
     cachedReviews = list;
     return productId ? list.filter((r) => r.product_id === productId) : list;
   } catch (e) {

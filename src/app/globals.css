@@ -84,6 +84,10 @@ body {
     line-height: 1.25;
     text-wrap: balance;
   }
+
+  p {
+    text-wrap: pretty;
+  }
 }
 
 /* Ensure footer headings are always crisp white */

@@ -51,16 +51,16 @@ export default function ContactPage() {
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 md:py-12 max-w-4xl">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 max-w-5xl">
         {/* Header section */}
         <div className="text-center space-y-3 mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold whitespace-nowrap">
             🌱 Kết nối cùng Gieo Mơ
           </div>
-          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
             Liên hệ Ban Tổ Chức Gieo Mơ
           </h1>
-          <p className="text-gray-600 text-sm max-w-xl mx-auto">
+          <p className="text-gray-600 text-xs sm:text-sm max-w-xl mx-auto text-balance">
             Bạn có câu hỏi, ý kiến đóng góp hoặc muốn đồng hành gây quỹ cùng dự án? Gửi lời nhắn cho Mầm nhé!
           </p>
         </div>

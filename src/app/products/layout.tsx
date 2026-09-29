@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Gieo Mơ | Danh mục sản phẩm thủ công gây quỹ ",
+  title: "Gieo Mơ",
   description:
     "Khám phá các sản phẩm may vá độc đáo: túi pouch, kẹp tóc... Lợi nhuận gây quỹ cho dự án Mầm Mơ.",
   alternates: {
     canonical: "/products",
   },
   openGraph: {
-    title: "Gieo Mơ | Danh mục sản phẩm thủ công gây quỹ",
+    title: "Gieo Mơ",
     description:
       "Khám phá các sản phẩm may vá độc đáo: túi pouch, kẹp tóc... Lợi nhuận gây quỹ cho dự án Mầm Mơ.",
   },

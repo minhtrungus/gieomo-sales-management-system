@@ -39,7 +39,7 @@ export function Navbar() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE] shadow-2xs">
-        <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6">
+        <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6 lg:px-8 max-w-7xl">
           {/* Brand Logo with Real Artwork */}
           <Link href="/" prefetch={true} className="flex items-center gap-3 group">
             <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFB98A] shadow-xs group-hover:scale-105 group-hover:rotate-3 transition-transform bg-white shrink-0">

@@ -271,13 +271,13 @@ function TrackContent() {
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="text-center space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold whitespace-nowrap">
           📍 Tra cứu bảo mật
         </div>
-        <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+        <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
           Tra cứu tiến độ &amp; Đơn hàng
         </h1>
-        <p className="text-gray-600 text-xs sm:text-sm max-w-xl mx-auto">
+        <p className="text-gray-600 text-xs sm:text-sm max-w-xl mx-auto text-balance">
           Nhập <strong>Mã đơn hàng</strong> hoặc kết hợp <strong>Số điện thoại + Họ tên</strong> để theo dõi tiến độ một cách bảo mật và an toàn.
         </p>
       </div>
@@ -661,7 +661,7 @@ export default function OrderTrackingPage() {
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-12 md:py-16">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl py-10 md:py-16">
         <Suspense fallback={<div className="text-center py-12">Đang tải...</div>}>
           <TrackContent />
         </Suspense>

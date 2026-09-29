@@ -23,10 +23,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "./",
   },
-  title: {
-    default: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
-    template: "%s | Gieo Mơ",
-  },
+  title: "Gieo Mơ",
   description:
     "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
   keywords: [
@@ -55,7 +52,7 @@ export const metadata: Metadata = {
     "Little Pieces Bigger Dreams",
   ],
   openGraph: {
-    title: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
+    title: "Gieo Mơ",
     description:
       "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
     type: "website",

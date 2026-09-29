@@ -42,13 +42,10 @@ export default function NotificationsPage() {
   const {
     notifications,
     unreadCount,
-    autoPushEnabled,
-    setAutoPushEnabled,
     markAsRead,
     markAsUnread,
     toggleStar,
     deleteNotifications,
-    triggerTestPush,
   } = useNotifications();
 
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -263,43 +260,6 @@ export default function NotificationsPage() {
               </p>
             </div>
           </div>
-        </div>
-
-        {/* Realtime Auto-Push Controls & Test Trigger */}
-        <div className="flex flex-wrap items-center gap-2.5 self-stretch md:self-auto">
-          {/* Toggle Auto Push Switch */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8]">
-            <span className="text-xs font-bold text-[#5C4D44]">Tự push Realtime:</span>
-            <button
-              onClick={() => setAutoPushEnabled(!autoPushEnabled)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                autoPushEnabled ? "bg-[#2D6338]" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition duration-200 ease-in-out ${
-                  autoPushEnabled ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-            <span
-              className={`text-[11px] font-extrabold ${
-                autoPushEnabled ? "text-[#2D6338]" : "text-gray-400"
-              }`}
-            >
-              {autoPushEnabled ? "BẬT" : "TẮT"}
-            </span>
-          </div>
-
-          {/* Test Push Trigger Button */}
-          <button
-            onClick={triggerTestPush}
-            className="px-3.5 py-1.5 rounded-2xl bg-[#2D6338] hover:bg-[#1E4525] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-            title="Mô phỏng 1 thông báo mới gửi tới ngay lập tức"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#FFE7A8]" />
-            <span>Bắn thông báo thử nghiệm</span>
-          </button>
         </div>
       </div>
 

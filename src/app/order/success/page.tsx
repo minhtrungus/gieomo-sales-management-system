@@ -260,13 +260,13 @@ function OrderSuccessContent() {
             💳
           </div>
           <div className="space-y-2">
-            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1">
+            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap">
               ⏳ ĐANG CHỜ CHUYỂN KHOẢN VIETQR
             </div>
-            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
               Đơn hàng đang chờ thanh toán
             </h1>
-            <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto">
+            <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
               Vui lòng quét mã VietQR bên dưới để hoàn tất giao dịch. Sau khi nhận được chuyển khoản, hệ thống sẽ tự động xác nhận đặt hàng thành công!
             </p>
           </div>
@@ -277,13 +277,13 @@ function OrderSuccessContent() {
             🎉
           </div>
           <div className="space-y-2">
-            <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1">
+            <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1 whitespace-nowrap">
               ✓ ĐÃ XÁC NHẬN ĐƠN HÀNG
             </div>
-            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
+            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
               Đặt hàng thành công!
             </h1>
-            <p className="text-gray-600 text-sm sm:text-base">
+            <p className="text-gray-600 text-sm sm:text-base text-balance">
               Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!
             </p>
           </div>
@@ -770,7 +770,7 @@ export default function OrderSuccessPage() {
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-12 md:py-16">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl py-12 md:py-16">
         <Suspense fallback={<div className="text-center py-12">Đang tải thông tin đơn hàng...</div>}>
           <OrderSuccessContent />
         </Suspense>

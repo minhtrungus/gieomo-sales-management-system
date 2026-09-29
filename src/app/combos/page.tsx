@@ -46,17 +46,17 @@ export default function CombosPage() {
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 md:py-12">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
         {/* Header */}
         <div className="max-w-2xl mb-8 space-y-2">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFE7A8] text-[#542B07] text-xs font-bold border border-[#ebd089]">
-            <Gift className="w-3.5 h-3.5 text-[#E2884E]" />
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFE7A8] text-[#542B07] text-xs font-bold border border-[#ebd089] whitespace-nowrap">
+            <Gift className="w-3.5 h-3.5 text-[#E2884E] shrink-0" />
             <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
           </div>
-          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight">
+          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight text-balance">
             Combo Gieo Mơ
           </h1>
-          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed">
+          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-pretty">
             Gieo Mơ gom góp những điều nhỏ xinh thành một món quà trọn vẹn, đủ chu đáo để đồng hành cùng bạn, đủ tinh tế để dành tặng người thương.
           </p>
         </div>
@@ -85,29 +85,29 @@ export default function CombosPage() {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-3 flex flex-col justify-between h-full">
+              <div className="flex-1 space-y-3 flex flex-col justify-between h-full w-full">
                 <div className="space-y-2">
-                  <h3 className="font-heading font-bold text-xl text-[#342A24]">
+                  <h3 className="font-heading font-bold text-xl text-[#342A24] text-balance">
                     {combo.name}
                   </h3>
-                  <p className="text-xs text-[#7E7068] leading-relaxed">
+                  <p className="text-xs text-[#7E7068] leading-relaxed text-pretty">
                     {combo.description}
                   </p>
 
                   {/* Included Items */}
                   {combo.items && (
                     <div className="pt-2">
-                      <span className="text-[10px] font-bold text-[#A89B92] uppercase tracking-wider block mb-1.5">
+                      <span className="text-[10px] font-bold text-[#A89B92] uppercase tracking-wider block mb-1.5 whitespace-nowrap">
                         Bao gồm {combo.items.length} món quà ghép:
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#5C4D44]">
                         {combo.items.map((it: any, idx: number) => (
                           <span key={idx} className="inline-flex items-center gap-1.5">
-                            <span className="px-2.5 py-1 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] font-bold text-[#342A24] text-xs">
+                            <span className="px-2.5 py-1 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] font-bold text-[#342A24] text-xs whitespace-nowrap">
                               {it.product.name} <span className="text-[#2D6338] font-black">×{it.quantity}</span>
                             </span>
                             {idx < combo.items!.length - 1 && (
-                              <span className="w-5 h-5 rounded-full bg-[#FFE7A8] text-[#542B07] font-black flex items-center justify-center text-xs shadow-2xs border border-[#ebd089]">
+                              <span className="w-5 h-5 rounded-full bg-[#FFE7A8] text-[#542B07] font-black flex items-center justify-center text-xs shadow-2xs border border-[#ebd089] shrink-0">
                                 +
                               </span>
                             )}
@@ -118,13 +118,15 @@ export default function CombosPage() {
                   )}
                 </div>
 
-                <div className="pt-4 border-t border-[#F0E5D8] flex items-center justify-between">
-                  <MoneyDisplay amount={combo.price} className="text-xl font-extrabold text-[#1B3622]" />
+                <div className="pt-4 border-t border-[#F0E5D8] flex items-center justify-between gap-3">
+                  <div className="whitespace-nowrap">
+                    <MoneyDisplay amount={combo.price} className="text-xl font-extrabold text-[#1B3622]" />
+                  </div>
                   <button
                     onClick={() => handleAddCombo(combo)}
-                    className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-bold text-xs transition-all shadow-xs border border-[#9ed4a3] active:scale-95 flex items-center gap-1.5"
+                    className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-bold text-xs transition-all shadow-xs border border-[#9ed4a3] active:scale-95 flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 shrink-0" />
                     <span>Thêm Combo</span>
                   </button>
                 </div>

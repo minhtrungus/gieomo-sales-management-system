@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
-import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword, clearAllMockData, restoreSeedMockData } from "@/lib/data/orderStore";
+import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock } from "lucide-react";
+import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
 
 export default function AdminSettingsPage() {
@@ -42,30 +42,6 @@ export default function AdminSettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordNotice, setPasswordNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  // Cleanup mock data state
-  const [includeCatalogInCleanup, setIncludeCatalogInCleanup] = useState(false);
-  const [isConfirmCleanupOpen, setIsConfirmCleanupOpen] = useState(false);
-  const [cleanupSuccessMessage, setCleanupSuccessMessage] = useState<string | null>(null);
-  const [isConfirmRestoreOpen, setIsConfirmRestoreOpen] = useState(false);
-
-  const handleExecuteCleanup = () => {
-    clearAllMockData(includeCatalogInCleanup);
-    setIsConfirmCleanupOpen(false);
-    setCleanupSuccessMessage(
-      includeCatalogInCleanup
-        ? "✓ Đã dọn dẹp sạch toàn bộ đơn hàng, thanh toán, khách hàng, đánh giá, sản phẩm và combo mẫu!"
-        : "✓ Đã dọn dẹp sạch dữ liệu giao dịch thử nghiệm! Giữ nguyên danh mục & sản phẩm sẵn sàng mở bán."
-    );
-    setTimeout(() => setCleanupSuccessMessage(null), 6000);
-  };
-
-  const handleExecuteRestore = () => {
-    restoreSeedMockData();
-    setIsConfirmRestoreOpen(false);
-    setCleanupSuccessMessage("✓ Đã khôi phục dữ liệu mẫu (Demo) thành công!");
-    setTimeout(() => setCleanupSuccessMessage(null), 6000);
-  };
 
   const handleUpdatePassword = () => {
     setPasswordNotice(null);
@@ -905,68 +881,6 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* SECTION 6: DỌN DẸP & KHỞI TẠO DỮ LIỆU VẬN HÀNH THỰC TẾ */}
-        <div className="bg-white rounded-3xl p-6 border border-red-200/80 shadow-2xs space-y-4">
-          <div className="flex items-center gap-2">
-            <Trash2 className="w-5 h-5 text-red-600" />
-            <h2 className="font-heading font-extrabold text-base text-[#231B16]">
-              6. Dọn dẹp dữ liệu thử nghiệm (Chuẩn bị mở bán thực tế)
-            </h2>
-          </div>
-          <p className="text-xs text-[#7E7068]">
-            Xóa bỏ toàn bộ đơn hàng, giao dịch VietQR, khách hàng mẫu, đánh giá và thông báo thử nghiệm để hệ thống bắt đầu với số liệu chính xác khi triển khai chiến dịch.
-          </p>
-
-          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-900 space-y-1">
-                <p className="font-bold">Lưu ý trước khi thực hiện:</p>
-                <p>
-                  Thao tác này sẽ làm sạch các bản ghi thử nghiệm. Bạn có thể chọn giữ nguyên danh mục và sản phẩm mẫu (chỉ cần đổi giá/tên/ảnh sau) hoặc xóa sạch cả sản phẩm để nhập mới từ đầu.
-                </p>
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none text-xs font-semibold text-gray-800">
-              <input
-                type="checkbox"
-                checked={includeCatalogInCleanup}
-                onChange={(e) => setIncludeCatalogInCleanup(e.target.checked)}
-                className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-gray-300"
-              />
-              <span>Xóa luôn toàn bộ danh sách sản phẩm & combo mẫu (Nhập mới 100% từ đầu)</span>
-            </label>
-          </div>
-
-          {cleanupSuccessMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 flex items-center gap-2 animate-in fade-in">
-              <span>✅</span>
-              <span>{cleanupSuccessMessage}</span>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setIsConfirmRestoreOpen(true)}
-              className="text-xs font-semibold text-gray-500 hover:text-gray-800 flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Khôi phục dữ liệu mẫu (Demo)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsConfirmCleanupOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Dọn dẹp dữ liệu thử nghiệm ➔</span>
-            </button>
-          </div>
-        </div>
-
         {saveSuccessMessage && (
           <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] font-bold flex items-center gap-2 animate-in fade-in">
             <span>✅</span>
@@ -1026,111 +940,6 @@ export default function AdminSettingsPage() {
                 className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
               >
                 Xác nhận lưu thay đổi ➔
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: XÁC NHẬN DỌN DẸP DỮ LIỆU THỬ NGHIỆM */}
-      {isConfirmCleanupOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-red-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">⚠️</span>
-                <h3 className="font-heading font-extrabold text-base text-red-900">
-                  Xác nhận dọn dẹp dữ liệu thử nghiệm?
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsConfirmCleanupOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs text-[#5C4D44] bg-red-50/60 p-4 rounded-2xl border border-red-100">
-              <p className="font-semibold text-red-950">
-                Các dữ liệu sau sẽ được xóa sạch để sẵn sàng mở bán thực tế:
-              </p>
-              <ul className="space-y-1 list-disc list-inside text-red-800">
-                <li>Toàn bộ đơn hàng test (kể cả các đơn mẫu ban đầu)</li>
-                <li>Toàn bộ giao dịch ngân hàng VietQR thử nghiệm</li>
-                <li>Danh sách khách hàng và lịch sử mua hàng test</li>
-                <li>Các đánh giá sản phẩm mẫu ban đầu</li>
-                <li>Thông báo chuông admin và tin nhắn liên hệ thử nghiệm</li>
-                {includeCatalogInCleanup && (
-                  <li className="font-bold text-red-900">Toàn bộ sản phẩm và combo mẫu hiện có</li>
-                )}
-              </ul>
-              {!includeCatalogInCleanup && (
-                <p className="text-[11px] text-emerald-800 font-semibold pt-1">
-                  ✓ Danh mục và sản phẩm mẫu sẽ ĐƯỢC GIỮ LẠI để bạn chỉnh sửa giá/ảnh thuận tiện.
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmCleanupOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteCleanup}
-                className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer"
-              >
-                Đồng ý xóa dữ liệu ➔
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: XÁC NHẬN KHÔI PHỤC DỮ LIỆU DEMO */}
-      {isConfirmRestoreOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-gray-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                  Khôi phục dữ liệu mẫu (Demo)?
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsConfirmRestoreOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-[#5C4D44]">
-              Hệ thống sẽ tải lại các đơn hàng mẫu, sản phẩm mẫu và đánh giá mặc định để bạn tiếp tục thử nghiệm giao diện.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmRestoreOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteRestore}
-                className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer"
-              >
-                Khôi phục ngay ➔
               </button>
             </div>
           </div>

@@ -101,8 +101,8 @@ export default function CartPage() {
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 md:py-12">
-        <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 mb-8">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
+        <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 mb-8 text-balance">
           Giỏ hàng gây quỹ ({items.length})
         </h1>
 

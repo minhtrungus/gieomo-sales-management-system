@@ -27,7 +27,7 @@ export function Footer() {
       {/* Decorative Pastel Stitch Line */}
       <div className="w-full border-t-2 border-dashed border-[#FFB98A]/50" />
 
-      <div className="container mx-auto px-4 sm:px-6 py-12 relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-12 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           {/* Brand Info with Mascot Logo */}
           <div className="md:col-span-1 space-y-4">

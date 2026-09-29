@@ -24,10 +24,10 @@ export function FeaturedProductsSection() {
   }, []);
 
   return (
-    <section className="py-16 sm:py-20 container mx-auto px-4 sm:px-6">
+    <section className="py-16 sm:py-20 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 text-center sm:text-left">
         <div>
-          <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16]">
+          <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] text-balance">
             Sản phẩm nổi bật
           </h2>
           <p className="text-xs sm:text-sm text-[#7E7068] mt-1 text-balance">
@@ -38,10 +38,10 @@ export function FeaturedProductsSection() {
         <Link
           href="/products"
           prefetch={true}
-          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#2D6338] hover:text-[#1B3622] transition-colors group"
+          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#2D6338] hover:text-[#1B3622] transition-colors group whitespace-nowrap"
         >
           <span>Xem tất cả sản phẩm</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform shrink-0" />
         </Link>
       </div>
 

@@ -128,7 +128,7 @@ export function ProductDetailClient({
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 md:py-12">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-gray-500 mb-6">
           <Link href="/" className="hover:text-emerald-800 transition-colors">Trang chủ</Link>
@@ -199,27 +199,27 @@ export function ProductDetailClient({
               </div>
 
               {/* Title */}
-              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-emerald-950 leading-tight">
+              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-emerald-950 leading-tight text-balance">
                 {product.name}
               </h1>
 
               {/* Price Box */}
               <div className="flex items-baseline gap-3 p-4 rounded-2xl bg-cream/70 border border-emerald-100">
-                <MoneyDisplay amount={product.price} className="text-2xl sm:text-3xl font-extrabold text-emerald-950" />
+                <MoneyDisplay amount={product.price} className="text-2xl sm:text-3xl font-extrabold text-emerald-950 whitespace-nowrap" />
                 {product.compare_at_price && (
-                  <div className="text-sm text-gray-400 line-through">
+                  <div className="text-sm text-gray-400 line-through whitespace-nowrap">
                     <MoneyDisplay amount={product.compare_at_price} />
                   </div>
                 )}
                 {product.compare_at_price && (
-                  <span className="ml-auto text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-md">
+                  <span className="ml-auto text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-md whitespace-nowrap">
                     Tiết kiệm {Math.round(((product.compare_at_price - product.price) / product.compare_at_price) * 100)}%
                   </span>
                 )}
               </div>
 
               {/* Short Description */}
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-sm text-gray-600 leading-relaxed text-pretty">
                 {product.short_description}
               </p>
 
@@ -295,14 +295,14 @@ export function ProductDetailClient({
               <button
                 onClick={handleAddToCart}
                 disabled={isOutOfStock}
-                className="w-full py-3.5 px-6 rounded-2xl bg-cream hover:bg-emerald-50 border-2 border-emerald-600 text-emerald-950 font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50"
+                className="w-full py-3.5 px-6 rounded-2xl bg-cream hover:bg-emerald-50 border-2 border-emerald-600 text-emerald-950 font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50 whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 🛒 Thêm vào giỏ
               </button>
               <button
                 onClick={handleBuyNow}
                 disabled={isOutOfStock}
-                className="w-full py-3.5 px-6 rounded-2xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50"
+                className="w-full py-3.5 px-6 rounded-2xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50 whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 ⚡ Mua ngay
               </button>
@@ -313,7 +313,7 @@ export function ProductDetailClient({
         {/* Specs & Impact Unified Section */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-soft mb-12 space-y-6">
           <div className="border-b border-gray-100 pb-4">
-            <h3 className="font-heading font-extrabold text-xl text-emerald-950">
+            <h3 className="font-heading font-extrabold text-xl text-emerald-950 text-balance">
               Thông tin sản phẩm &amp; Ý nghĩa Mầm Mơ
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">

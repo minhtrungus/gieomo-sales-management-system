@@ -42,31 +42,31 @@ export default function AdminDashboardPage() {
   const stats = [
     {
       label: "Tổng doanh thu",
-      value: totalRevenue || 12500000,
+      value: totalRevenue,
       icon: DollarSign,
       color: "bg-emerald-500/10 text-emerald-700",
-      change: "+15% so với tuần trước",
+      change: orders.length > 0 ? `${orders.length} giao dịch` : "Chưa có phát sinh",
     },
     {
       label: "Tổng đơn hàng",
       value: `${orders.length} đơn`,
       icon: ShoppingBag,
       color: "bg-blue-500/10 text-blue-700",
-      change: `${pendingOrdersCount} đơn cần xử lý ngay`,
+      change: pendingOrdersCount > 0 ? `${pendingOrdersCount} đơn cần xử lý ngay` : "Đã xử lý tất cả",
     },
     {
       label: "Đơn chờ xác nhận",
       value: `${pendingOrdersCount} đơn`,
       icon: Clock,
       color: "bg-amber-500/10 text-amber-700",
-      change: "Cần duyệt thanh toán",
+      change: pendingOrdersCount > 0 ? "Cần duyệt thanh toán" : "Không có đơn tồn đọng",
     },
     {
       label: "Thực thu đã nhận",
-      value: paidRevenue || 9800000,
+      value: paidRevenue,
       icon: CheckCircle2,
       color: "bg-purple-500/10 text-purple-700",
-      change: "Đã khớp lệnh VietQR",
+      change: paidRevenue > 0 ? "Đã khớp lệnh VietQR" : "Chờ giao dịch mới",
     },
   ];
 

@@ -33,7 +33,7 @@ export default function AdminLoginPage() {
       if (isValid) {
         router.push("/admin/dashboard");
       } else {
-        setError("Mật khẩu không chính xác! Vui lòng thử GieoMo@2026 hoặc mật khẩu thành viên.");
+        setError("Mật khẩu không chính xác!");
         setLoading(false);
       }
     }, 400);

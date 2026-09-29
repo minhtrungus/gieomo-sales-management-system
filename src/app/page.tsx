@@ -7,16 +7,14 @@ import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSecti
 import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: {
-    absolute: "Gieo Mơ - Tạp hoá gây quỹ thuộc Mầm Mơ",
-  },
+  title: "Gieo Mơ",
   description:
     "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
   alternates: {
     canonical: "https://gieomo.store",
   },
   openGraph: {
-    title: "Gieo Mơ - Tạp hoá gây quỹ thuộc Mầm Mơ",
+    title: "Gieo Mơ",
     description:
       "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
     url: "https://gieomo.store",
@@ -51,7 +49,7 @@ export default function HomePage() {
             style={{ background: "radial-gradient(circle, rgba(255, 231, 168, 0.5) 0%, rgba(255, 231, 168, 0) 70%)" }}
           />
 
-          <div className="container mx-auto px-4 sm:px-6 relative z-10">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
               
               {/* Left Column: Story & Narrative */}
@@ -71,7 +69,7 @@ export default function HomePage() {
                       Bigger Dreams
                     </span>
                   </h1>
-                  <p className="text-sm sm:text-base text-[#6B5A50] max-w-xl mx-auto lg:mx-0 leading-relaxed font-medium">
+                  <p className="text-sm sm:text-base text-[#6B5A50] max-w-xl mx-auto lg:mx-0 leading-relaxed font-medium text-pretty">
                     Chào mừng bạn đến với Tạp hóa Gieo Mơ, một dự án gây quỹ thuộc Mầm Mơ. Tại đây, mỗi món đồ bạn chọn không chỉ mang đến một điều nhỏ xinh cho riêng mình, mà còn trở thành một mảnh ghép góp phần vun đắp để những ước mơ được lớn lên từng ngày.
                   </p>
                 </div>
@@ -90,7 +88,7 @@ export default function HomePage() {
                   <Link
                     href="#impact"
                     prefetch={false}
-                    className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white/90 hover:bg-white text-[#4A3B32] font-bold text-sm flex items-center justify-center gap-2 border border-[#EADBCC] shadow-soft hover:shadow-xs transition-[transform,background-color,border-color]"
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white/90 hover:bg-white text-[#4A3B32] font-bold text-sm flex items-center justify-center gap-2 border border-[#EADBCC] shadow-soft hover:shadow-xs transition-[transform,background-color,border-color] whitespace-nowrap"
                   >
                     <Heart className="w-4 h-4 text-[#FF85A1]" />
                     <span>Ý nghĩa dự án</span>
@@ -113,7 +111,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Cute floating badge */}
-                  <div className="absolute -bottom-2 right-4 bg-white/95 px-3.5 py-1.5 rounded-2xl border border-[#FFB98A] shadow-md flex items-center gap-2 text-xs font-extrabold text-[#342A24]">
+                  <div className="absolute -bottom-2 right-4 bg-white/95 px-3.5 py-1.5 rounded-2xl border border-[#FFB98A] shadow-md flex items-center gap-2 text-xs font-extrabold text-[#342A24] whitespace-nowrap">
                     <span className="text-base">🌱</span>
                     <span>Mầm & Thế giới may vá</span>
                   </div>
@@ -134,33 +132,33 @@ export default function HomePage() {
             BRAND VALUES & IMPACT: 4 PASTEL PALETTE CARDS
             ======================================================== */}
         <section id="impact" className="py-16 sm:py-20 bg-white/60 border-y border-[#F0E5D8]">
-          <div className="container mx-auto px-4 sm:px-6">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
             <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#CFE8FF] text-[#133A63] text-xs font-bold">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#CFE8FF] text-[#133A63] text-xs font-bold whitespace-nowrap">
                 <Compass className="w-3.5 h-3.5" />
                 <span>Ý nghĩa thương hiệu</span>
               </div>
-              <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16]">
+              <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] text-balance">
                 LITTLE PIECES, BIGGER DREAMS
               </h2>
-              <h2 className="font-heading font-extrabold text-xl text-[#231B16]">
+              <h2 className="font-heading font-extrabold text-xl text-[#231B16] text-balance">
                 Gom từng mảnh nhỏ, dệt thành giấc mơ
               </h2>
-              <p className="text-xs sm:text-sm text-[#7E7068]">
+              <p className="text-xs sm:text-sm text-[#7E7068] text-pretty leading-relaxed">
                 Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {/* Card 1: Soft Green */}
               <div className="p-6 rounded-3xl bg-[#BFE9C3]/40 border border-[#BFE9C3] shadow-soft space-y-3 transition-transform hover:-translate-y-1">
                 <div className="w-12 h-12 rounded-2xl bg-[#BFE9C3] flex items-center justify-center text-2xl shadow-xs">
                   🌱
                 </div>
-                <h3 className="font-heading font-bold text-base text-[#16381D]">
+                <h3 className="font-heading font-bold text-base text-[#16381D] text-balance">
                   Gieo Mơ & Sự Phát Triển
                 </h3>
-                <p className="text-xs text-[#285031] leading-relaxed">
+                <p className="text-xs text-[#285031] leading-relaxed text-pretty">
                   Tạp hóa Gieo Mơ là dự án thiện nguyện trực thuộc Mầm Mơ, với mong muốn đồng hành cùng các em nhỏ có hoàn cảnh khó khăn trong hành trình nuôi dưỡng ước mơ và hỗ trợ các em trên hành trình trưởng thành.
                 </p>
               </div>
@@ -170,10 +168,10 @@ export default function HomePage() {
                 <div className="w-12 h-12 rounded-2xl bg-[#CFE8FF] flex items-center justify-center text-2xl shadow-xs">
                   🧵
                 </div>
-                <h3 className="font-heading font-bold text-base text-[#153B61]">
+                <h3 className="font-heading font-bold text-base text-[#153B61] text-balance">
                   Quá trình hình thành sản phẩm
                 </h3>
-                <p className="text-xs text-[#214D78] leading-relaxed">
+                <p className="text-xs text-[#214D78] leading-relaxed text-pretty">
                   Sợi chỉ nối những khoảng cách, chiếc nút giữ những mảnh rời lại bên nhau, những mảnh vải khi được kết hợp có thể trở thành một sản phẩm hoàn chỉnh. 
                 </p>
               </div>
@@ -183,10 +181,10 @@ export default function HomePage() {
                 <div className="w-12 h-12 rounded-2xl bg-[#FFE7A8] flex items-center justify-center text-2xl shadow-xs">
                   ☀️
                 </div>
-                <h3 className="font-heading font-bold text-base text-[#523F07]">
+                <h3 className="font-heading font-bold text-base text-[#523F07] text-balance">
                   Ý nghĩa sản phẩm
                 </h3>
-                <p className="text-xs text-[#5C480E] leading-relaxed">
+                <p className="text-xs text-[#5C480E] leading-relaxed text-pretty">
                   Gieo Mơ mong mỗi món đồ bạn mang về không chỉ là một vật dụng để sử dụng mỗi ngày, mà còn là một lời nhắc rằng, những điều bé nhỏ của bạn cũng đáng được trân trọng. Điều làm nên một phiên bản tốt đẹp hơn của chúng ta không phải là một điều thật lớn, mà là rất nhiều điều nhỏ bé được vun đắp qua từng ngày.
                 </p>
               </div>
@@ -196,10 +194,10 @@ export default function HomePage() {
                 <div className="w-12 h-12 rounded-2xl bg-[#FFD1E1] flex items-center justify-center text-2xl shadow-xs">
                   🌸
                 </div>
-                <h3 className="font-heading font-bold text-base text-[#52132A]">
+                <h3 className="font-heading font-bold text-base text-[#52132A] text-balance">
                   Ý nghĩa với cộng đồng
                 </h3>
-                <p className="text-xs text-[#6B203B] leading-relaxed">
+                <p className="text-xs text-[#6B203B] leading-relaxed text-pretty">
                   Từ những món đồ tại Gieo Mơ, những giá trị nhỏ được tiếp nối thành những đóng góp dành cho cộng đồng. Bởi với Gieo Mơ, giá trị của một món đồ không chỉ nằm ở điều bạn nhận về, mà còn ở những điều tốt đẹp mà nó tiếp tục trao đi.
                 </p>
               </div>
@@ -210,20 +208,20 @@ export default function HomePage() {
         {/* ========================================================
             CALL TO ACTION: SẴN SÀNG GIEO MẦM
             ======================================================== */}
-        <section className="py-16 container mx-auto px-4 sm:px-6">
+        <section className="py-16 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="rounded-3xl gradient-main p-8 sm:p-12 text-center space-y-4 border border-[#BFE9C3] shadow-soft max-w-3xl mx-auto">
             <span className="text-4xl">🌱✨🧵</span>
-            <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#1B3622]">
+            <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#1B3622] text-balance">
               Sẵn sàng cùng Mầm gieo một "hạt mơ"?
             </h2>
-            <p className="text-xs sm:text-sm text-[#2D5636] max-w-md mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#2D5636] max-w-md mx-auto leading-relaxed text-pretty">
               Hãy chọn cho mình và người mình thương một món quà nhỏ xinh tại Gieo Mơ để “gieo” yêu thương, lan tỏa những điều tốt đẹp.
             </p>
             <div className="pt-2">
               <Link
                 href="/products"
                 prefetch={true}
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-[transform,background-color] active:scale-95"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-[transform,background-color] active:scale-95 whitespace-nowrap"
               >
                 <span>Rước sản phẩm Gieo Mơ ngay ➔</span>
               </Link>

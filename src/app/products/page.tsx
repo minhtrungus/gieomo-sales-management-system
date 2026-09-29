@@ -119,17 +119,17 @@ export default function ProductsPage() {
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 py-8 md:py-12">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
         {/* Page Header */}
         <div className="max-w-2xl mb-8 space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-xs font-bold border border-[#9ed4a3]">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-xs font-bold border border-[#9ed4a3] whitespace-nowrap">
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
           </div>
-          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight">
+          <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight text-balance">
             Tất cả sản phẩm Gieo Mơ
           </h1>
-          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed">
+          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-pretty">
             Tất cả sản phẩm tại Tạp hóa Gieo Mơ đều được tạo nên từ những điều nhỏ bé, để mang đến một niềm vui nhỏ cho bạn và tiếp nối những điều tốt đẹp đến cộng đồng.
           </p>
         </div>
