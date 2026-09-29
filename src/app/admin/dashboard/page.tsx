@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { MOCK_ORDERS } from "@/lib/data/mockData";
-import { getStoredOrders } from "@/lib/data/orderStore";
+import { getStoredOrders, getStoredProducts } from "@/lib/data/orderStore";
+import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import {
@@ -22,15 +22,23 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<ExtendedProduct[]>([]);
 
   useEffect(() => {
     setOrders(getStoredOrders());
-    const handleUpdate = () => {
-      setOrders(getStoredOrders());
+    setProducts(getStoredProducts());
+
+    const handleOrdersUpdate = () => setOrders(getStoredOrders());
+    const handleProdUpdate = () => setProducts(getStoredProducts());
+
+    window.addEventListener("gieomo_orders_updated", handleOrdersUpdate);
+    window.addEventListener("gieomo_products_updated", handleProdUpdate);
+
+    return () => {
+      window.removeEventListener("gieomo_orders_updated", handleOrdersUpdate);
+      window.removeEventListener("gieomo_products_updated", handleProdUpdate);
     };
-    window.addEventListener("gieomo_orders_updated", handleUpdate);
-    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
   }, []);
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
@@ -38,6 +46,19 @@ export default function AdminDashboardPage() {
     .filter((o) => o.payment_status === "paid")
     .reduce((sum, o) => sum + (o.final_amount || 0), 0);
   const pendingOrdersCount = orders.filter((o) => o.order_status === "pending").length;
+
+  const lowStockItem = useMemo(() => {
+    for (const p of products) {
+      if (p.variants) {
+        for (const v of p.variants) {
+          if ((v.stock || 0) <= 10 && (v.stock || 0) > 0) {
+            return { name: `${p.name} - ${v.name}`, stock: v.stock };
+          }
+        }
+      }
+    }
+    return null;
+  }, [products]);
 
   const stats = [
     {
@@ -135,24 +156,26 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Low Stock Warning Banner */}
-      <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0">
-            <AlertTriangle className="w-5 h-5" />
+      {/* Low Stock Warning Banner - only when actual items are low in stock */}
+      {lowStockItem && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="text-xs text-amber-950">
+              <span className="font-bold block">Cảnh báo tồn kho sắp hết:</span>
+              <span>Mặt hàng <strong>&quot;{lowStockItem.name}&quot;</strong> chỉ còn <strong>{lowStockItem.stock} sản phẩm</strong> trong kho!</span>
+            </div>
           </div>
-          <div className="text-xs text-amber-950">
-            <span className="font-bold block">Cảnh báo tồn kho sắp hết:</span>
-            <span>Mặt hàng <strong>&quot;Pouch Mầm Mơ - Màu xanh bơ&quot;</strong> chỉ còn <strong>10 sản phẩm</strong> trong kho!</span>
-          </div>
+          <Link
+            href="/admin/inventory"
+            className="px-3.5 py-1.5 rounded-xl bg-amber-200 hover:bg-amber-300 text-amber-950 text-xs font-bold whitespace-nowrap transition-colors"
+          >
+            Nhập kho ➔
+          </Link>
         </div>
-        <Link
-          href="/admin/inventory"
-          className="px-3.5 py-1.5 rounded-xl bg-amber-200 hover:bg-amber-300 text-amber-950 text-xs font-bold whitespace-nowrap transition-colors"
-        >
-          Nhập kho ➔
-        </Link>
-      </div>
+      )}
 
       {/* Recent Orders List */}
       <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
@@ -168,52 +191,58 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-100 text-gray-500 font-semibold uppercase">
-                <th className="py-3 px-3">Mã đơn</th>
-                <th className="py-3 px-3">Khách hàng</th>
-                <th className="py-3 px-3">Hình thức nhận</th>
-                <th className="py-3 px-3">Tổng tiền</th>
-                <th className="py-3 px-3">Trạng thái</th>
-                <th className="py-3 px-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {orders.slice(0, 5).map((ord) => (
-                <tr key={ord.order_id} className="hover:bg-emerald-50/40 transition-colors">
-                  <td className="py-3.5 px-3 font-mono font-bold text-emerald-950">
-                    {ord.order_code}
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <span className="font-semibold text-gray-900 block">{ord.buyer_name}</span>
-                    <span className="text-[11px] text-gray-500">{ord.buyer_phone}</span>
-                  </td>
-                  <td className="py-3.5 px-3 font-medium text-gray-600">
-                    {ord.delivery_type === "home_delivery" ? "Giao tận nơi" : "Nhận tại điểm"}
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <MoneyDisplay amount={ord.final_amount} className="font-bold text-emerald-950" />
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
-                      {ORDER_STATUS_LABELS[ord.order_status]}
-                    </Badge>
-                  </td>
-                  <td className="py-3.5 px-3 text-right">
-                    <Link
-                      href={`/admin/orders/${ord.order_id}`}
-                      className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-emerald-100 text-gray-800 hover:text-emerald-950 font-semibold transition-colors"
-                    >
-                      Chi tiết
-                    </Link>
-                  </td>
+        {orders.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500 font-semibold uppercase">
+                  <th className="py-3 px-3">Mã đơn</th>
+                  <th className="py-3 px-3">Khách hàng</th>
+                  <th className="py-3 px-3">Hình thức nhận</th>
+                  <th className="py-3 px-3">Tổng tiền</th>
+                  <th className="py-3 px-3">Trạng thái</th>
+                  <th className="py-3 px-3 text-right">Thao tác</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {orders.slice(0, 5).map((ord) => (
+                  <tr key={ord.order_id} className="hover:bg-emerald-50/40 transition-colors">
+                    <td className="py-3.5 px-3 font-mono font-bold text-emerald-950">
+                      {ord.order_code}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className="font-semibold text-gray-900 block">{ord.buyer_name}</span>
+                      <span className="text-[11px] text-gray-500">{ord.buyer_phone}</span>
+                    </td>
+                    <td className="py-3.5 px-3 font-medium text-gray-600">
+                      {ord.delivery_type === "home_delivery" ? "Giao tận nơi" : "Nhận tại điểm"}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <MoneyDisplay amount={ord.final_amount} className="font-bold text-emerald-950" />
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                        {ORDER_STATUS_LABELS[ord.order_status]}
+                      </Badge>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <Link
+                        href={`/admin/orders/${ord.order_id}`}
+                        className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-emerald-100 text-gray-800 hover:text-emerald-950 font-semibold transition-colors"
+                      >
+                        Chi tiết
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-10 text-gray-400 text-xs">
+            Chưa có đơn hàng nào được ghi nhận trên hệ thống.
+          </div>
+        )}
       </div>
     </div>
   );

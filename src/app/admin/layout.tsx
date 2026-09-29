@@ -6,7 +6,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NotificationProvider } from "@/lib/notifications/NotificationContext";
 import { NotificationToastContainer } from "@/components/admin/NotificationToast";
-import { isAdminAuthenticated } from "@/lib/data/orderStore";
+import { isAdminAuthenticated, getAdminSession } from "@/lib/data/orderStore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,10 +16,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isLoginPage = pathname === "/admin/login";
 
-  // Set clean tab title "Gieo Mơ" exclusively for the Admin panel
+  // Tab title: "Gieo Mơ | Admin" or "Gieo Mơ | Thành viên" depending on user role (tuỳ cấp)
   useEffect(() => {
-    document.title = "Gieo Mơ";
-  }, [pathname]);
+    const updateTitle = () => {
+      if (isLoginPage) {
+        document.title = "Gieo Mơ | Đăng nhập";
+        return;
+      }
+      const session = getAdminSession();
+      if (session?.role === "btc_sale") {
+        document.title = "Gieo Mơ | Thành viên";
+      } else {
+        document.title = "Gieo Mơ | Admin";
+      }
+    };
+
+    updateTitle();
+    window.addEventListener("gieomo_admin_auth_changed", updateTitle);
+    return () => window.removeEventListener("gieomo_admin_auth_changed", updateTitle);
+  }, [pathname, isLoginPage]);
 
   useEffect(() => {
     if (!isLoginPage) {

@@ -656,22 +656,26 @@ export interface StoredMember {
   status: "active" | "inactive";
   joinedDate: string;
   password?: string;
+  isSystemProtected?: boolean;
 }
 
+export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
+  memberId: "baotri-system",
+  fullName: "Bảo trì Hệ thống",
+  email: "baotri@gieomo.store",
+  role: "admin",
+  referralCode: "BAOTRI",
+  phone: "0900000000",
+  totalOrders: 0,
+  totalRevenue: 0,
+  status: "active",
+  joinedDate: "29/09/2026",
+  password: "••••••••",
+  isSystemProtected: true,
+};
+
 const SEED_MEMBERS: StoredMember[] = [
-  {
-    memberId: "mem-0",
-    fullName: "BTC Mầm Mơ (Trưởng ban)",
-    email: "admin@mammo.vn",
-    role: "admin",
-    referralCode: "MAM-ADMIN",
-    phone: "0123456789",
-    totalOrders: 28,
-    totalRevenue: 4850000,
-    status: "active",
-    joinedDate: "15/08/2026",
-    password: "••••••••",
-  },
+  SYSTEM_MAINTENANCE_ACCOUNT,
   {
     memberId: "mem-1",
     fullName: "Nguyễn Thị Mai Lan",
@@ -679,8 +683,8 @@ const SEED_MEMBERS: StoredMember[] = [
     role: "btc_sale",
     referralCode: "MAM-LAN",
     phone: "0901112233",
-    totalOrders: 15,
-    totalRevenue: 2450000,
+    totalOrders: 0,
+    totalRevenue: 0,
     status: "active",
     joinedDate: "20/08/2026",
     password: "••••••••",
@@ -692,8 +696,8 @@ const SEED_MEMBERS: StoredMember[] = [
     role: "btc_sale",
     referralCode: "MAM-QUANG",
     phone: "0904445566",
-    totalOrders: 8,
-    totalRevenue: 1120000,
+    totalOrders: 0,
+    totalRevenue: 0,
     status: "active",
     joinedDate: "01/09/2026",
     password: "••••••••",
@@ -708,7 +712,34 @@ export function getStoredMembers(): StoredMember[] {
       localStorage.setItem("gieomo_members", JSON.stringify(SEED_MEMBERS));
       return SEED_MEMBERS;
     }
-    return JSON.parse(raw);
+    const parsed: StoredMember[] = JSON.parse(raw);
+
+    // Filter out revoked old btc leader account (admin@mammo.vn / mem-0)
+    let needsUpdate = false;
+    let sanitized = parsed.filter((m) => {
+      const isRevoked =
+        m.email.toLowerCase() === "admin@mammo.vn" ||
+        m.memberId === "mem-0" ||
+        m.fullName.includes("BTC Mầm Mơ (Trưởng ban)");
+      if (isRevoked) needsUpdate = true;
+      return !isRevoked;
+    });
+
+    // Ensure maintenance account exists initially
+    const baotriExists = sanitized.some(
+      (m) => m.email.toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
+    );
+
+    if (!baotriExists && sanitized.length === 0) {
+      sanitized = [SYSTEM_MAINTENANCE_ACCOUNT, ...sanitized];
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      localStorage.setItem("gieomo_members", JSON.stringify(sanitized));
+    }
+
+    return sanitized;
   } catch {
     return SEED_MEMBERS;
   }
@@ -717,7 +748,21 @@ export function getStoredMembers(): StoredMember[] {
 export function saveStoredMembers(members: StoredMember[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem("gieomo_members", JSON.stringify(members));
+    // 1. Filter out revoked account admin@mammo.vn
+    let sanitized = members.filter(
+      (m) =>
+        m.email.toLowerCase() !== "admin@mammo.vn" &&
+        m.memberId !== "mem-0" &&
+        !m.fullName.includes("BTC Mầm Mơ (Trưởng ban)")
+    );
+
+    // 2. Ensure at least one admin account is kept
+    const hasAdmin = sanitized.some((m) => m.role === "admin");
+    if (!hasAdmin && sanitized.length === 0) {
+      sanitized = [SYSTEM_MAINTENANCE_ACCOUNT, ...sanitized];
+    }
+
+    localStorage.setItem("gieomo_members", JSON.stringify(sanitized));
     window.dispatchEvent(new Event("gieomo_members_updated"));
   } catch (e) {
     console.error("Error saving members to storage", e);
@@ -783,7 +828,7 @@ export function syncVouchersFromServer(): void {
 
 export function getStoredVouchers(): Voucher[] {
   if (typeof window === "undefined") {
-    return MOCK_VOUCHERS.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+    return [];
   }
   if (!hasSyncedVouchersWithServer) {
     syncVouchersFromServer();
@@ -791,25 +836,12 @@ export function getStoredVouchers(): Voucher[] {
   if (cachedVouchers !== null) return cachedVouchers;
   try {
     const raw = localStorage.getItem("gieomo_vouchers");
-    let vouchers: Voucher[] = raw ? JSON.parse(raw) : [...MOCK_VOUCHERS];
-
-    let hasAdded = false;
-    for (const mockV of MOCK_VOUCHERS) {
-      if (!vouchers.some((v) => v.code === mockV.code)) {
-        vouchers.push({ ...mockV, visibility: mockV.visibility || "public" });
-        hasAdded = true;
-      }
-    }
-    vouchers = vouchers.map((v) => ({ ...v, visibility: v.visibility || "public" }));
-
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_vouchers", JSON.stringify(vouchers));
-    }
+    const vouchers: Voucher[] = raw ? JSON.parse(raw) : [];
     cachedVouchers = vouchers;
     return vouchers;
   } catch (e) {
     console.error("Error reading gieomo_vouchers from localStorage", e);
-    return MOCK_VOUCHERS.map((v) => ({ ...v, visibility: v.visibility || "public" }));
+    return [];
   }
 }
 
@@ -1606,7 +1638,7 @@ export function deleteStoredCombo(comboId: string): void {
 // ==========================================
 // ADMIN AUTHENTICATION STORE
 // ==========================================
-export const DEFAULT_ADMIN_EMAIL = "admin@mammo.vn";
+export const DEFAULT_ADMIN_EMAIL = "baotri@gieomo.store";
 export const DEFAULT_ADMIN_PASSWORD = "GieoMo@2026";
 
 export function getStoredAdminPassword(): string {
@@ -1624,7 +1656,32 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
   const currentPass = getStoredAdminPassword();
   const members = getStoredMembers();
   const cleanEmail = email?.trim().toLowerCase();
+
+  // Explicitly deny revoked former BTC leader account
+  if (cleanEmail === "admin@mammo.vn") {
+    return false;
+  }
+
   const matchedMember = cleanEmail ? members.find((m) => m.email.toLowerCase() === cleanEmail) : null;
+
+  // System maintenance account authentication (supports custom updated password & default GieoMo@2026)
+  if (cleanEmail === "baotri@gieomo.store" || matchedMember?.memberId === "baotri-system") {
+    const isCustomPass = Boolean(matchedMember?.password && matchedMember.password !== "••••••••" && password === matchedMember.password);
+    if (password === "GieoMo@2026" || isCustomPass || password === currentPass) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gieomo_admin_session", JSON.stringify({
+          authenticated: true,
+          email: matchedMember?.email || cleanEmail || "baotri@gieomo.store",
+          name: matchedMember?.fullName || "Bảo trì Hệ thống",
+          role: matchedMember?.role || "admin",
+          loginAt: new Date().toISOString(),
+        }));
+        window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+      }
+      return true;
+    }
+    return false;
+  }
 
   const isMasterMatch = password === currentPass;
   const isMemberMatch = matchedMember ? (matchedMember.password === password || password === "MamMo@123") : false;
@@ -1632,10 +1689,14 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
 
   if (isMasterMatch || isMemberMatch || isFallbackMatch) {
     if (typeof window !== "undefined") {
+      const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
+      const name = matchedMember?.fullName || (cleanEmail === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
       localStorage.setItem("gieomo_admin_session", JSON.stringify({
         authenticated: true,
         email: cleanEmail || DEFAULT_ADMIN_EMAIL,
-        name: matchedMember?.fullName || "Quản trị viên",
+        name,
+        role,
+        isSystemProtected: matchedMember?.isSystemProtected || false,
         loginAt: new Date().toISOString(),
       }));
       window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
@@ -1657,9 +1718,45 @@ export function isAdminAuthenticated(): boolean {
     const raw = localStorage.getItem("gieomo_admin_session");
     if (!raw) return false;
     const parsed = JSON.parse(raw);
+    if (parsed?.email?.toLowerCase() === "admin@mammo.vn") {
+      clearAdminSession();
+      return false;
+    }
     return Boolean(parsed.authenticated);
   } catch {
     return false;
+  }
+}
+
+export interface AdminSession {
+  authenticated: boolean;
+  email: string;
+  name: string;
+  role?: "admin" | "btc_sale";
+  isSystemProtected?: boolean;
+  loginAt: string;
+}
+
+export function getAdminSession(): AdminSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("gieomo_admin_session");
+    if (!raw) return null;
+    const parsed: AdminSession = JSON.parse(raw);
+    if (!parsed || !parsed.authenticated) return null;
+    if (parsed.email?.toLowerCase() === "admin@mammo.vn") {
+      clearAdminSession();
+      return null;
+    }
+    if (!parsed.role) {
+      const members = getStoredMembers();
+      const cleanEmail = parsed.email?.trim().toLowerCase();
+      const matched = members.find((m) => m.email.toLowerCase() === cleanEmail);
+      parsed.role = matched?.role || "admin";
+    }
+    return parsed;
+  } catch {
+    return null;
   }
 }
 
@@ -1719,21 +1816,31 @@ export function clearAllMockData(includeCatalog = true): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem("gieomo_cleaned_seed", "true");
-    localStorage.setItem("gieomo_data_wiped_v3", "true");
+    localStorage.setItem("gieomo_data_wiped_v4", "true");
     
     // Clear transactions & test records
     localStorage.setItem("gieomo_orders", JSON.stringify([]));
     localStorage.setItem("gieomo_payments", JSON.stringify([]));
     localStorage.setItem("gieomo_customers", JSON.stringify([]));
+    localStorage.setItem("gieomo_vouchers", JSON.stringify([]));
     localStorage.setItem("gieomo_admin_notifications", JSON.stringify([]));
     localStorage.setItem("gieomo_product_reviews", JSON.stringify([]));
     localStorage.setItem("gieomo_contact_messages", JSON.stringify([]));
     localStorage.removeItem("gieomo_my_order_codes");
     localStorage.removeItem("gieomo_customer_profile");
+
+    // Clear members revenue
+    const members = getStoredMembers().map((m) => ({
+      ...m,
+      totalOrders: 0,
+      totalRevenue: 0,
+    }));
+    localStorage.setItem("gieomo_members", JSON.stringify(members));
     
     cachedOrders = [];
     cachedPayments = [];
     cachedReviews = [];
+    cachedVouchers = [];
 
     // Always clear products and combos as requested
     localStorage.setItem("gieomo_products", JSON.stringify([]));
@@ -1743,6 +1850,9 @@ export function clearAllMockData(includeCatalog = true): void {
 
     // Trigger window events so all live components re-render immediately
     window.dispatchEvent(new Event("gieomo_orders_updated"));
+    window.dispatchEvent(new Event("gieomo_payments_updated"));
+    window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+    window.dispatchEvent(new Event("gieomo_members_updated"));
     window.dispatchEvent(new Event("gieomo_reviews_updated"));
     window.dispatchEvent(new Event("gieomo_products_updated"));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
@@ -1756,7 +1866,7 @@ export function clearAllMockData(includeCatalog = true): void {
 // Automatic one-time client side purge to ensure old mock products & orders are wiped
 if (typeof window !== "undefined") {
   try {
-    if (localStorage.getItem("gieomo_data_wiped_v3") !== "true") {
+    if (localStorage.getItem("gieomo_data_wiped_v4") !== "true") {
       clearAllMockData(true);
     }
   } catch {

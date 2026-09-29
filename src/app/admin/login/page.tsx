@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
         <Input
           label="Email / Tài khoản *"
           type="email"
-          placeholder="admin@mammo.vn"
+          placeholder="baotri@gieomo.store"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required

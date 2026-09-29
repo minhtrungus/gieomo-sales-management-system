@@ -7,14 +7,14 @@ import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSecti
 import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Gieo Mơ",
+  title: "Trang chủ",
   description:
     "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
   alternates: {
     canonical: "https://gieomo.store",
   },
   openGraph: {
-    title: "Gieo Mơ",
+    title: "Gieo Mơ | Trang chủ",
     description:
       "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
     url: "https://gieomo.store",

@@ -25,8 +25,8 @@ export const metadata: Metadata = {
     canonical: "./",
   },
   title: {
-    default: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ | Đồ May Vá Thủ Công",
-    template: "%s | Gieo Mơ",
+    default: "Gieo Mơ | Trang chủ",
+    template: "Gieo Mơ | %s",
   },
   description:
     "Tạp hoá Gieo Mơ — Dự án bán hàng gây quỹ của tổ chức thiện nguyện Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản: túi pouch, ví sen đá, kẹp tóc, set combo quà tặng ý nghĩa. 100% lợi nhuận đồng hành cùng trẻ em khó khăn.",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     telephone: false,
   },
   openGraph: {
-    title: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ | Đồ May Vá Thủ Công",
+    title: "Gieo Mơ | Trang chủ",
     description:
       "Tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm handmade may vá độc bản. Mỗi sản phẩm trao đi là một điều ước được gieo cho các em nhỏ khó khăn.",
     type: "website",
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ",
+    title: "Gieo Mơ | Trang chủ",
     description: "Tạp hoá gây quỹ thiện nguyện của Mầm Mơ — Little Pieces, Bigger Dreams.",
     images: ["/images/logo_gieo%20m%C6%A1.jpg"],
   },

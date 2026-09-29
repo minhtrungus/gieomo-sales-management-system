@@ -22,8 +22,9 @@ import {
   MessageSquare,
   FolderTree,
 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
-import { clearAdminSession } from "@/lib/data/orderStore";
+import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -33,6 +34,14 @@ interface AdminSidebarProps {
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { unreadCount } = useNotifications();
+  const [session, setSession] = useState<AdminSession | null>(null);
+
+  useEffect(() => {
+    const updateSession = () => setSession(getAdminSession());
+    updateSession();
+    window.addEventListener("gieomo_admin_auth_changed", updateSession);
+    return () => window.removeEventListener("gieomo_admin_auth_changed", updateSession);
+  }, []);
 
   const menuItems = [
     { href: "/admin/dashboard", label: "Tổng quan (Dashboard)", icon: LayoutDashboard },
@@ -138,8 +147,12 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               🌱
             </div>
             <div className="truncate">
-              <span className="text-xs font-bold text-white block truncate">BTC Mầm Mơ</span>
-              <span className="text-[10px] text-[#A39688] block truncate">Quản trị viên</span>
+              <span className="text-xs font-bold text-white block truncate">
+                {session?.name || "Quản trị viên"}
+              </span>
+              <span className="text-[10px] text-[#A39688] block truncate">
+                {session?.role === "btc_sale" ? "Thành viên (BTC Sale)" : "Quản trị viên (Admin)"}
+              </span>
             </div>
           </div>
 

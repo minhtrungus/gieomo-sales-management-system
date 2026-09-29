@@ -19,6 +19,7 @@ import {
   ExternalLink,
   ShoppingBag,
   KeyRound,
+  Edit3,
 } from "lucide-react";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
 import {
@@ -69,6 +70,15 @@ export default function AdminMembersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
   const [passwordMember, setPasswordMember] = useState<MemberItem | null>(null);
+
+  // Edit member modal states
+  const [editingMember, setEditingMember] = useState<MemberItem | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editRole, setEditRole] = useState<"admin" | "btc_sale">("btc_sale");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
   // Form states for new member
   const [newFullName, setNewFullName] = useState("");
@@ -143,8 +153,98 @@ export default function AdminMembersPage() {
     setFormError(null);
   };
 
+  const handleOpenEdit = (m: MemberItem) => {
+    setEditingMember(m);
+    setEditFullName(m.fullName);
+    setEditEmail(m.email);
+    setEditPhone(m.phone === "Chưa cập nhật" ? "" : m.phone);
+    setEditRole(m.role);
+    setEditError(null);
+    setEditSuccess(null);
+  };
+
+  const handleSaveMemberInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditError(null);
+
+    if (!editingMember) return;
+
+    const trimmedName = editFullName.trim();
+    const trimmedEmail = editEmail.trim().toLowerCase();
+    const trimmedPhone = editPhone.trim();
+
+    if (!trimmedName) {
+      setEditError("Vui lòng nhập họ và tên thành viên.");
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setEditError("Vui lòng nhập email/Gmail.");
+      return;
+    }
+
+    if (trimmedEmail === "admin@mammo.vn") {
+      setEditError("Tài khoản admin cũ đã bị thu hồi, không thể dùng email này.");
+      return;
+    }
+
+    // Check duplicate email
+    const duplicate = members.find(
+      (m) => m.memberId !== editingMember.memberId && m.email.toLowerCase() === trimmedEmail
+    );
+    if (duplicate) {
+      setEditError(`Email "${trimmedEmail}" đã được sử dụng bởi ${duplicate.fullName}.`);
+      return;
+    }
+
+    const updated = members.map((m) =>
+      m.memberId === editingMember.memberId
+        ? {
+            ...m,
+            fullName: trimmedName,
+            email: trimmedEmail,
+            phone: trimmedPhone || "Chưa cập nhật",
+            role: editRole,
+          }
+        : m
+    );
+
+    setMembers(updated);
+    saveStoredMembers(updated);
+
+    // Sync admin session if currently logged in user is updated
+    if (typeof window !== "undefined") {
+      try {
+        const rawSession = localStorage.getItem("gieomo_admin_session");
+        if (rawSession) {
+          const session = JSON.parse(rawSession);
+          if (session.email?.toLowerCase() === editingMember.email.toLowerCase() || (editingMember.memberId === "baotri-system" && session.email === "baotri@gieomo.store")) {
+            session.name = trimmedName;
+            session.email = trimmedEmail;
+            session.role = editRole;
+            localStorage.setItem("gieomo_admin_session", JSON.stringify(session));
+            window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    setEditSuccess("Đã cập nhật thông tin thành viên thành công!");
+    setTimeout(() => {
+      setEditSuccess(null);
+      setEditingMember(null);
+    }, 1200);
+  };
+
   const handleConfirmRevoke = () => {
     if (!deletingMember) return;
+    if (deletingMember.memberId === "baotri-system") {
+      alert("Tài khoản bảo trì hệ thống gốc không thể thu hồi!");
+      setDeletingMember(null);
+      return;
+    }
     const updated = members.filter((m) => m.memberId !== deletingMember.memberId);
     setMembers(updated);
     saveStoredMembers(updated);
@@ -231,6 +331,12 @@ export default function AdminMembersPage() {
                 );
                 const displayOrdersCount = mOrders.length > 0 ? mOrders.length : m.totalOrders;
                 const displayRevenue = mOrders.length > 0 ? mOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) : m.totalRevenue;
+
+                const isProtected = Boolean(
+                  m.isSystemProtected ||
+                  m.email.toLowerCase() === "baotri@gieomo.store" ||
+                  m.memberId === "baotri-system"
+                );
 
                 return (
                   <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
@@ -331,6 +437,15 @@ export default function AdminMembersPage() {
                         </button>
 
                         <button
+                          onClick={() => handleOpenEdit(m)}
+                          className="px-2 py-1 rounded-lg border border-[#CFE8FF] bg-[#F0F7FF] hover:bg-[#DCEEFF] text-[#0C4A6E] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Chỉnh sửa thông tin thành viên (Tên, SĐT, Gmail)"
+                        >
+                          <Edit3 className="w-3 h-3 text-[#0284C7]" />
+                          <span className="hidden sm:inline">Sửa</span>
+                        </button>
+
+                        <button
                           onClick={() => {
                             setPasswordMember(m);
                             setChangePasswordInput("");
@@ -345,7 +460,7 @@ export default function AdminMembersPage() {
                           <span className="hidden sm:inline">Đổi pass</span>
                         </button>
 
-                        {m.memberId !== "mem-0" && (
+                        {m.memberId !== "baotri-system" && (
                           <button
                             onClick={() => setDeletingMember(m)}
                             className="p-1 rounded-lg border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
@@ -363,6 +478,114 @@ export default function AdminMembersPage() {
           </table>
         </div>
       </div>
+
+      {/* MODAL: CHỈNH SỬA THÔNG TIN THÀNH VIÊN */}
+      {editingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center">
+                  <Edit3 className="w-4 h-4 text-sky-600" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                    Chỉnh sửa thông tin thành viên
+                  </h3>
+                  <p className="text-[11px] text-[#7E7068]">
+                    Mã Referral: <code className="font-mono font-bold text-[#2D6338]">{editingMember.referralCode}</code>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingMember(null)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMemberInfo} className="space-y-3.5 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Họ và tên *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  placeholder="Ví dụ: Nguyễn Thị Trúc Hân"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Số điện thoại *</label>
+                <input
+                  type="tel"
+                  required
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="0888670637"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Email / Gmail đăng nhập *</label>
+                <input
+                  type="email"
+                  required
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="truchan16092005@gmail.com"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Vai trò (Phân quyền)</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as "admin" | "btc_sale")}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
+                >
+                  <option value="btc_sale">Thành viên gây quỹ (BTC Sale)</option>
+                  <option value="admin">Quản trị viên (Admin)</option>
+                </select>
+              </div>
+
+              {editError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+                  {editError}
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>{editSuccess}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F0E5D8]">
+                <button
+                  type="button"
+                  onClick={() => setEditingMember(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#2D6338] hover:bg-[#23502D] text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: CẤP TÀI KHOẢN MỚI */}
       {isModalOpen && (

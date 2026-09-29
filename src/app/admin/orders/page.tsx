@@ -6,13 +6,14 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
-import { getStoredOrders, updateStoredOrderStatus } from "@/lib/data/orderStore";
+import { getStoredOrders, updateStoredOrderStatus, getStoredMembers, type StoredMember } from "@/lib/data/orderStore";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import { Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [members, setMembers] = useState<StoredMember[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
@@ -20,11 +21,19 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     setOrders(getStoredOrders());
+    setMembers(getStoredMembers());
     const handleUpdate = () => {
       setOrders(getStoredOrders());
     };
+    const handleMembersUpdate = () => {
+      setMembers(getStoredMembers());
+    };
     window.addEventListener("gieomo_orders_updated", handleUpdate);
-    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
+    window.addEventListener("gieomo_members_updated", handleMembersUpdate);
+    return () => {
+      window.removeEventListener("gieomo_orders_updated", handleUpdate);
+      window.removeEventListener("gieomo_members_updated", handleMembersUpdate);
+    };
   }, []);
 
   const handleCopyAddress = (e: React.MouseEvent, ord: Order) => {
@@ -143,9 +152,11 @@ export default function AdminOrdersPage() {
               className="bg-transparent font-extrabold text-[#1B3622] outline-none cursor-pointer"
             >
               <option value="all">Tất cả nguồn đơn</option>
-              <option value="LAN">Mai Lan (MAM-LAN)</option>
-              <option value="QUANG">Minh Quang (MAM-QUANG)</option>
-              <option value="ADMIN">BTC Mầm Mơ (MAM-ADMIN)</option>
+              {members.map((m) => (
+                <option key={m.memberId} value={m.referralCode}>
+                  {m.fullName} ({m.referralCode})
+                </option>
+              ))}
               <option value="direct">Trực tiếp qua Web</option>
             </select>
           </div>

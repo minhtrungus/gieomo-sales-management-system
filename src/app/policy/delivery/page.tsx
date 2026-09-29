@@ -5,14 +5,14 @@ import Link from "next/link";
 import { Truck, ShieldCheck, Clock, PackageCheck } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Chính Sách Vận Chuyển & Giao Hàng Toàn Quốc",
+  title: "Chính sách vận chuyển",
   description:
     "Thông tin chi tiết về cước phí vận chuyển toàn quốc, thời gian giao nhận hàng và quy trình đóng gói tỉ mỉ các sản phẩm thủ công từ Gieo Mơ.",
   alternates: {
     canonical: "/policy/delivery",
   },
   openGraph: {
-    title: "Chính Sách Vận Chuyển & Giao Hàng Toàn Quốc | Gieo Mơ",
+    title: "Gieo Mơ | Chính sách vận chuyển",
     description:
       "Thông tin chi tiết về cước phí vận chuyển toàn quốc, thời gian giao nhận hàng và quy trình đóng gói tỉ mỉ các sản phẩm thủ công từ Gieo Mơ.",
   },

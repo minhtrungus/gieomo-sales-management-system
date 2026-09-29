@@ -55,10 +55,15 @@ export default function AdminSettingsPage() {
     setTimeout(() => setCopiedCategory(null), 2500);
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
     clearAllMockData(true);
+    try {
+      await fetch("/api/admin/clear-data", { method: "POST" });
+    } catch (e) {
+      console.warn("Could not wipe server data:", e);
+    }
     setIsConfirmClearDataOpen(false);
-    setClearDataNotice("✓ Đã xóa sạch toàn bộ dữ liệu mẫu, sản phẩm cũ và chặn thông báo tự động thành công!");
+    setClearDataNotice("✓ Đã xóa sạch toàn bộ dữ liệu sản phẩm, kho hàng, doanh thu và voucher thành công!");
     setTimeout(() => setClearDataNotice(null), 6000);
   };
 

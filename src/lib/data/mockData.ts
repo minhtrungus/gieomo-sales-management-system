@@ -74,75 +74,7 @@ export const MOCK_PRODUCTS: ExtendedProduct[] = [];
 
 export const MOCK_COMBOS: ExtendedCombo[] = [];
 
-export const MOCK_VOUCHERS: Voucher[] = [
-  {
-    voucher_id: "v-1",
-    code: "GIEOMO10",
-    discount_type: "percentage",
-    discount_value: 10,
-    min_order_value: 100000,
-    min_items_count: 0,
-    usage_limit: 50,
-    usage_count: 12,
-    status: "active",
-    visibility: "public",
-    created_at: new Date().toISOString(),
-  },
-  {
-    voucher_id: "v-2",
-    code: "WELCOME20K",
-    discount_type: "fixed_amount",
-    discount_value: 20000,
-    min_order_value: 150000,
-    min_items_count: 0,
-    usage_limit: 100,
-    usage_count: 45,
-    status: "active",
-    visibility: "public",
-    created_at: new Date().toISOString(),
-  },
-  {
-    voucher_id: "v-3",
-    code: "FREESHIPMAM",
-    discount_type: "freeship",
-    discount_value: 15000,
-    min_order_value: 120000,
-    min_items_count: 0,
-    usage_limit: 200,
-    usage_count: 30,
-    status: "active",
-    visibility: "public",
-    created_at: new Date().toISOString(),
-  },
-  {
-    voucher_id: "v-4",
-    code: "MUA2MON25K",
-    discount_type: "fixed_amount",
-    discount_value: 25000,
-    min_order_value: 0,
-    min_items_count: 2,
-    usage_limit: 100,
-    usage_count: 18,
-    status: "active",
-    visibility: "public",
-    created_at: new Date().toISOString(),
-  },
-  {
-    voucher_id: "v-5",
-    code: "TRIANMAMMO",
-    discount_type: "percentage",
-    discount_value: 15,
-    min_order_value: 80000,
-    min_items_count: 0,
-    is_gift_voucher: true,
-    gift_min_order_value: 100000,
-    usage_limit: 500,
-    usage_count: 5,
-    status: "active",
-    visibility: "private",
-    created_at: new Date().toISOString(),
-  },
-];
+export const MOCK_VOUCHERS: Voucher[] = [];
 
 export const MOCK_ORDERS: Order[] = [];
 

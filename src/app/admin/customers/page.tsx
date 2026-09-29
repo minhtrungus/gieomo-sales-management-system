@@ -31,34 +31,6 @@ export default function AdminCustomersPage() {
       // Map phone -> customer record
       const map = new Map<string, CustomerRecord>();
 
-      // Seed baseline customers (only if not cleaned)
-      const isCleaned = typeof window !== "undefined" && localStorage.getItem("gieomo_cleaned_seed") === "true";
-      if (!isCleaned) {
-        map.set("0901234567", {
-          customerId: "cust-1",
-          fullName: "Nguyễn Văn A",
-          phone: "0901234567",
-          email: "nguyenvana@example.com",
-          address: "123 Nguyễn Huệ, Quận 1, TP.HCM",
-          introducerInfo: "Khánh Huyền (MM-102)",
-          totalOrders: 3,
-          totalSpent: 420000,
-          createdAt: "2026-09-01",
-        });
-
-        map.set("0987654321", {
-          customerId: "cust-2",
-          fullName: "Trần Thị C",
-          phone: "0987654321",
-          email: "tranthic@example.com",
-          address: "45 Lê Lợi, Quận 3, TP.HCM",
-          introducerInfo: "Trực tiếp",
-          totalOrders: 1,
-          totalSpent: 85000,
-          createdAt: "2026-09-10",
-        });
-      }
-
       // Merge local saved customers
       for (const lc of localCusts) {
         const cleanP = lc.phone?.replace(/\s+/g, "");

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Liên Hệ Ban Tổ Chức & Tình Nguyện Viên Mầm Mơ",
+  title: "Liên hệ",
   description:
     "Liên hệ với đội ngũ dự án Gieo Mơ — Mầm Mơ. Chúng tôi luôn sẵn sàng lắng nghe, giải đáp thắc mắc đơn hàng và tiếp nhận hợp tác thiện nguyện.",
   alternates: {
     canonical: "/contact",
   },
   openGraph: {
-    title: "Liên Hệ Ban Tổ Chức & Tình Nguyện Viên Mầm Mơ | Gieo Mơ",
+    title: "Gieo Mơ | Liên hệ",
     description:
       "Liên hệ với đội ngũ dự án Gieo Mơ — Mầm Mơ. Chúng tôi luôn sẵn sàng lắng nghe, giải đáp thắc mắc đơn hàng và tiếp nhận hợp tác thiện nguyện.",
   },

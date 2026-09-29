@@ -44,19 +44,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!product) {
     return {
-      title: "Gieo Mơ | Sản phẩm không tồn tại ",
+      title: "Sản phẩm không tồn tại",
       description: "Không tìm thấy sản phẩm bạn yêu cầu trên cửa hàng gây quỹ Gieo Mơ.",
+      openGraph: {
+        title: "Gieo Mơ | Sản phẩm không tồn tại",
+        description: "Không tìm thấy sản phẩm bạn yêu cầu trên cửa hàng gây quỹ Gieo Mơ.",
+      },
     };
   }
 
   const siteUrl = getSiteUrl();
   const canonicalUrl = `${siteUrl}/products/${product.slug}`;
 
-  // 1. Title: Under 60 characters
-  let title = `${product.name} | Gieo Mơ`;
-  if (title.length > 60) {
-    title = `${product.name.slice(0, 48)}... | Gieo Mơ`;
+  // 1. Clean product name under 50 characters
+  let cleanName = product.name;
+  if (cleanName.length > 50) {
+    cleanName = `${cleanName.slice(0, 47)}...`;
   }
+  const displayTitle = `Gieo Mơ | ${cleanName}`;
 
   // 2. Meta description: 140 - 160 characters
   const description = buildMetaDescription(
@@ -72,13 +77,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : `${siteUrl}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;
 
   return {
-    title,
+    title: cleanName,
     description,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
-      title,
+      title: displayTitle,
       description,
       url: canonicalUrl,
       siteName: "Gieo Mơ",
@@ -95,7 +100,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: displayTitle,
       description,
       images: [ogImageUrl],
     },
