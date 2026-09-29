@@ -4,6 +4,7 @@ import { Montserrat } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { SEO_KEYWORD_LIST } from "@/lib/seo/keywords";
 import "./globals.css";
 
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "G-P3MJB88K1K";
@@ -23,42 +24,43 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "./",
   },
-  title: "Gieo Mơ",
+  title: {
+    default: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ | Đồ May Vá Thủ Công",
+    template: "%s | Gieo Mơ",
+  },
   description:
-    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
-  keywords: [
-    "Gieo Mơ",
-    "gieo mo",
-    "Mầm Mơ",
-    "mam mo",
-    "Tổ chức thiện nguyện Mầm Mơ",
-    "Chiến dịch Mầm Mơ",
-    "Tạp hoá Gây quỹ Mầm Mơ",
-    "Bán hàng gây quỹ",
-    "gây quỹ Mầm Mơ",
-    "đồ handmade gây quỹ",
-    "thiện nguyện",
-    "tình nguyện",
-    "cộng đồng",
-    "Sản phẩm Handmade",
-    "may vá thủ công",
-    "túi pouch",
-    "túi handmade",
-    "kẹp tóc handmade",
-    "phụ kiện handmade",
-    "quà tặng",
-    "quà lưu niệm",
-    "set quà tặng ý nghĩa",
-    "Little Pieces Bigger Dreams",
-  ],
+    "Tạp hoá Gieo Mơ — Dự án bán hàng gây quỹ của tổ chức thiện nguyện Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản: túi pouch, ví sen đá, kẹp tóc, set combo quà tặng ý nghĩa. 100% lợi nhuận đồng hành cùng trẻ em khó khăn.",
+  keywords: SEO_KEYWORD_LIST,
+  authors: [{ name: "Tổ chức thiện nguyện Mầm Mơ", url: "https://gieomo.store" }],
+  creator: "Mầm Mơ",
+  publisher: "Gieo Mơ",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   openGraph: {
-    title: "Gieo Mơ",
+    title: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ | Đồ May Vá Thủ Công",
     description:
-      "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
+      "Tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm handmade may vá độc bản. Mỗi sản phẩm trao đi là một điều ước được gieo cho các em nhỏ khó khăn.",
     type: "website",
     locale: "vi_VN",
     siteName: "Gieo Mơ",
     url: "https://gieomo.store",
+    images: [
+      {
+        url: "/images/logo_gieo%20m%C6%A1.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Gieo Mơ — Tạp Hoá Gây Quỹ Mầm Mơ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ",
+    description: "Tạp hoá gây quỹ thiện nguyện của Mầm Mơ — Little Pieces, Bigger Dreams.",
+    images: ["/images/logo_gieo%20m%C6%A1.jpg"],
   },
   robots: {
     index: true,

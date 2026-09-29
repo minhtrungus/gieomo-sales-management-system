@@ -45,11 +45,25 @@ export function FeaturedProductsSection() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-        {products.map((product) => (
-          <ProductCard key={product.product_id} product={product} />
-        ))}
-      </div>
+      {products.length === 0 ? (
+        <div className="text-center py-12 px-6 rounded-3xl bg-[#FFF8EE] border border-[#F0E5D8] max-w-xl mx-auto space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-[#FFFDF9] border border-[#F0E5D8] flex items-center justify-center text-2xl mx-auto shadow-2xs">
+            ✨
+          </div>
+          <h3 className="font-heading font-bold text-base text-[#231B16]">
+            Sản phẩm gây quỹ mới đang được chuẩn bị
+          </h3>
+          <p className="text-xs text-[#7E7068] leading-relaxed">
+            Các món đồ thủ công độc bản từ Mầm Mơ sẽ sớm được cập nhật. Cảm ơn bạn đã luôn quan tâm và đồng hành cùng dự án!
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          {products.map((product) => (
+            <ProductCard key={product.product_id} product={product} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

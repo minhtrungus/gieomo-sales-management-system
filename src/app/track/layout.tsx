@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Gieo Mơ",
+  title: "Tra Cứu Tiến Độ Đơn Hàng Trực Tuyến",
   description:
     "Kiểm tra tình trạng đơn hàng, lộ trình vận chuyển và thông tin thanh toán đơn hàng Gieo Mơ nhanh chóng qua mã đơn hoặc số điện thoại.",
   alternates: {
     canonical: "/track",
   },
   openGraph: {
-    title: "Gieo Mơ",
+    title: "Tra Cứu Tiến Độ Đơn Hàng Trực Tuyến | Gieo Mơ",
     description:
       "Kiểm tra tình trạng đơn hàng, lộ trình vận chuyển và thông tin thanh toán đơn hàng Gieo Mơ nhanh chóng qua mã đơn hoặc số điện thoại.",
   },

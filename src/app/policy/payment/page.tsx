@@ -5,14 +5,14 @@ import Link from "next/link";
 import { QrCode, Banknote, ShieldCheck, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Gieo Mơ",
+  title: "Hướng Dẫn Thanh Toán Chuyển Khoản An Toàn",
   description:
     "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 5 giây.",
   alternates: {
     canonical: "/policy/payment",
   },
   openGraph: {
-    title: "Gieo Mơ",
+    title: "Hướng Dẫn Thanh Toán Chuyển Khoản An Toàn | Gieo Mơ",
     description:
       "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 5 giây.",
   },

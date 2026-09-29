@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock } from "lucide-react";
-import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
+import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock, Copy, Trash2, BellOff, Search } from "lucide-react";
+import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword, clearAllMockData } from "@/lib/data/orderStore";
+import { SEO_CATEGORIZED_KEYWORDS, SEO_KEYWORD_LIST } from "@/lib/seo/keywords";
 import { uploadAsset } from "@/lib/services/uploadService";
 
 export default function AdminSettingsPage() {
@@ -42,6 +43,24 @@ export default function AdminSettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordNotice, setPasswordNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // SEO & Keywords State
+  const [copiedCategory, setCopiedCategory] = useState<string | null>(null);
+  const [isConfirmClearDataOpen, setIsConfirmClearDataOpen] = useState(false);
+  const [clearDataNotice, setClearDataNotice] = useState<string | null>(null);
+
+  const handleCopyKeywords = (text: string, categoryId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCategory(categoryId);
+    setTimeout(() => setCopiedCategory(null), 2500);
+  };
+
+  const handleClearAllData = () => {
+    clearAllMockData(true);
+    setIsConfirmClearDataOpen(false);
+    setClearDataNotice("✓ Đã xóa sạch toàn bộ dữ liệu mẫu, sản phẩm cũ và chặn thông báo tự động thành công!");
+    setTimeout(() => setClearDataNotice(null), 6000);
+  };
 
   const handleUpdatePassword = () => {
     setPasswordNotice(null);
@@ -881,6 +900,229 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* ========================================================
+            SECTION 7: THƯ VIỆN TỪ KHÓA GOOGLE SEARCH & ĐÒN BẨY SEO
+            ======================================================== */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#F0E5D8] pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] flex items-center justify-center text-xl">
+                🚀
+              </div>
+              <div>
+                <h3 className="font-heading font-extrabold text-lg text-[#231B16] flex items-center gap-2">
+                  <span>7. Thư viện từ khóa Google Search &amp; Đòn bẩy SEO</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#E6F7EC] text-[#1B5E20] border border-[#A5D6A7] text-[10px] font-black uppercase">
+                    Chuẩn Google {SEO_KEYWORD_LIST.length}+ từ
+                  </span>
+                </h3>
+                <p className="text-xs text-[#7E7068]">
+                  Tối ưu hóa khả năng hiển thị, tăng độ phủ sóng trên Google Search Console &amp; Google Tìm kiếm.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleCopyKeywords(SEO_KEYWORD_LIST.join(", "), "all")}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFF8EE] hover:bg-[#FFF4E5] border border-[#F0E5D8] text-xs font-bold text-[#4A2603] transition-colors cursor-pointer self-start sm:self-auto"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>{copiedCategory === "all" ? "✓ Đã sao chép tất cả!" : "Sao chép toàn bộ từ khóa"}</span>
+            </button>
+          </div>
+
+          {/* GOOGLE SERP PREVIEW CARD */}
+          <div className="space-y-2">
+            <span className="text-xs font-extrabold text-[#342A24] flex items-center gap-1.5">
+              <span>Mô phỏng hiển thị trên kết quả tìm kiếm Google (Google SERP Snippet Preview):</span>
+            </span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E0E0E0] shadow-sm max-w-2xl space-y-1.5">
+              <div className="flex items-center gap-2 text-[11px] text-[#202124]">
+                <div className="w-4 h-4 rounded-full overflow-hidden bg-gray-100 relative shrink-0">
+                  <Image src={faviconPreview} alt="Favicon" fill className="object-cover" />
+                </div>
+                <div className="flex items-center gap-1 truncate">
+                  <span className="font-medium text-[#202124]">Gieo Mơ</span>
+                  <span className="text-[#5f6368]">https://gieomo.store › products</span>
+                </div>
+              </div>
+              <h4 className="text-base sm:text-lg font-medium text-[#1a0dab] hover:underline cursor-pointer leading-snug line-clamp-1">
+                Gieo Mơ — Tạp Hoá Gây Quỹ Thiện Nguyện Mầm Mơ | Đồ May Vá Thủ Công
+              </h4>
+              <p className="text-xs text-[#4d5156] leading-relaxed line-clamp-2">
+                Tạp hoá Gieo Mơ — Dự án bán hàng gây quỹ của tổ chức thiện nguyện Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản: túi pouch, ví sen đá, kẹp tóc, set combo quà tặng ý nghĩa. 100% lợi nhuận đồng hành cùng trẻ em khó khăn.
+              </p>
+              <div className="pt-1 flex flex-wrap items-center gap-2 text-[10px] text-[#1a0dab]">
+                <span className="hover:underline cursor-pointer">Sản phẩm thủ công</span> •
+                <span className="hover:underline cursor-pointer">Combo quà tặng</span> •
+                <span className="hover:underline cursor-pointer">Tra cứu đơn hàng</span> •
+                <span className="hover:underline cursor-pointer">Liên hệ Mầm Mơ</span>
+              </div>
+            </div>
+          </div>
+
+          {/* KEYWORD LIBRARY CATEGORIES */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-extrabold text-[#342A24] uppercase tracking-wider">
+              Thư viện từ khóa trọng tâm theo từng nhóm đối tượng tìm kiếm:
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {SEO_CATEGORIZED_KEYWORDS.map((cat, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2.5 flex flex-col justify-between"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-heading font-extrabold text-xs text-[#231B16]">
+                        {cat.categoryName}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyKeywords(cat.keywords.join(", "), `cat-${idx}`)}
+                        className="text-[11px] font-bold text-[#2D6338] hover:text-[#16381D] inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{copiedCategory === `cat-${idx}` ? "✓ Đã sao chép" : "Copy"}</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-[#7E7068]">
+                      {cat.description}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {cat.keywords.map((kw, kIdx) => (
+                      <span
+                        key={kIdx}
+                        className="px-2 py-0.5 rounded-lg bg-white border border-[#E8DDD0] text-[11px] font-medium text-[#4A3B32] shadow-2xs"
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* GOOGLE BOOSTING CHECKLIST & ACTIONS */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#F0FDF4] to-[#F7FEE7] border border-[#86EFAC] space-y-3 text-xs text-[#14532D]">
+            <div className="flex items-center gap-2 font-heading font-extrabold text-sm text-[#166534]">
+              <Sparkles className="w-4 h-4 text-[#16a34a]" />
+              <span>Các bước tăng tốc Google index (Lập chỉ mục thần tốc trong 24 giờ):</span>
+            </div>
+            <ul className="space-y-1.5 list-disc list-inside leading-relaxed text-[#15803D]">
+              <li>
+                <strong>Tệp Sơ đồ trang web (Sitemap):</strong>{" "}
+                <a
+                  href="/sitemap.xml"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono underline font-bold hover:text-black inline-flex items-center gap-1"
+                >
+                  https://gieomo.store/sitemap.xml <ExternalLink className="w-3 h-3 inline" />
+                </a>{" "}
+                (Đã thiết lập tự động cập nhật sản phẩm hàng ngày).
+              </li>
+              <li>
+                <strong>Tệp Robots:</strong>{" "}
+                <a
+                  href="/robots.txt"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono underline font-bold hover:text-black inline-flex items-center gap-1"
+                >
+                  https://gieomo.store/robots.txt <ExternalLink className="w-3 h-3 inline" />
+                </a>{" "}
+                (Cho phép Googlebot, Bingbot thu thập thông tin trang công khai, bảo mật trang admin).
+              </li>
+              <li>
+                <strong>Khai báo Google Search Console:</strong> Vào{" "}
+                <a
+                  href="https://search.google.com/search-console"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold underline hover:text-black"
+                >
+                  Google Search Console
+                </a>
+                , gửi URL Sơ đồ trang web <code className="bg-white/80 px-1 py-0.5 rounded border border-green-300">sitemap.xml</code> và bấm <strong>&quot;Yêu cầu lập chỉ mục&quot; (Request Indexing)</strong>.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* ========================================================
+            SECTION 8: QUẢN TRỊ DỮ LIỆU & LÀM SẠCH HỆ THỐNG
+            ======================================================== */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-[#F0E5D8] pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] flex items-center justify-center text-xl">
+              🧹
+            </div>
+            <div>
+              <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+                8. Quản trị dữ liệu &amp; Chặn thông báo tự động
+              </h3>
+              <p className="text-xs text-[#7E7068]">
+                Làm sạch dữ liệu mẫu, chuẩn bị kho sản phẩm mới và kiểm soát thông báo hệ thống.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Notification Blocking Status */}
+            <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-heading font-extrabold text-xs text-[#342A24] flex items-center gap-1.5">
+                  <BellOff className="w-4 h-4 text-red-500" />
+                  <span>Thông báo đẩy tự động:</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-black uppercase border border-red-200">
+                  Đã chặn hoàn toàn
+                </span>
+              </div>
+              <p className="text-xs text-[#7E7068] leading-relaxed">
+                Hệ thống đã chặn toàn bộ pop-up thông báo tự động và thông báo giả lập trên giao diện để tránh làm phiền ban tổ chức khi đang quản trị.
+              </p>
+            </div>
+
+            {/* Clear Mock Data */}
+            <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-heading font-extrabold text-xs text-[#342A24]">
+                  Xóa sạch dữ liệu mẫu &amp; Sản phẩm cũ:
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase border border-emerald-200">
+                  Sạch 100%
+                </span>
+              </div>
+              <p className="text-xs text-[#7E7068] leading-relaxed">
+                Xóa bỏ toàn bộ đơn hàng test, thanh toán thử nghiệm và sản phẩm mẫu để bạn có thể thêm sản phẩm thật từ đầu.
+              </p>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmClearDataOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs border border-red-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa dữ liệu &amp; Khởi động lại kho mới ➔</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {clearDataNotice && (
+            <div className="p-3.5 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs font-bold text-[#1B5E20] animate-in fade-in">
+              {clearDataNotice}
+            </div>
+          )}
+        </div>
+
         {saveSuccessMessage && (
           <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] font-bold flex items-center gap-2 animate-in fade-in">
             <span>✅</span>
@@ -940,6 +1182,61 @@ export default function AdminSettingsPage() {
                 className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
               >
                 Xác nhận lưu thay đổi ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: XÁC NHẬN XÓA TOÀN BỘ DỮ LIỆU */}
+      {isConfirmClearDataOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                  Xác nhận xóa sạch toàn bộ dữ liệu?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfirmClearDataOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-[#5C4D44] bg-red-50 p-4 rounded-2xl border border-red-200">
+              <p className="font-semibold text-red-800">
+                Hành động này sẽ làm sạch hoàn toàn hệ thống:
+              </p>
+              <ul className="space-y-1 list-disc list-inside text-red-700">
+                <li>Xóa toàn bộ sản phẩm mẫu &amp; Combo quà tặng cũ</li>
+                <li>Xóa sạch danh sách đơn hàng test &amp; giao dịch thử nghiệm</li>
+                <li>Xóa toàn bộ hộp thư thông báo và tin nhắn mẫu</li>
+                <li>Chặn hoàn toàn các thông báo tự động (Auto Push / Toasts)</li>
+              </ul>
+              <p className="text-[11px] text-red-600 pt-1 italic">
+                Sau khi xóa, bạn có thể bắt đầu tạo sản phẩm thật từ trang &quot;Quản lý sản phẩm&quot;.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConfirmClearDataOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllData}
+                className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer"
+              >
+                Đồng ý xóa sạch toàn bộ ➔
               </button>
             </div>
           </div>

@@ -5,14 +5,14 @@ import { Lock, Shield, EyeOff, UserCheck } from "lucide-react";
 import { getSystemSettingsServer } from "@/lib/services/configService";
 
 export const metadata: Metadata = {
-  title: "Gieo Mơ",
+  title: "Chính Sách Bảo Mật Thông Tin Khách Hàng",
   description:
     "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
   alternates: {
     canonical: "/policy/privacy",
   },
   openGraph: {
-    title: "Gieo Mơ",
+    title: "Chính Sách Bảo Mật Thông Tin Khách Hàng | Gieo Mơ",
     description:
       "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
   },

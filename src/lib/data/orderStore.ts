@@ -160,30 +160,8 @@ export function saveNewOrder(newOrder: Order): void {
       localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
     }
 
-    // Add notification to admin notifications mailbox
-    try {
-      const notifRaw = localStorage.getItem("gieomo_admin_notifications");
-      const notifs = notifRaw ? JSON.parse(notifRaw) : [];
-      const newNotif = {
-        id: `notif-ord-${Date.now()}`,
-        type: "order",
-        title: `Đơn hàng mới #${newOrder.order_code}`,
-        desc: `Khách hàng ${newOrder.buyer_name || "Khách"} vừa hoàn tất đặt đơn trị giá ${newOrder.final_amount.toLocaleString("vi-VN")}đ.`,
-        created_at: new Date().toISOString(),
-        read: false,
-        starred: false,
-        link: `/admin/orders/${newOrder.order_id}`,
-        meta: {
-          order_code: newOrder.order_code,
-          amount: newOrder.final_amount,
-          customer: newOrder.buyer_name,
-        },
-      };
-      localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
-      window.dispatchEvent(new Event("gieomo_notifications_updated"));
-    } catch {
-      // ignore
-    }
+    // Automatic push notifications are disabled
+
 
     // Sync order to Supabase PostgreSQL database
     fetch("/api/orders", {
@@ -304,26 +282,8 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
-    // Guard: Only fire payment notification when payment has been completed (paid)
-    if (justPaidOrder) {
-      try {
-        const notifRaw = localStorage.getItem("gieomo_admin_notifications");
-        const notifs = notifRaw ? JSON.parse(notifRaw) : [];
-        const newNotif = {
-          id: `notif-paid-${Date.now()}`,
-          type: "payment",
-          title: `💰 Đơn hàng #${(justPaidOrder as Order).order_code} đã thanh toán thành công`,
-          desc: `Nhận ${(justPaidOrder as Order).final_amount.toLocaleString("vi-VN")}đ từ ${(justPaidOrder as Order).buyer_name || "Khách hàng"}.`,
-          created_at: new Date().toISOString(),
-          read: false,
-          starred: true,
-          link: `/admin/orders/${(justPaidOrder as Order).order_id}`,
-        };
-        localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
-      } catch {
-        // ignore
-      }
-    }
+    // Automatic push notifications are disabled
+
 
     // Sync payment status to Supabase
     fetch("/api/orders", {
@@ -614,25 +574,7 @@ export function saveContactMessage(msg: Omit<ContactMessage, "id" | "status" | "
       const updated = [newMsg, ...list];
       localStorage.setItem("gieomo_contact_messages", JSON.stringify(updated));
 
-      // Add admin notification
-      const notifRaw = localStorage.getItem("gieomo_admin_notifications");
-      const notifs = notifRaw ? JSON.parse(notifRaw) : [];
-      const newNotif = {
-        id: `notif-msg-${Date.now()}`,
-        type: "system",
-        title: `Tin nhắn liên hệ mới từ ${newMsg.name}`,
-        desc: newMsg.message.slice(0, 100) + (newMsg.message.length > 100 ? "..." : ""),
-        created_at: new Date().toISOString(),
-        read: false,
-        starred: false,
-        link: "/admin/messages",
-        meta: {
-          sender: newMsg.name,
-          email: newMsg.email,
-          phone: newMsg.phone,
-        },
-      };
-      localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
+      // Automatic push notifications are disabled
       window.dispatchEvent(new Event("gieomo_messages_updated"));
     } catch (e) {
       console.error("Error saving contact message", e);
@@ -691,20 +633,7 @@ export function confirmOrderPaymentFromWebhook(orderCode: string, amount: number
     };
     localStorage.setItem("gieomo_payments", JSON.stringify([newPay, ...payments.filter((p) => p.orderCode !== target.order_code)]));
 
-    // Create notification
-    const notifRaw = localStorage.getItem("gieomo_admin_notifications");
-    const notifs = notifRaw ? JSON.parse(notifRaw) : [];
-    const newNotif = {
-      id: `notif-sepay-${Date.now()}`,
-      type: "payment",
-      title: `⚡ SePay đã tự động duyệt đơn #${target.order_code}`,
-      desc: `Nhận ${amount.toLocaleString("vi-VN")}đ qua chuyển khoản ngân hàng (Mã GD: ${transactionId}).`,
-      created_at: new Date().toISOString(),
-      read: false,
-      starred: true,
-      link: `/admin/orders/${target.order_id}`,
-    };
-    localStorage.setItem("gieomo_admin_notifications", JSON.stringify([newNotif, ...notifs]));
+    // Automatic push notifications are disabled
     window.dispatchEvent(new Event("gieomo_orders_updated"));
     return true;
   } catch (e) {
@@ -1010,41 +939,12 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
-    const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [...MOCK_PRODUCTS];
-
-    const map = new Map<string, ExtendedProduct>();
-
-    // Add products and ensure valid images (repairing any previously corrupted single fallback pouch image)
-    for (const p of products) {
-      const key = p.slug || p.product_id;
-      if (!map.has(key)) {
-        const mockMatch = MOCK_PRODUCTS.find((m) => m.slug === p.slug || m.product_id === p.product_id);
-        if (mockMatch && p.slug !== "pouch-mam-mo" && p.images?.length === 1 && p.images[0] === "/images/products/pounch_1.png") {
-          p.images = mockMatch.images;
-          p.thumbnail = mockMatch.thumbnail;
-        }
-        map.set(key, p);
-      }
-    }
-
-    // Ensure all seed products are present
-    for (const mockP of MOCK_PRODUCTS) {
-      const key = mockP.slug || mockP.product_id;
-      if (!map.has(key)) {
-        map.set(key, mockP);
-      }
-    }
-
-    const uniqueProducts = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-    if (uniqueProducts.length !== products.length || !raw) {
-      localStorage.setItem("gieomo_products", JSON.stringify(uniqueProducts));
-    }
-    cachedProducts = uniqueProducts;
-    return uniqueProducts;
+    const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+    cachedProducts = products;
+    return products;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
-    return MOCK_PRODUCTS;
+    return [];
   }
 }
 
@@ -1655,24 +1555,12 @@ export function getStoredCombos(): ExtendedCombo[] {
   if (cachedCombos !== null) return cachedCombos;
   try {
     const raw = localStorage.getItem("gieomo_combos");
-    let combos: ExtendedCombo[] = raw ? JSON.parse(raw) : [...MOCK_COMBOS];
-
-    let hasAdded = false;
-    for (const mockCb of MOCK_COMBOS) {
-      if (!combos.some((c) => c.combo_id === mockCb.combo_id)) {
-        combos.push(mockCb);
-        hasAdded = true;
-      }
-    }
-
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_combos", JSON.stringify(combos));
-    }
+    const combos: ExtendedCombo[] = raw ? JSON.parse(raw) : [];
     cachedCombos = combos;
     return combos;
   } catch (e) {
     console.error("Error reading gieomo_combos", e);
-    return MOCK_COMBOS;
+    return [];
   }
 }
 
@@ -1827,10 +1715,11 @@ export function deleteStoredReview(reviewId: string): void {
 // ==========================================
 // DATA CLEANUP & LIVE STORE PREPARATION
 // ==========================================
-export function clearAllMockData(includeCatalog = false): void {
+export function clearAllMockData(includeCatalog = true): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem("gieomo_cleaned_seed", "true");
+    localStorage.setItem("gieomo_data_wiped_v3", "true");
     
     // Clear transactions & test records
     localStorage.setItem("gieomo_orders", JSON.stringify([]));
@@ -1846,11 +1735,11 @@ export function clearAllMockData(includeCatalog = false): void {
     cachedPayments = [];
     cachedReviews = [];
 
-    if (includeCatalog) {
-      localStorage.setItem("gieomo_products", JSON.stringify([]));
-      localStorage.setItem("gieomo_combos", JSON.stringify([]));
-      cachedProducts = [];
-    }
+    // Always clear products and combos as requested
+    localStorage.setItem("gieomo_products", JSON.stringify([]));
+    localStorage.setItem("gieomo_combos", JSON.stringify([]));
+    cachedProducts = [];
+    cachedCombos = [];
 
     // Trigger window events so all live components re-render immediately
     window.dispatchEvent(new Event("gieomo_orders_updated"));
@@ -1858,8 +1747,20 @@ export function clearAllMockData(includeCatalog = false): void {
     window.dispatchEvent(new Event("gieomo_products_updated"));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
+    window.dispatchEvent(new Event("gieomo_notifications_updated"));
   } catch (e) {
     console.error("Error clearing mock data", e);
+  }
+}
+
+// Automatic one-time client side purge to ensure old mock products & orders are wiped
+if (typeof window !== "undefined") {
+  try {
+    if (localStorage.getItem("gieomo_data_wiped_v3") !== "true") {
+      clearAllMockData(true);
+    }
+  } catch {
+    // ignore
   }
 }
 

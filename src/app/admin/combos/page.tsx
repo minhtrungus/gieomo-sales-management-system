@@ -86,7 +86,7 @@ export default function AdminCombosPage() {
   const handleAddItemToCreate = () => {
     setComboItems([
       ...comboItems,
-      { product_id: availableProducts[0]?.product_id || MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
+      { product_id: availableProducts[0]?.product_id || "prod-custom", quantity: 1 },
     ]);
   };
 
@@ -100,7 +100,7 @@ export default function AdminCombosPage() {
   const handleAddItemToEdit = () => {
     setEditComboItems([
       ...editComboItems,
-      { product_id: availableProducts[0]?.product_id || MOCK_PRODUCTS[0]?.product_id || "prod-1", quantity: 1 },
+      { product_id: availableProducts[0]?.product_id || "prod-custom", quantity: 1 },
     ]);
   };
 
@@ -210,8 +210,18 @@ export default function AdminCombosPage() {
     const mappedItems = comboItems.map((item) => {
       const p =
         availableProducts.find((prod) => prod.product_id === item.product_id) ||
-        MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) ||
-        MOCK_PRODUCTS[0];
+        availableProducts[0] ||
+        ({
+          product_id: item.product_id,
+          name: "Sản phẩm ghép",
+          slug: "san-pham-ghep",
+          price: 0,
+          compare_at_price: null,
+          cost_price: null,
+          status: "active" as const,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as ExtendedProduct);
       return {
         product: p,
         quantity: item.quantity,
@@ -256,8 +266,18 @@ export default function AdminCombosPage() {
     const mappedItems = editComboItems.map((item) => {
       const p =
         availableProducts.find((prod) => prod.product_id === item.product_id) ||
-        MOCK_PRODUCTS.find((prod) => prod.product_id === item.product_id) ||
-        MOCK_PRODUCTS[0];
+        availableProducts[0] ||
+        ({
+          product_id: item.product_id,
+          name: "Sản phẩm ghép",
+          slug: "san-pham-ghep",
+          price: 0,
+          compare_at_price: null,
+          cost_price: null,
+          status: "active" as const,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as ExtendedProduct);
       return {
         product: p,
         quantity: item.quantity,

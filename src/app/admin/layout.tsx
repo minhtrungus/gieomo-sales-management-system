@@ -16,6 +16,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isLoginPage = pathname === "/admin/login";
 
+  // Set clean tab title "Gieo Mơ" exclusively for the Admin panel
+  useEffect(() => {
+    document.title = "Gieo Mơ";
+  }, [pathname]);
+
   useEffect(() => {
     if (!isLoginPage) {
       if (!isAdminAuthenticated()) {

@@ -42,27 +42,16 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-// Clean initial system notifications
+// Clean initial system notifications - empty by default to prevent spam notifications
 function generateInitialNotifications(): NotificationItem[] {
-  return [
-    {
-      id: "notif-system-init",
-      type: "system",
-      title: "Hệ thống quản lý Gieo Mơ sẵn sàng",
-      desc: "Chào mừng ban tổ chức Mầm Mơ. Hệ thống vận hành và ghi nhận đơn hàng đã sẵn sàng.",
-      created_at: new Date().toISOString(),
-      read: false,
-      starred: true,
-      link: "/admin/orders",
-    }
-  ];
+  return [];
 }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  // Load notifications from storage or initial seed
+  // Load notifications from storage or initialize empty
   useEffect(() => {
     const saved = localStorage.getItem("gieomo_admin_notifications");
     if (saved) {
@@ -73,13 +62,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         console.error("Failed to parse saved notifications", e);
       }
     }
-    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
-    if (isCleaned) {
-      setNotifications([]);
-      return;
-    }
-    const initial = generateInitialNotifications();
-    setNotifications(initial);
+    setNotifications([]);
   }, []);
 
   // Save to localStorage (limit to 50 most recent to prevent storage bloat)
@@ -95,28 +78,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Automatic push notifications and toasts are blocked per user instruction
   const pushNotification = useCallback(
-    (itemData: Omit<NotificationItem, "id" | "created_at" | "read" | "starred">) => {
-      const newItem: NotificationItem = {
-        ...itemData,
-        id: `notif-push-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        created_at: new Date().toISOString(),
-        read: false,
-        starred: false,
-      };
-
-      setNotifications((prev) => [newItem, ...prev]);
-
-      // Add Toast
-      const toastId = `toast-${Date.now()}`;
-      setToasts((prev) => [...prev.slice(-2), { id: toastId, notification: newItem }]);
-
-      // Auto dismiss toast after 6s
-      setTimeout(() => {
-        dismissToast(toastId);
-      }, 6000);
+    (_itemData: Omit<NotificationItem, "id" | "created_at" | "read" | "starred">) => {
+      // Intentionally blocked to prevent unwanted automatic popups
     },
-    [dismissToast]
+    []
   );
 
   const markAsRead = useCallback((ids: string[]) => {
