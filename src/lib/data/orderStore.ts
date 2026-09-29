@@ -1691,6 +1691,10 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
           email: matchedMember?.email || cleanEmail || "baotri@gieomo.store",
           name: matchedMember?.fullName || "Bảo trì Hệ thống",
           role: matchedMember?.role || "admin",
+          referralCode: matchedMember?.referralCode || "BAOTRI",
+          memberId: matchedMember?.memberId || "baotri-system",
+          phone: matchedMember?.phone || "0900000000",
+          isSystemProtected: true,
           loginAt: new Date().toISOString(),
         }));
         window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
