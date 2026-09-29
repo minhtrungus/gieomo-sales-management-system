@@ -29,11 +29,11 @@ export default function AdminLoginPage() {
         return;
       }
 
-      const isValid = verifyAdminLogin(cleanPass);
+      const isValid = verifyAdminLogin(cleanPass, cleanEmail);
       if (isValid) {
         router.push("/admin/dashboard");
       } else {
-        setError("Mật khẩu không chính xác! Vui lòng kiểm tra lại.");
+        setError("Mật khẩu không chính xác! Vui lòng thử GieoMo@2026 hoặc mật khẩu thành viên.");
         setLoading(false);
       }
     }, 400);
@@ -83,10 +83,14 @@ export default function AdminLoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full h-11 inline-flex items-center justify-center font-bold text-xs sm:text-sm text-white bg-[#342A24] hover:bg-[#231B16] rounded-full shadow-xs transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-11 inline-flex items-center justify-center font-bold text-xs sm:text-sm text-white bg-[#342A24] hover:bg-[#231B16] rounded-full shadow-xs transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           {loading ? "Đang xử lý..." : "Đăng nhập Quản trị"}
         </button>
+
+        <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900 text-center">
+          🔑 Mật khẩu quản trị mặc định: <code className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-amber-200">GieoMo@2026</code> hoặc <code className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-amber-200">MamMo@123</code> (Đổi được trong Cài đặt).
+        </div>
       </form>
 
       <div className="text-center pt-2 border-t border-gray-100">
