@@ -57,14 +57,14 @@ export default function HomePage() {
               {/* Left Column: Story & Narrative */}
               <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
                 {/* Floating Campaign Badge - Crisp bg without backdrop-filter to prevent layer invalidation */}
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float">
-                  <Sparkles className="w-3.5 h-3.5 text-[#FFB98A]" />
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float whitespace-nowrap">
+                  <Sparkles className="w-3.5 h-3.5 text-[#FFB98A] shrink-0" />
                   <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
                 </div>
 
                 {/* Main Headline */}
                 <div className="space-y-2">
-                  <h1 className="font-heading font-extrabold text-4xl sm:text-5xl lg:text-6xl text-[#231B16] tracking-tight leading-[1.15]">
+                  <h1 className="font-heading font-extrabold text-4xl sm:text-5xl lg:text-6xl text-[#231B16] tracking-tight leading-[1.15] text-balance">
                     Little Pieces,
                     <br />
                     <span className="bg-gradient-to-r from-[#2D6338] via-[#E2884E] to-[#D95B88] bg-clip-text text-transparent">
@@ -81,10 +81,10 @@ export default function HomePage() {
                   <Link
                     href="/products"
                     prefetch={true}
-                    className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-[transform,background-color,box-shadow] active:scale-95 border border-[#9ed4a3]"
+                    className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-[transform,background-color,box-shadow] active:scale-95 border border-[#9ed4a3] whitespace-nowrap"
                   >
                     <span>Khám phá sản phẩm Gieo Mơ</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </Link>
 
                   <Link

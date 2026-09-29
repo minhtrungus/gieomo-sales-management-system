@@ -69,7 +69,13 @@ export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return MOCK_ORDERS;
   if (cachedOrders !== null) return cachedOrders;
   try {
+    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_orders");
+    if (isCleaned) {
+      const orders: Order[] = raw ? JSON.parse(raw) : [];
+      cachedOrders = orders;
+      return orders;
+    }
     let orders: Order[] = raw ? JSON.parse(raw) : [...MOCK_ORDERS];
 
     // Ensure all seed orders (GM-369817, Mai Lan's 15 orders, etc.) are present
@@ -88,7 +94,7 @@ export function getStoredOrders(): Order[] {
     return orders;
   } catch (e) {
     console.error("Error reading gieomo_orders from localStorage", e);
-    return MOCK_ORDERS;
+    return [];
   }
 }
 
@@ -442,7 +448,13 @@ export function getStoredPayments(): PaymentRecord[] {
   if (typeof window === "undefined") return SEED_PAYMENTS;
   if (cachedPayments !== null) return cachedPayments;
   try {
+    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_payments");
+    if (isCleaned) {
+      const payments: PaymentRecord[] = raw ? JSON.parse(raw) : [];
+      cachedPayments = payments;
+      return payments;
+    }
     let payments: PaymentRecord[] = raw ? JSON.parse(raw) : [...SEED_PAYMENTS];
     const targetPay = SEED_PAYMENTS.find((p) => p.orderCode === "GM-369817");
     if (targetPay && !payments.some((p) => p.orderCode === "GM-369817")) {
@@ -455,7 +467,7 @@ export function getStoredPayments(): PaymentRecord[] {
     return payments;
   } catch (e) {
     console.error("Error reading gieomo_payments", e);
-    return SEED_PAYMENTS;
+    return [];
   }
 }
 
@@ -1912,7 +1924,13 @@ export function getStoredReviews(productId?: string): ProductReview[] {
     return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
   }
   try {
+    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
     const raw = localStorage.getItem("gieomo_product_reviews");
+    if (isCleaned) {
+      const list: ProductReview[] = raw ? JSON.parse(raw) : [];
+      cachedReviews = list;
+      return productId ? list.filter((r) => r.product_id === productId) : list;
+    }
     if (!raw) {
       localStorage.setItem("gieomo_product_reviews", JSON.stringify(SEED_REVIEWS));
       cachedReviews = SEED_REVIEWS;
@@ -1923,7 +1941,7 @@ export function getStoredReviews(productId?: string): ProductReview[] {
     return productId ? list.filter((r) => r.product_id === productId) : list;
   } catch (e) {
     console.error("Error reading reviews", e);
-    return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
+    return [];
   }
 }
 
@@ -1950,6 +1968,74 @@ export function deleteStoredReview(reviewId: string): void {
     window.dispatchEvent(new Event("gieomo_reviews_updated"));
   } catch (e) {
     console.error("Error deleting review", e);
+  }
+}
+
+// ==========================================
+// DATA CLEANUP & LIVE STORE PREPARATION
+// ==========================================
+export function clearAllMockData(includeCatalog = false): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("gieomo_cleaned_seed", "true");
+    
+    // Clear transactions & test records
+    localStorage.setItem("gieomo_orders", JSON.stringify([]));
+    localStorage.setItem("gieomo_payments", JSON.stringify([]));
+    localStorage.setItem("gieomo_customers", JSON.stringify([]));
+    localStorage.setItem("gieomo_admin_notifications", JSON.stringify([]));
+    localStorage.setItem("gieomo_product_reviews", JSON.stringify([]));
+    localStorage.setItem("gieomo_contact_messages", JSON.stringify([]));
+    localStorage.removeItem("gieomo_my_order_codes");
+    localStorage.removeItem("gieomo_customer_profile");
+    
+    cachedOrders = [];
+    cachedPayments = [];
+    cachedReviews = [];
+
+    if (includeCatalog) {
+      localStorage.setItem("gieomo_products", JSON.stringify([]));
+      localStorage.setItem("gieomo_combos", JSON.stringify([]));
+      cachedProducts = [];
+    }
+
+    // Trigger window events so all live components re-render immediately
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+    window.dispatchEvent(new Event("gieomo_reviews_updated"));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+    window.dispatchEvent(new Event("gieomo_categories_updated"));
+    window.dispatchEvent(new Event("gieomo_combos_updated"));
+  } catch (e) {
+    console.error("Error clearing mock data", e);
+  }
+}
+
+export function restoreSeedMockData(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem("gieomo_cleaned_seed");
+    localStorage.removeItem("gieomo_orders");
+    localStorage.removeItem("gieomo_payments");
+    localStorage.removeItem("gieomo_customers");
+    localStorage.removeItem("gieomo_admin_notifications");
+    localStorage.removeItem("gieomo_product_reviews");
+    localStorage.removeItem("gieomo_contact_messages");
+    localStorage.removeItem("gieomo_products");
+    localStorage.removeItem("gieomo_combos");
+    localStorage.removeItem("gieomo_categories");
+
+    cachedOrders = null;
+    cachedPayments = null;
+    cachedReviews = null;
+    cachedProducts = null;
+
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+    window.dispatchEvent(new Event("gieomo_reviews_updated"));
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+    window.dispatchEvent(new Event("gieomo_categories_updated"));
+    window.dispatchEvent(new Event("gieomo_combos_updated"));
+  } catch (e) {
+    console.error("Error restoring mock data", e);
   }
 }
 

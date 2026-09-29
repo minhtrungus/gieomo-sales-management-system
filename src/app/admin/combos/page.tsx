@@ -350,7 +350,7 @@ export default function AdminCombosPage() {
             Quản lý Set Combo quà tặng
           </h1>
           <p className="text-xs text-[#7E7068] mt-0.5">
-            Tạo và cấu hình các bộ quà tặng may vá ghép từ nhiều sản phẩm (2, 3 hoặc nhiều món) với mức giá ưu đãi và tính toán tiết kiệm tự động.
+            Tạo và cấu hình các bộ quà tặng ghép từ nhiều sản phẩm với mức giá ưu đãi.
           </p>
         </div>
 

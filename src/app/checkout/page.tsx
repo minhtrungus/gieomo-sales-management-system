@@ -474,8 +474,16 @@ function CheckoutContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {[
-                  { id: "home_delivery", label: "Giao tận nơi", desc: `Ship cố định ${(siteSettings.flatShippingFee / 1000)}k toàn quốc` },
-                  { id: "member_delivery", label: "Qua người quen", desc: "Thành viên giao tay (0đ)" },
+                  {
+                    id: "home_delivery",
+                    label: "Giao tận nơi",
+                    desc: `Phí ship ${siteSettings.flatShippingFee ? `${siteSettings.flatShippingFee.toLocaleString("vi-VN")}đ` : "15.000đ"} toàn quốc`,
+                  },
+                  {
+                    id: "member_delivery",
+                    label: "Qua người quen",
+                    desc: "Thành viên Mầm Mơ gửi trực tiếp",
+                  },
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -503,9 +511,11 @@ function CheckoutContent() {
                       { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
                       { value: "Hà Nội", label: "Hà Nội" },
                       { value: "Tây Ninh", label: "Tây Ninh" },
-                      { value: "Đà Nẵng", label: "Đà Nẵng" },
                       { value: "Đồng Tháp", label: "Đồng Tháp" },
+                      { value: "Đà Nẵng", label: "Đà Nẵng" },
+                      { value: "Bình Dương", label: "Bình Dương" },
                       { value: "Đồng Nai", label: "Đồng Nai" },
+                      { value: "Cần Thơ", label: "Cần Thơ" },
                       { value: "Tỉnh khác", label: "Các tỉnh thành khác" },
                     ]}
                   />
@@ -840,7 +850,9 @@ function CheckoutContent() {
                 <div className="flex justify-between text-gray-600">
                   <span>Phí giao hàng:</span>
                   {shippingFee === 0 ? (
-                    <span className="text-emerald-700 font-bold">Miễn phí</span>
+                    <span className="text-emerald-700 font-bold">
+                      {deliveryType === "member_delivery" ? "0đ (Thành viên gửi)" : "Miễn phí"}
+                    </span>
                   ) : (
                     <MoneyDisplay amount={shippingFee} className="font-bold text-gray-900" />
                   )}

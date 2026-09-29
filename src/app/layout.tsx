@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Montserrat } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import "./globals.css";
 
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "G-P3MJB88K1K";
@@ -84,7 +85,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="vi" className={`${montserrat.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <OrganizationJsonLd />
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
         {GA_MEASUREMENT_ID && (
           <>
             <Script

@@ -18,11 +18,22 @@ import {
 import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star, FolderTree } from "lucide-react";
+import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star, FolderTree, Boxes } from "lucide-react";
+import { AdminCategoriesTab } from "@/components/admin/AdminCategoriesTab";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
+  const [activeMainTab, setActiveMainTab] = useState<"products" | "categories">("products");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "categories") {
+        setActiveMainTab("categories");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     setProducts(getStoredProducts());
@@ -212,28 +223,26 @@ export default function AdminProductsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-heading font-extrabold text-2xl text-[#231B16]">
-            Quản lý sản phẩm & Hàng hóa
+            Quản lý sản phẩm &amp; Hàng hóa
           </h1>
           <p className="text-xs text-[#7E7068] mt-0.5">
-            Xem danh sách, thêm mới, sửa giá, kiểm soát tồn kho và cập nhật trạng thái sản phẩm đồng bộ cơ sở dữ liệu.
+            Xem danh sách, kiểm soát tồn kho và phân loại danh mục sản phẩm.
           </p>
-          <div className="mt-2 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3 py-1.5 inline-flex items-center gap-2">
-            <span>💡</span>
-            <span>
-              Sản phẩm <strong>&quot;Đang bán&quot;</strong> sẽ hiển thị trên trang Tất cả sản phẩm. Bật thêm <strong>&quot;⭐ Nổi bật&quot;</strong> để đưa sản phẩm lên khu vực nổi bật trên Trang chủ.
-            </span>
-          </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <Link
-            href="/admin/categories"
-            className="px-4 py-2.5 rounded-full bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#342A24] border border-[#F0E5D8] font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all active:scale-95"
-            title="Quản lý và chỉnh sửa danh mục sản phẩm"
+          <button
+            type="button"
+            onClick={() => setActiveMainTab("categories")}
+            className={`px-4 py-2.5 rounded-full border text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer ${
+              activeMainTab === "categories"
+                ? "bg-[#1B3622] text-white border-[#1B3622]"
+                : "bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#342A24] border-[#F0E5D8]"
+            }`}
           >
-            <FolderTree className="w-3.5 h-3.5 text-emerald-700" />
+            <FolderTree className="w-3.5 h-3.5 text-emerald-600" />
             <span>Danh mục ({categories.length})</span>
-          </Link>
+          </button>
 
           <Link
             href="/admin/products/new"
@@ -244,6 +253,47 @@ export default function AdminProductsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Main Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-[#F0E5D8] pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("products")}
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeMainTab === "products"
+              ? "bg-[#1B3622] text-white shadow-xs"
+              : "bg-white text-[#7E7068] hover:text-[#1B3622] hover:bg-cream border border-[#F0E5D8]"
+          }`}
+        >
+          <Boxes className="w-4 h-4" />
+          <span>Danh sách sản phẩm ({products.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("categories")}
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeMainTab === "categories"
+              ? "bg-[#1B3622] text-white shadow-xs"
+              : "bg-white text-[#7E7068] hover:text-[#1B3622] hover:bg-cream border border-[#F0E5D8]"
+          }`}
+        >
+          <FolderTree className="w-4 h-4" />
+          <span>Danh mục sản phẩm ({categories.length})</span>
+        </button>
+      </div>
+
+      {activeMainTab === "categories" ? (
+        <AdminCategoriesTab />
+      ) : (
+        <>
+          {/* Tip Box */}
+          <div className="text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl px-3.5 py-2 flex items-center gap-2">
+            <span>💡</span>
+            <span>
+              Sản phẩm <strong>&quot;Đang bán&quot;</strong> hiển thị trên website. Bật <strong>&quot;⭐ Nổi bật&quot;</strong> để đưa lên đầu Trang chủ.
+            </span>
+          </div>
 
       {/* Search & Category Filter */}
       <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -290,14 +340,15 @@ export default function AdminProductsPage() {
               Chưa phân loại ({uncategorizedCount})
             </button>
           )}
-          <Link
-            href="/admin/categories"
+          <button
+            type="button"
+            onClick={() => setActiveMainTab("categories")}
             className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
-            title="Quản lý / Thêm sửa xóa danh mục sản phẩm"
+            title="Quản lý danh mục sản phẩm"
           >
             <FolderTree className="w-3.5 h-3.5" />
             <span>+ Quản lý danh mục</span>
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -816,6 +867,8 @@ export default function AdminProductsPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

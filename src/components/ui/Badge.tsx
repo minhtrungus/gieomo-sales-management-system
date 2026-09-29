@@ -34,7 +34,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-medium rounded-full shadow-2xs",
+        "inline-flex items-center font-medium rounded-full shadow-2xs whitespace-nowrap",
         variantStyles[variant],
         sizeStyles[size],
         className
@@ -57,7 +57,7 @@ export function StatusBadge({ status, labels, colors, className }: StatusBadgePr
   return (
     <span
       className={cn(
-        "inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full border shadow-2xs",
+        "inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full border shadow-2xs whitespace-nowrap",
         colors[status] || "bg-[#FFF8EE] text-[#4A3B32] border-[#F0E5D8]",
         className
       )}

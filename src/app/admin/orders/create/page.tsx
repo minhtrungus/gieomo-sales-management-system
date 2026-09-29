@@ -461,9 +461,12 @@ export default function AdminCreateOrderPage() {
                   options={[
                     { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
                     { value: "Hà Nội", label: "Hà Nội" },
+                    { value: "Tây Ninh", label: "Tây Ninh" },
+                    { value: "Đồng Tháp", label: "Đồng Tháp" },
                     { value: "Đà Nẵng", label: "Đà Nẵng" },
                     { value: "Bình Dương", label: "Bình Dương" },
                     { value: "Đồng Nai", label: "Đồng Nai" },
+                    { value: "Cần Thơ", label: "Cần Thơ" },
                     { value: "Tỉnh khác", label: "Các tỉnh thành khác" },
                   ]}
                 />

@@ -84,6 +84,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         console.error("Failed to parse saved notifications", e);
       }
     }
+    const isCleaned = localStorage.getItem("gieomo_cleaned_seed") === "true";
+    if (isCleaned) {
+      setNotifications([]);
+      return;
+    }
     const initial = generateInitialNotifications();
     setNotifications(initial);
   }, []);

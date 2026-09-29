@@ -50,7 +50,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
 
   const getRouteInfo = (path: string) => {
     if (path.includes("/admin/notifications"))
-      return { title: "Hộp thư thông báo", breadcrumb: "Hộp thư hệ thống (Gmail View)" };
+      return { title: "Hộp thư thông báo", breadcrumb: "Hộp thư hệ thống" };
     if (path.includes("/admin/orders/create"))
       return { title: "Tạo đơn hàng hộ", breadcrumb: "Đơn hàng / Tạo đơn" };
     if (path.includes("/admin/orders"))
@@ -259,7 +259,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
                   className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#2D6338] hover:text-[#1E4525] hover:underline"
                 >
                   <Inbox className="w-4 h-4" />
-                  <span>Mở toàn bộ hộp thư thông báo (50/trang kiểu Gmail) ➔</span>
+                  <span>Xem toàn bộ thông báo hệ thống ➔</span>
                 </Link>
               </div>
             </div>

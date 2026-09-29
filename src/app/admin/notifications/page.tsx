@@ -259,7 +259,7 @@ export default function NotificationsPage() {
                 )}
               </h1>
               <p className="text-xs text-[#7E7068]">
-                Quản lý toàn bộ thông báo đơn hàng, thanh toán và biến động kho theo phong cách Gmail (50 thông báo/trang).
+                Theo dõi đơn hàng mới, thanh toán và biến động kho theo thời gian thực.
               </p>
             </div>
           </div>
@@ -657,7 +657,7 @@ export default function NotificationsPage() {
         {/* Gmail Footer Pagination Bar */}
         <div className="p-3 bg-[#FFFDF9] border-t border-[#F0E5D8] flex items-center justify-between text-xs text-[#7E7068]">
           <span className="font-medium">
-            Hiển thị <strong>50 thông báo</strong> trên mỗi trang (chuẩn phong cách Gmail)
+            Hiển thị <strong>50 thông báo</strong> trên mỗi trang
           </span>
 
           <div className="flex items-center gap-2">

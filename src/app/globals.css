@@ -82,6 +82,7 @@ body {
     font-weight: 700;
     color: var(--color-title);
     line-height: 1.25;
+    text-wrap: balance;
   }
 }
 
