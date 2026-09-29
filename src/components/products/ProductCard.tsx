@@ -98,7 +98,7 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
           <h3 className="font-heading font-bold text-[#342A24] text-sm sm:text-base line-clamp-2 leading-snug text-balance group-hover:text-[#2D6338] transition-colors">
             {product.name}
           </h3>
-          <p className="text-[11px] sm:text-xs text-[#7E7068] line-clamp-2 leading-relaxed hidden sm:block text-pretty">
+          <p className="text-[11px] sm:text-xs text-[#7E7068] line-clamp-2 leading-relaxed hidden sm:block text-justify hyphens-auto break-words">
             {product.short_description}
           </p>
         </div>

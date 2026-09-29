@@ -45,7 +45,7 @@ export default function DeliveryPolicyPage() {
             </div>
             <div>
               <h3 className="font-heading font-bold text-base text-emerald-950 text-balance">Phí giao hàng cố định</h3>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-pretty">
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-justify hyphens-auto break-words">
                 Đồng giá <strong className="text-emerald-900">15.000đ</strong> cho tất cả các đơn hàng giao tận nơi trên toàn quốc.
               </p>
             </div>
@@ -57,7 +57,7 @@ export default function DeliveryPolicyPage() {
             </div>
             <div>
               <h3 className="font-heading font-bold text-base text-emerald-950 text-balance">Thời gian nhận hàng</h3>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-pretty">
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-justify hyphens-auto break-words">
                 Từ 3 đến 5 ngày tùy theo khu vực nhận hàng.
               </p>
             </div>
@@ -69,7 +69,7 @@ export default function DeliveryPolicyPage() {
             </div>
             <div>
               <h3 className="font-heading font-bold text-base text-emerald-950 text-balance">Đóng gói cẩn thận</h3>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-pretty">
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed text-justify hyphens-auto break-words">
                 Sản phẩm được đóng gói chỉn chu nhất để gửi đến bạn.
               </p>
             </div>
@@ -82,7 +82,7 @@ export default function DeliveryPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               1. Quy trình xử lý đơn hàng
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Ngay khi bạn đặt hàng và xác nhận thanh toán, Tạp Hóa Gieo Mơ sẽ chuẩn bị sản phẩm, đóng gói cẩn thận và bàn giao cho đơn vị vận chuyển (SPX Express) trong vòng 24 giờ.
             </p>
           </section>
@@ -91,7 +91,7 @@ export default function DeliveryPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               2. Kiểm tra hàng khi nhận
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Gieo Mơ khuyến khích bạn quay video nhận hàng nhận về tình trạng sản phẩm khi unbox. Nếu sản phẩm bị hư hỏng hoặc không đúng mẫu do lỗi Gieo Mơ, bạn có thể liên hệ ngay với hotline <strong>0888670637</strong> để được hỗ trợ trong vòng 2 ngày kể từ khi nhận hàng.
             </p>
           </section>
@@ -100,7 +100,7 @@ export default function DeliveryPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               3. Tra cứu hành trình vận chuyển
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Bạn có thể dễ dàng kiểm tra đơn hàng đang ở công đoạn nào bằng cách truy cập trang{" "}
               <Link href="/track" className="text-emerald-800 font-bold hover:underline">
                 Tra cứu đơn hàng (`/track`)

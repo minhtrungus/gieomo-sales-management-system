@@ -129,7 +129,7 @@ export default function ProductsPage() {
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight text-balance">
             Tất cả sản phẩm Gieo Mơ
           </h1>
-          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-pretty">
+          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-justify hyphens-auto break-words">
             Tất cả sản phẩm tại Tạp hóa Gieo Mơ đều được tạo nên từ những điều nhỏ bé, để mang đến một niềm vui nhỏ cho bạn và tiếp nối những điều tốt đẹp đến cộng đồng.
           </p>
         </div>

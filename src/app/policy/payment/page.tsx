@@ -50,7 +50,7 @@ export default function PaymentPolicyPage() {
             <h3 className="font-heading font-extrabold text-xl text-emerald-950 text-balance">
               Chuyển khoản VietQR tự động
             </h3>
-            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed text-pretty">
+            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed text-justify hyphens-auto break-words">
               Mã QR động được sinh tự động khi checkout, tích hợp chính xác số tiền & nội dung chuyển khoản mã đơn hàng.
             </p>
 
@@ -77,7 +77,7 @@ export default function PaymentPolicyPage() {
             📌 Hướng dẫn chuyển khoản qua VietQR
           </h2>
 
-          <ol className="list-decimal list-inside space-y-3 text-xs sm:text-sm text-gray-700 text-pretty">
+          <ol className="list-decimal list-inside space-y-3 text-xs sm:text-sm text-gray-700 text-justify hyphens-auto break-words">
             <li>Tại bước Thanh toán, chọn phương thức <strong>Chuyển khoản VietQR</strong>.</li>
             <li>Mở ứng dụng Ngân hàng (MB Bank, Vietcombank, Techcombank, Momo, VPBank...) trên điện thoại của bạn.</li>
             <li>Chọn tính năng <strong>Quét mã QR</strong> và đưa camera về phía mã QR trên màn hình.</li>

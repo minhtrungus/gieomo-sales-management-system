@@ -84,7 +84,7 @@ export default function FAQPage() {
               </button>
 
               {openIndex === idx && (
-                <div className="px-5 pb-5 text-xs sm:text-sm text-gray-600 leading-relaxed border-t border-emerald-50 pt-3 text-pretty">
+                <div className="px-5 pb-5 text-xs sm:text-sm text-gray-600 leading-relaxed border-t border-emerald-50 pt-3 text-justify hyphens-auto break-words">
                   {faq.a}
                 </div>
               )}

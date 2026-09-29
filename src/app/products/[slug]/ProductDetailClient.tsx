@@ -219,7 +219,7 @@ export function ProductDetailClient({
               </div>
 
               {/* Short Description */}
-              <p className="text-sm text-gray-600 leading-relaxed text-pretty">
+              <p className="text-sm text-gray-600 leading-relaxed text-justify hyphens-auto break-words">
                 {product.short_description}
               </p>
 
@@ -330,7 +330,7 @@ export function ProductDetailClient({
                   <BookOpen className="w-4 h-4 text-[#2D6338]" />
                   <span>Mô tả chi tiết</span>
                 </h4>
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-gray-50/70 p-4 sm:p-5 rounded-2xl border border-gray-100">
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-gray-50/70 p-4 sm:p-5 rounded-2xl border border-gray-100 text-justify hyphens-auto break-words">
                   {parsedInfo.overview || product.description}
                 </div>
               </div>
@@ -354,7 +354,7 @@ export function ProductDetailClient({
                         <div className="w-36 sm:w-48 py-3 px-4 text-gray-500 font-medium shrink-0 border-r border-gray-100/90 flex items-center">
                           {row.label}
                         </div>
-                        <div className="py-3 px-4 text-gray-900 font-semibold leading-relaxed flex-1 whitespace-pre-line">
+                        <div className="py-3 px-4 text-gray-900 font-semibold leading-relaxed flex-1 whitespace-pre-line text-justify hyphens-auto break-words">
                           {row.value}
                         </div>
                       </div>
@@ -378,7 +378,7 @@ export function ProductDetailClient({
                   <span>🌱</span>
                   <span>Ý nghĩa từ Gieo Mơ</span>
                 </div>
-                <p className="text-xs sm:text-sm text-emerald-950/85 leading-relaxed whitespace-pre-line">
+                <p className="text-xs sm:text-sm text-emerald-950/85 leading-relaxed whitespace-pre-line text-justify hyphens-auto break-words">
                   {parsedInfo.impactStory || product.impact_story || "100% lợi nhuận thu được từ mỗi sản phẩm bạn mua sẽ được quy đổi thành tập vở, áo ấm và học bổng cho các em nhỏ tại các điểm trường khó khăn."}
                 </p>
                 <div className="pt-2 border-t border-emerald-200/50 text-xs font-bold text-emerald-900 flex items-center justify-between">
@@ -393,7 +393,7 @@ export function ProductDetailClient({
                   <ShieldCheck className="w-4 h-4 text-[#2D6338]" />
                   Cam kết chất lượng
                 </span>
-                <p className="text-xs text-[#7E7068] leading-relaxed">
+                <p className="text-xs text-[#7E7068] leading-relaxed text-justify hyphens-auto break-words">
                   Sản phẩm được tuyển chọn kỹ lưỡng, đường may tỉ mỉ và đóng gói cẩn thận.
                 </p>
               </div>

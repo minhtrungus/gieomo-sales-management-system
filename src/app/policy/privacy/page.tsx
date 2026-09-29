@@ -42,7 +42,7 @@ export default async function PrivacyPolicyPage() {
               <Lock className="w-5 h-5" />
             </div>
             <h3 className="font-heading font-bold text-sm text-emerald-950 text-balance">Mã hóa an toàn</h3>
-            <p className="text-xs text-gray-600 leading-relaxed text-pretty">
+            <p className="text-xs text-gray-600 leading-relaxed text-justify hyphens-auto break-words">
               Mọi dữ liệu đặt hàng được mã hóa truyền nhận an toàn qua SSL/TLS.
             </p>
           </div>
@@ -52,7 +52,7 @@ export default async function PrivacyPolicyPage() {
               <EyeOff className="w-5 h-5" />
             </div>
             <h3 className="font-heading font-bold text-sm text-emerald-950 text-balance">Không bán dữ liệu</h3>
-            <p className="text-xs text-gray-600 leading-relaxed text-pretty">
+            <p className="text-xs text-gray-600 leading-relaxed text-justify hyphens-auto break-words">
               Tuyệt đối không chia sẻ hoặc bán thông tin cá nhân cho bên thứ ba.
             </p>
           </div>
@@ -62,7 +62,7 @@ export default async function PrivacyPolicyPage() {
               <UserCheck className="w-5 h-5" />
             </div>
             <h3 className="font-heading font-bold text-sm text-emerald-950 text-balance">Quyền riêng tư</h3>
-            <p className="text-xs text-gray-600 leading-relaxed text-pretty">
+            <p className="text-xs text-gray-600 leading-relaxed text-justify hyphens-auto break-words">
               Bạn có quyền yêu cầu tra cứu, chỉnh sửa hoặc xóa thông tin bất kỳ lúc nào.
             </p>
           </div>
@@ -74,7 +74,7 @@ export default async function PrivacyPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               1. Thu thập thông tin cá nhân (PII)
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Khi bạn đặt hàng trên Gieo Mơ, chúng mình chỉ thu thập các thông tin tối thiểu cần thiết để giao nhận sản phẩm: Họ tên người nhận, Số điện thoại liên hệ, Địa chỉ giao hàng và Ghi chú đơn hàng.
             </p>
           </section>
@@ -83,8 +83,8 @@ export default async function PrivacyPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               2. Mục đích sử dụng thông tin
             </h2>
-            <p className="text-pretty">Thông tin của bạn được sử dụng duy nhất cho các mục đích:</p>
-            <ul className="list-disc list-inside space-y-1 text-xs sm:text-sm pl-2 text-gray-700 text-pretty">
+            <p className="text-justify hyphens-auto break-words">Thông tin của bạn được sử dụng duy nhất cho các mục đích:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs sm:text-sm pl-2 text-gray-700 text-justify hyphens-auto break-words">
               <li>Xác nhận đơn hàng và in nhãn giao hàng cho đối tác vận chuyển.</li>
               <li>Gửi thông báo tiến độ giao hàng hoặc liên hệ hỗ trợ khi có sự cố.</li>
               <li>Báo cáo tổng kết gây quỹ.</li>
@@ -95,7 +95,7 @@ export default async function PrivacyPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               3. Lưu trữ & Bảo vệ dữ liệu
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Dữ liệu đơn hàng được lưu trữ trên cơ sở dữ liệu Supabase được bảo vệ bằng các chính sách truy cập nghiêm ngặt (Row Level Security). Chỉ các thành viên BTC được phân quyền mới có thể truy cập thông tin đơn hàng để đóng gói.
             </p>
           </section>
@@ -104,7 +104,7 @@ export default async function PrivacyPolicyPage() {
             <h2 className="font-heading font-bold text-lg text-emerald-950 border-b border-emerald-50 pb-2 text-balance">
               4. Liên hệ thắc mắc về quyền riêng tư
             </h2>
-            <p className="text-pretty">
+            <p className="text-justify hyphens-auto break-words">
               Nếu bạn có bất kỳ câu hỏi hoặc yêu cầu nào về bảo mật thông tin cá nhân, vui lòng gửi email về <strong>{settings.contactEmail}</strong> hoặc hotline <strong>{settings.contactPhone}</strong>.
             </p>
           </section>
