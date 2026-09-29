@@ -122,8 +122,8 @@ export default function ProductsPage() {
       <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
         {/* Page Header */}
         <div className="max-w-2xl mb-8 space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-xs font-bold border border-[#9ed4a3] whitespace-nowrap">
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float whitespace-nowrap">
+            <Sparkles className="w-3.5 h-3.5 text-[#FFB98A] shrink-0" />
             <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
           </div>
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight text-balance">
