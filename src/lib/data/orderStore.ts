@@ -1654,6 +1654,30 @@ export function updateStoredCategory(cat: ProductCategory): void {
     localStorage.setItem("gieomo_categories", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
 
+    // Sync to all products belonging to this category
+    const products = getStoredProducts();
+    let prodsChanged = false;
+    const updatedProds = products.map((p) => {
+      if (p.category_id === cat.category_id || p.category?.category_id === cat.category_id) {
+        prodsChanged = true;
+        return {
+          ...p,
+          category_id: cat.category_id,
+          category: {
+            ...p.category,
+            ...cat,
+          },
+        };
+      }
+      return p;
+    });
+
+    if (prodsChanged) {
+      cachedProducts = updatedProds;
+      localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
+    }
+
     // Sync to Supabase in background
     fetch("/api/categories", {
       method: "POST",
@@ -1673,6 +1697,30 @@ export function deleteStoredCategory(categoryId: string): void {
     cachedCategories = updated;
     localStorage.setItem("gieomo_categories", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_categories_updated"));
+
+    // Reassign products to fallback category
+    const fallbackCat = updated[0];
+    if (fallbackCat) {
+      const products = getStoredProducts();
+      let prodsChanged = false;
+      const updatedProds = products.map((p) => {
+        if (p.category_id === categoryId || p.category?.category_id === categoryId) {
+          prodsChanged = true;
+          return {
+            ...p,
+            category_id: fallbackCat.category_id,
+            category: fallbackCat,
+          };
+        }
+        return p;
+      });
+
+      if (prodsChanged) {
+        cachedProducts = updatedProds;
+        localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
+        window.dispatchEvent(new Event("gieomo_products_updated"));
+      }
+    }
   } catch (e) {
     console.error("Error deleting category", e);
   }

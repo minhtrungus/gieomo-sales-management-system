@@ -51,13 +51,13 @@ export default function CombosPage() {
         <div className="max-w-2xl mb-8 space-y-2">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFE7A8] text-[#542B07] text-xs font-bold border border-[#ebd089]">
             <Gift className="w-3.5 h-3.5 text-[#E2884E]" />
-            <span>Set Combo quà tặng tiết kiệm</span>
+            <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
           </div>
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight">
-            Bộ quà tặng may vá handmade
+            Combo Gieo Mơ
           </h1>
           <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed">
-            Các món quà được ghép sẵn vừa tiện lợi vừa tiết kiệm, đóng gói trang trọng trong hộp quà Gieo Mơ kèm thiệp cảm ơn.
+            Gieo Mơ gom góp những điều nhỏ xinh thành một món quà trọn vẹn, đủ chu đáo để đồng hành cùng bạn, đủ tinh tế để dành tặng người thương.
           </p>
         </div>
 

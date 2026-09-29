@@ -14,7 +14,7 @@ import {
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck } from "lucide-react";
+import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check } from "lucide-react";
 
 interface ComboItemSelection {
   product_id: string;
@@ -61,6 +61,10 @@ export default function AdminCombosPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCombo, setEditingCombo] = useState<ExtendedCombo | null>(null);
   const [deletingCombo, setDeletingCombo] = useState<ExtendedCombo | null>(null);
+
+  // Quick inline rename states for combo name
+  const [renamingComboId, setRenamingComboId] = useState<string | null>(null);
+  const [inlineComboName, setInlineComboName] = useState("");
 
   // Form states for Create Combo
   const [name, setName] = useState("");
@@ -264,6 +268,8 @@ export default function AdminCombosPage() {
 
     const updated: ExtendedCombo = {
       ...editingCombo,
+      name: editingCombo.name.trim(),
+      slug: (editingCombo.slug || "").trim() || editingCombo.name.toLowerCase().trim().replace(/\s+/g, "-"),
       items: mappedItems,
       thumbnail: currentThumb,
       images: [currentThumb],
@@ -295,6 +301,44 @@ export default function AdminCombosPage() {
     };
     updateStoredCombo(updated);
     setCombos(getStoredCombos());
+  };
+
+  // Quick inline rename combo name
+  const handleStartRename = (cb: ExtendedCombo) => {
+    setRenamingComboId(cb.combo_id);
+    setInlineComboName(cb.name);
+  };
+
+  const handleCancelRename = () => {
+    setRenamingComboId(null);
+    setInlineComboName("");
+  };
+
+  const handleSaveInlineRename = (comboId: string) => {
+    if (!inlineComboName.trim()) return;
+    const target = combos.find((c) => c.combo_id === comboId);
+    if (!target) return;
+
+    const newSlug = inlineComboName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[đĐ]/g, "d")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+
+    const updated: ExtendedCombo = {
+      ...target,
+      name: inlineComboName.trim(),
+      slug: newSlug || target.slug,
+      updated_at: new Date().toISOString(),
+    };
+
+    updateStoredCombo(updated);
+    setCombos(getStoredCombos());
+    setRenamingComboId(null);
+    setInlineComboName("");
   };
 
   return (
@@ -358,15 +402,60 @@ export default function AdminCombosPage() {
                             <span>🎁</span>
                           )}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-[#342A24] block text-sm">{cb.name}</span>
-                            {cb.featured && (
-                              <span className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold">
-                                ⭐ Nổi bật
-                              </span>
-                            )}
-                          </div>
+                        <div className="min-w-0">
+                          {renamingComboId === cb.combo_id ? (
+                            <div className="flex items-center gap-1.5 py-1">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inlineComboName}
+                                onChange={(e) => setInlineComboName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSaveInlineRename(cb.combo_id);
+                                  } else if (e.key === "Escape") {
+                                    handleCancelRename();
+                                  }
+                                }}
+                                className="px-2.5 py-1 text-xs font-bold border-2 border-emerald-500 rounded-xl outline-none bg-white text-[#342A24] w-48 shadow-xs"
+                                placeholder="Nhập tên combo mới..."
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInlineRename(cb.combo_id)}
+                                className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-2xs transition-transform active:scale-95"
+                                title="Lưu tên combo"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelRename}
+                                className="p-1.5 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 cursor-pointer transition-transform active:scale-95"
+                                title="Hủy"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="group/name flex items-center gap-1.5">
+                              <span className="font-bold text-[#342A24] block text-sm">{cb.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartRename(cb)}
+                                className="opacity-0 group-hover/name:opacity-100 p-1 text-[#7E7068] hover:text-[#2D6338] hover:bg-[#BFE9C3]/40 rounded-lg transition-all cursor-pointer"
+                                title="Đổi nhanh tên combo"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                              {cb.featured && (
+                                <span className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold">
+                                  ⭐ Nổi bật
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <span className="text-[11px] text-[#A89B92] font-mono">/{cb.slug}</span>
                         </div>
                       </td>
@@ -487,14 +576,21 @@ export default function AdminCombosPage() {
 
             <form onSubmit={handleCreateCombo} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Tên Set Combo *</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-[#342A24] block">Tên Set Combo *</label>
+                  {name && (
+                    <span className="text-[10.5px] text-gray-400 font-mono">
+                      /combos/{name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-")}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   placeholder="Ví dụ: Combo Gieo Mầm Yêu Thương"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-medium"
                 />
               </div>
 
@@ -726,9 +822,34 @@ export default function AdminCombosPage() {
                   type="text"
                   required
                   value={editingCombo.name}
-                  onChange={(e) => setEditingCombo({ ...editingCombo, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white"
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    const autoSlug = newName
+                      .toLowerCase()
+                      .normalize("NFD")
+                      .replace(/[\u0300-\u036f]/g, "")
+                      .replace(/[đĐ]/g, "d")
+                      .replace(/[^a-z0-9\s-]/g, "")
+                      .trim()
+                      .replace(/\s+/g, "-");
+                    setEditingCombo({ ...editingCombo, name: newName, slug: autoSlug || editingCombo.slug });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block text-[11px]">Đường dẫn tĩnh (Slug) *</label>
+                <div className="flex items-center rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] px-3 py-2 text-xs">
+                  <span className="text-gray-400 font-mono text-[11px]">/combos/</span>
+                  <input
+                    type="text"
+                    required
+                    value={editingCombo.slug || ""}
+                    onChange={(e) => setEditingCombo({ ...editingCombo, slug: e.target.value })}
+                    className="flex-1 font-mono text-[11px] text-[#342A24] outline-none bg-transparent pl-1 font-bold"
+                  />
+                </div>
               </div>
 
               {/* Thumbnail Selector */}

@@ -91,13 +91,13 @@ export default function ProductsPage() {
         <div className="max-w-2xl mb-8 space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-xs font-bold border border-[#9ed4a3]">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Cửa hàng gây quỹ Gieo Mơ</span>
+            <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
           </div>
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight">
-            Tất cả sản phẩm handmade
+            Tất cả sản phẩm Gieo Mơ
           </h1>
           <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed">
-            Mỗi món hàng nhỏ là một niềm vui lớn. 100% lợi nhuận được dùng để tài trợ học tập cho trẻ em vùng cao.
+            Tất cả sản phẩm tại Tạp hóa Gieo Mơ đều được tạo nên từ những điều nhỏ bé, để mang đến một niềm vui nhỏ cho bạn và tiếp nối những điều tốt đẹp đến cộng đồng.
           </p>
         </div>
 

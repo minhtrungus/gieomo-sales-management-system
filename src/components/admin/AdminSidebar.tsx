@@ -20,6 +20,7 @@ import {
   Bell,
   MapPin,
   MessageSquare,
+  FolderTree,
 } from "lucide-react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
 import { clearAdminSession } from "@/lib/data/orderStore";
@@ -39,6 +40,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/orders", label: "Quản lý đơn hàng", icon: ShoppingBag },
     { href: "/admin/orders/create", label: "Nhập đơn hộ", icon: Package },
     { href: "/admin/products", label: "Sản phẩm", icon: Boxes },
+    { href: "/admin/categories", label: "Danh mục sản phẩm", icon: FolderTree },
     { href: "/admin/combos", label: "Set Combo", icon: Package },
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
     { href: "/admin/customers", label: "Khách hàng", icon: Users },

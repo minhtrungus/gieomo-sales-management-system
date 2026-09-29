@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Danh mục sản phẩm thủ công gây quỹ | Gieo Mơ",
+  title: "Gieo Mơ | Danh mục sản phẩm thủ công gây quỹ ",
   description:
-    "Khám phá các sản phẩm thủ công may vá độc đáo: túi pouch, kẹp tóc nơ, túi tote canvas, bộ kim chỉ mộc. 100% lợi nhuận ủng hộ quỹ trẻ em Mầm Mơ.",
+    "Khám phá các sản phẩm may vá độc đáo: túi pouch, kẹp tóc... Lợi nhuận gây quỹ cho dự án Mầm Mơ.",
   alternates: {
     canonical: "/products",
   },
   openGraph: {
-    title: "Danh mục sản phẩm thủ công gây quỹ | Gieo Mơ",
+    title: "Gieo Mơ | Danh mục sản phẩm thủ công gây quỹ",
     description:
-      "Khám phá các sản phẩm thủ công may vá độc đáo: túi pouch, kẹp tóc nơ, túi tote canvas, bộ kim chỉ mộc. 100% lợi nhuận ủng hộ quỹ trẻ em Mầm Mơ.",
+      "Khám phá các sản phẩm may vá độc đáo: túi pouch, kẹp tóc... Lợi nhuận gây quỹ cho dự án Mầm Mơ.",
   },
 };
 

@@ -18,7 +18,7 @@ import {
 import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
+import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star, FolderTree } from "lucide-react";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -200,13 +200,24 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        <Link
-          href="/admin/products/new"
-          className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Thêm sản phẩm</span>
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/admin/categories"
+            className="px-4 py-2.5 rounded-full bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#342A24] border border-[#F0E5D8] font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all active:scale-95"
+            title="Quản lý và chỉnh sửa danh mục sản phẩm"
+          >
+            <FolderTree className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Danh mục ({categories.length})</span>
+          </Link>
+
+          <Link
+            href="/admin/products/new"
+            className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm sản phẩm</span>
+          </Link>
+        </div>
       </div>
 
       {/* Search & Category Filter */}
@@ -242,6 +253,14 @@ export default function AdminProductsPage() {
               {cat.name}
             </button>
           ))}
+          <Link
+            href="/admin/categories"
+            className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
+            title="Quản lý / Thêm sửa xóa danh mục sản phẩm"
+          >
+            <FolderTree className="w-3.5 h-3.5" />
+            <span>+ Quản lý danh mục</span>
+          </Link>
         </div>
       </div>
 
