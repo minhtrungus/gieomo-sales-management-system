@@ -14,19 +14,19 @@ interface PageProps {
  */
 function buildMetaDescription(productName: string, price: number, rawDesc?: string | null): string {
   const formattedPrice = new Intl.NumberFormat("vi-VN").format(price) + "đ";
-  const cleanSnippet = (rawDesc || "Sản phẩm may thủ công gây quỹ")
+  const cleanSnippet = (rawDesc || "Sản phẩm Gieo Mơ")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
   // Template targeting ~140-160 characters
-  let desc = `${productName} thủ công tại Gieo Mơ. Giá chỉ ${formattedPrice}. ${cleanSnippet} Mua ngay để ủng hộ quỹ Mầm Mơ!`;
+  let desc = `${productName} tại Gieo Mơ. Giá chỉ ${formattedPrice}. ${cleanSnippet} Mua ngay để ủng hộ quỹ Mầm Mơ!`;
   
   if (desc.length > 160) {
     desc = desc.slice(0, 157) + "...";
   } else if (desc.length < 130) {
     // Pad slightly if too short
-    desc = `${productName} chính hãng từ Mầm Mơ. Giá chỉ ${formattedPrice}. ${cleanSnippet}. 100% lợi nhuận gây quỹ vì cộng đồng!`;
+    desc = `${productName} từ Mầm Mơ. Giá chỉ ${formattedPrice}. ${cleanSnippet}. Lợi nhuận gây quỹ vì cộng đồng!`;
     if (desc.length > 160) {
       desc = desc.slice(0, 157) + "...";
     }
@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!product) {
     return {
-      title: "Sản phẩm không tồn tại | Gieo Mơ",
+      title: "Gieo Mơ | Sản phẩm không tồn tại ",
       description: "Không tìm thấy sản phẩm bạn yêu cầu trên cửa hàng gây quỹ Gieo Mơ.",
     };
   }

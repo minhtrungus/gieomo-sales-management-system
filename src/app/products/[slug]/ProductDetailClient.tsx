@@ -394,11 +394,8 @@ export function ProductDetailClient({
                   Cam kết chất lượng
                 </span>
                 <p className="text-xs text-[#7E7068] leading-relaxed">
-                  Sản phẩm được tuyển chọn kỹ lưỡng, đường may thủ công tỉ mỉ và đóng gói cẩn thận kèm thiệp cảm ơn từ Mầm Mơ.
+                  Sản phẩm được tuyển chọn kỹ lưỡng, đường may tỉ mỉ và đóng gói cẩn thận.
                 </p>
-                <div className="pt-2 border-t border-[#F0E5D8] text-[11px] text-[#2D6338] font-bold">
-                  🌱 100% lợi nhuận dành cho các dự án thiện nguyện
-                </div>
               </div>
             </div>
           </div>
