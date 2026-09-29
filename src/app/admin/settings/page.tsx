@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink } from "lucide-react";
-import { getStoredSettings, saveStoredSettings } from "@/lib/data/orderStore";
+import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock } from "lucide-react";
+import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
 
 export default function AdminSettingsPage() {
@@ -13,8 +13,8 @@ export default function AdminSettingsPage() {
   const [contactPhone, setContactPhone] = useState("0123456789");
   const [contactEmail, setContactEmail] = useState("gieomo@mammo.vn");
   const [officeAddress, setOfficeAddress] = useState("TP. Hồ Chí Minh, Việt Nam");
-  const [flatShippingFee, setFlatShippingFee] = useState("25000");
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState("200000");
+  const [flatShippingFee, setFlatShippingFee] = useState("15000");
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState("0");
 
   // Social Media Channels
   const [facebookUrl, setFacebookUrl] = useState("https://www.facebook.com/BanHangGieoMo");
@@ -36,6 +36,34 @@ export default function AdminSettingsPage() {
   const [faviconPreview, setFaviconPreview] = useState<string>("/icon.png");
   const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleUpdatePassword = () => {
+    setPasswordNotice(null);
+    const stored = getStoredAdminPassword();
+    if (currentPassword !== stored) {
+      setPasswordNotice({ type: "error", text: "Mật khẩu hiện tại không chính xác!" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordNotice({ type: "error", text: "Mật khẩu mới phải có tối thiểu 6 ký tự!" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordNotice({ type: "error", text: "Xác nhận mật khẩu mới không trùng khớp!" });
+      return;
+    }
+    saveAdminPassword(newPassword);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordNotice({ type: "success", text: "✓ Đã cập nhật mật khẩu quản trị mới thành công!" });
+  };
 
   // Load from store & server DB
   useEffect(() => {
@@ -800,6 +828,8 @@ export default function AdminSettingsPage() {
               <input
                 type="password"
                 placeholder="Nhập mật khẩu cũ..."
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
               />
             </div>
@@ -808,6 +838,8 @@ export default function AdminSettingsPage() {
               <input
                 type="password"
                 placeholder="Nhập mật khẩu mới..."
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
               />
             </div>
@@ -816,21 +848,33 @@ export default function AdminSettingsPage() {
               <input
                 type="password"
                 placeholder="Nhập lại mật khẩu mới..."
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3]"
               />
             </div>
           </div>
 
+          {passwordNotice && (
+            <div
+              className={`p-3 rounded-xl text-xs font-bold ${
+                passwordNotice.type === "success"
+                  ? "bg-[#E6F7EC] border border-[#A5D6A7] text-[#1B5E20]"
+                  : "bg-red-50 border border-red-200 text-red-600"
+              }`}
+            >
+              {passwordNotice.text}
+            </div>
+          )}
+
           <div className="flex items-center justify-between pt-2">
             <span className="text-[11px] text-gray-500">
-              💡 Khuyến nghị dùng mật khẩu có chữ in hoa, số và ký tự đặc biệt.
+              💡 Mật khẩu mặc định ban đầu: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono font-bold text-emerald-950">GieoMo@2026</code>. Bạn có thể đổi bất kỳ lúc nào.
             </span>
             <button
               type="button"
-              onClick={() => {
-                alert("Đã cập nhật mật khẩu mới thành công! Vui lòng ghi nhớ mật khẩu cho lần đăng nhập sau.");
-              }}
-              className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-[#231B16] font-bold text-xs transition-colors cursor-pointer"
+              onClick={handleUpdatePassword}
+              className="px-4 py-2 rounded-xl bg-[#2D6338] hover:bg-[#234d2c] text-white font-bold text-xs transition-colors cursor-pointer"
             >
               Cập nhật mật khẩu ➔
             </button>

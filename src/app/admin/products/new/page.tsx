@@ -48,8 +48,9 @@ export default function AdminNewProductPage() {
 
   // Variants list
   const [variants, setVariants] = useState([
-    { name: "Mặc định", sku: "GM-SKU-01", stock: 20 },
+    { name: "Mặc định", sku: "GM-SKU-01", stock: 20, imageUrl: "" },
   ]);
+  const [extraImagesText, setExtraImagesText] = useState("");
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -67,7 +68,12 @@ export default function AdminNewProductPage() {
   const handleAddVariant = () => {
     setVariants((prev) => [
       ...prev,
-      { name: `Phân loại ${prev.length + 1}`, sku: `GM-SKU-0${prev.length + 1}`, stock: 10 },
+      {
+        name: `Phân loại ${prev.length + 1}`,
+        sku: `GM-SKU-0${prev.length + 1}`,
+        stock: 10,
+        imageUrl: "",
+      },
     ]);
   };
 
@@ -136,7 +142,15 @@ export default function AdminNewProductPage() {
       status: status as "active" | "draft",
       sort_order: 1,
       thumbnail: imageUrl,
-      images: [imageUrl],
+      images: Array.from(
+        new Set([
+          imageUrl,
+          ...extraImagesText
+            .split("\n")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0),
+        ])
+      ),
       impact_story: descImpact || undefined,
       variants: variants.map((v, i) => {
         const st = Number(v.stock) || 0;
@@ -154,6 +168,7 @@ export default function AdminNewProductPage() {
           compare_at_price: null,
           cost_price: null,
           weight_gram: 100,
+          image_url: v.imageUrl?.trim() || null,
           status: "active" as const,
           sort_order: i + 1,
           created_at: new Date().toISOString(),
@@ -351,7 +366,7 @@ export default function AdminNewProductPage() {
                     />
                   </div>
 
-                  <div className="w-32">
+                  <div className="w-28">
                     <input
                       type="text"
                       placeholder="SKU"
@@ -366,7 +381,7 @@ export default function AdminNewProductPage() {
                     />
                   </div>
 
-                  <div className="w-24">
+                  <div className="w-20">
                     <input
                       type="number"
                       placeholder="Tồn kho"
@@ -378,6 +393,22 @@ export default function AdminNewProductPage() {
                         );
                       }}
                       className="w-full p-2 text-center rounded-xl border border-gray-200 text-xs font-bold outline-none"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-[140px]">
+                    <input
+                      type="text"
+                      placeholder="URL ảnh riêng phân loại..."
+                      value={v.imageUrl || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVariants((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, imageUrl: val } : item))
+                        );
+                      }}
+                      className="w-full p-2 rounded-xl border border-gray-200 text-[11px] font-mono outline-none bg-white"
+                      title="Khi khách chọn phân loại này, ảnh chính sẽ tự động chuyển sang ảnh này"
                     />
                   </div>
 
@@ -494,6 +525,23 @@ export default function AdminNewProductPage() {
                     <option value="/images/products/set_combo_1.jpg">Mẫu: Set Combo 1</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Album ảnh phụ (Gallery) */}
+              <div className="pt-2 border-t border-gray-100 space-y-1">
+                <label className="text-xs font-bold text-gray-800 block">
+                  🖼️ Album nhiều ảnh chi tiết (Gallery)
+                </label>
+                <p className="text-[10px] text-gray-500">
+                  Thêm nhiều ảnh góc chụp cận cảnh, chất vải, đường may... để khách hàng an tâm tin cậy. Nhập mỗi link ảnh trên 1 dòng:
+                </p>
+                <textarea
+                  value={extraImagesText}
+                  onChange={(e) => setExtraImagesText(e.target.value)}
+                  placeholder={"/images/products/pounch_1.png\n/images/products/pounch_2.jpg\nhttps://example.com/anh-chi-tiet.jpg"}
+                  rows={3}
+                  className="w-full p-2 rounded-xl border border-gray-200 text-[11px] font-mono outline-none focus:border-emerald-500 bg-white"
+                />
               </div>
             </div>
 

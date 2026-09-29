@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
+import { ProductReviews } from "@/components/products/ProductReviews";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -37,6 +38,8 @@ export function ProductDetailClient({
   });
 
   const [selectedVariant, setSelectedVariant] = useState(product.variants?.[0] ?? null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
 
   useEffect(() => {
     const list = getStoredProducts();
@@ -48,8 +51,36 @@ export function ProductDetailClient({
   }, [initialProduct.slug, initialProduct.product_id]);
 
   const [quantity, setQuantity] = useState(1);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Gallery images combined
+  const displayImages = useMemo(() => {
+    const base = product.images && product.images.length > 0
+      ? [...product.images]
+      : [product.thumbnail || "/images/products/pounch_1.png"];
+    if (product.variants) {
+      product.variants.forEach((v) => {
+        if (v.image_url && !base.includes(v.image_url)) {
+          base.push(v.image_url);
+        }
+      });
+    }
+    return base;
+  }, [product]);
+
+  // When variant changes, auto-switch to its image if available
+  const handleVariantSelect = (v: any) => {
+    setSelectedVariant(v);
+    if (v.image_url) {
+      const idx = displayImages.indexOf(v.image_url);
+      if (idx >= 0) {
+        setSelectedImageIndex(idx);
+        setCustomActiveImage(null);
+      } else {
+        setCustomActiveImage(v.image_url);
+      }
+    }
+  };
 
   const parsedInfo = parseProductDescription(product.description, product.specs, product.impact_story ?? undefined);
   const addItem = useCartStore((state) => state.addItem);
@@ -112,13 +143,13 @@ export function ProductDetailClient({
           {/* Gallery - Left 6 Cols */}
           <div className="lg:col-span-6 space-y-4">
             <div className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-cream border border-emerald-100 overflow-hidden flex items-center justify-center">
-              {product.images?.[selectedImageIndex] ? (
+              {displayImages[selectedImageIndex] || customActiveImage ? (
                 <Image
-                  src={product.images[selectedImageIndex]}
+                  src={customActiveImage || displayImages[selectedImageIndex] || displayImages[0]}
                   alt={product.name}
                   fill
                   sizes="(max-width: 1024px) 100vw, 50vw"
-                  className="object-cover"
+                  className="object-cover transition-all duration-300"
                   priority
                 />
               ) : (
@@ -130,16 +161,19 @@ export function ProductDetailClient({
             </div>
 
             {/* Thumbnails */}
-            {product.images && product.images.length > 1 && (
-              <div className="flex gap-3">
-                {product.images.map((img, idx) => (
+            {displayImages.length > 1 && (
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {displayImages.map((img, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setSelectedImageIndex(idx)}
-                    className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 transition-all ${
-                      selectedImageIndex === idx
-                        ? "border-emerald-700 ring-2 ring-emerald-700/20"
-                        : "border-transparent opacity-70 hover:opacity-100"
+                    onClick={() => {
+                      setSelectedImageIndex(idx);
+                      setCustomActiveImage(null);
+                    }}
+                    className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
+                      selectedImageIndex === idx && !customActiveImage
+                        ? "border-emerald-700 ring-2 ring-emerald-700/20 shadow-xs"
+                        : "border-gray-200 opacity-70 hover:opacity-100"
                     }`}
                   >
                     <Image src={img} alt="" fill sizes="80px" className="object-cover" />
@@ -199,14 +233,20 @@ export function ProductDetailClient({
                     {product.variants.map((v) => (
                       <button
                         key={v.variant_id}
-                        onClick={() => setSelectedVariant(v)}
-                        className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                        type="button"
+                        onClick={() => handleVariantSelect(v)}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-2 cursor-pointer ${
                           selectedVariant?.variant_id === v.variant_id
-                            ? "bg-soft-green border-emerald-600 text-emerald-950 shadow-xs"
+                            ? "bg-soft-green border-emerald-600 text-emerald-950 shadow-xs ring-2 ring-emerald-600/20"
                             : "bg-white border-gray-200 text-gray-700 hover:border-emerald-300"
                         }`}
                       >
-                        {v.name}
+                        {v.image_url && (
+                          <span className="relative w-4 h-4 rounded-full overflow-hidden shrink-0 inline-block border border-gray-300">
+                            <Image src={v.image_url} alt="" fill className="object-cover" />
+                          </span>
+                        )}
+                        <span>{v.name}</span>
                       </button>
                     ))}
                   </div>
@@ -363,6 +403,9 @@ export function ProductDetailClient({
             </div>
           </div>
         </div>
+
+        {/* Product Reviews & Comments */}
+        <ProductReviews productId={product.product_id} productName={product.name} />
 
         {/* Related Products */}
         <div className="space-y-6">

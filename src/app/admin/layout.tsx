@@ -1,20 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NotificationProvider } from "@/lib/notifications/NotificationContext";
 import { NotificationToastContainer } from "@/components/admin/NotificationToast";
+import { isAdminAuthenticated } from "@/lib/data/orderStore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
 
   const isLoginPage = pathname === "/admin/login";
 
+  useEffect(() => {
+    if (!isLoginPage) {
+      if (!isAdminAuthenticated()) {
+        router.replace("/admin/login");
+        return;
+      }
+    }
+    setIsAuthChecked(true);
+
+    const handleAuthChange = () => {
+      if (!isLoginPage && !isAdminAuthenticated()) {
+        router.replace("/admin/login");
+      }
+    };
+
+    window.addEventListener("gieomo_admin_auth_changed", handleAuthChange);
+    return () => window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
+  }, [isLoginPage, router]);
+
   if (isLoginPage) {
     return <div className="min-h-screen bg-cream/70 flex items-center justify-center p-4">{children}</div>;
+  }
+
+  if (!isAuthChecked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+          <span className="text-xs text-gray-500 font-medium">Đang kiểm tra quyền quản trị...</span>
+        </div>
+      </div>
+    );
   }
 
   return (

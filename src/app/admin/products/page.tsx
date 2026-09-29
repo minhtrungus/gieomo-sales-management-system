@@ -54,6 +54,9 @@ export default function AdminProductsPage() {
   const [editExtraSpecs, setEditExtraSpecs] = useState("");
   const [editImpact, setEditImpact] = useState("");
   const [editFeatured, setEditFeatured] = useState(false);
+  const [editThumbnail, setEditThumbnail] = useState("");
+  const [editImagesText, setEditImagesText] = useState("");
+  const [editVariants, setEditVariants] = useState<any[]>([]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -103,6 +106,9 @@ export default function AdminProductsPage() {
     );
     setEditImpact(parsed.impactStory || p.impact_story || "");
     setEditFeatured(p.featured ?? false);
+    setEditThumbnail(p.thumbnail || "");
+    setEditImagesText((p.images || [p.thumbnail]).filter(Boolean).join("\n"));
+    setEditVariants(p.variants || []);
     setEditingProduct(p);
   };
 
@@ -142,8 +148,18 @@ export default function AdminProductsPage() {
       editImpact.trim() ? `\n\n## Ý nghĩa\n${editImpact.trim()}` : "",
     ].filter(Boolean).join("");
 
+    const imgList = editImagesText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const finalThumb: string = editThumbnail.trim() || imgList[0] || editingProduct.thumbnail || "/images/products/pounch_1.png";
+    const finalImages: string[] = Array.from(new Set([finalThumb, ...imgList])).filter((s): s is string => Boolean(s));
+
     const updated: ExtendedProduct = {
       ...editingProduct,
+      thumbnail: finalThumb,
+      images: finalImages,
+      variants: editVariants,
       description: fullDescription,
       impact_story: editImpact.trim() || undefined,
       specs: newSpecs,
@@ -541,6 +557,66 @@ export default function AdminProductsPage() {
                   </strong>
                 </div>
               </div>
+
+              {/* Hình ảnh & Album Gallery */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/40 border border-amber-200/80 space-y-3">
+                <label className="font-extrabold text-[#342A24] uppercase tracking-wider block text-xs">
+                  🖼️ Hình ảnh đại diện &amp; Album chi tiết (Gallery)
+                </label>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#342A24] block text-[11px]">Ảnh đại diện chính (Thumbnail):</label>
+                  <input
+                    type="text"
+                    value={editThumbnail}
+                    onChange={(e) => setEditThumbnail(e.target.value)}
+                    placeholder="/images/products/pounch_1.png hoặc URL ảnh"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-mono outline-none bg-white focus:border-amber-400"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#342A24] block text-[11px]">
+                    Album ảnh chi tiết (Nhiều ảnh để khách hàng tin cậy - Mỗi ảnh 1 dòng):
+                  </label>
+                  <textarea
+                    value={editImagesText}
+                    onChange={(e) => setEditImagesText(e.target.value)}
+                    placeholder={"/images/products/pounch_1.png\n/images/products/pounch_2.jpg\nhttps://example.com/anh-chi-tiet.jpg"}
+                    rows={3}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-[11px] font-mono outline-none bg-white focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* Phân loại & Ảnh riêng từng phân loại */}
+              {editVariants.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-2">
+                  <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
+                    🎨 Phân loại sản phẩm &amp; Ảnh riêng (Variant Photos)
+                  </label>
+                  <p className="text-[10px] text-gray-500">
+                    Khi khách hàng bấm chọn phân loại ở trang chi tiết, ảnh đại diện sẽ tự động chuyển sang ảnh riêng này.
+                  </p>
+                  <div className="space-y-2">
+                    {editVariants.map((v, vIdx) => (
+                      <div key={v.variant_id || vIdx} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-emerald-100">
+                        <span className="font-bold text-xs text-gray-800 w-32 truncate">{v.name}:</span>
+                        <input
+                          type="text"
+                          value={v.image_url || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVariants((prev) =>
+                              prev.map((item, i) => (i === vIdx ? { ...item, image_url: val } : item))
+                            );
+                          }}
+                          placeholder="URL ảnh riêng phân loại này..."
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-mono outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Các khung thông tin chi tiết (Tách bạch ở quản trị để dễ nhập liệu) */}
               <div className="space-y-3 pt-2 border-t border-gray-100">

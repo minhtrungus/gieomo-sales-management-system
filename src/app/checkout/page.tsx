@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
-import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
+import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers, type StoredMember, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 
 function CheckoutContent() {
@@ -19,6 +19,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { items, getSubtotal, clearCart } = useCartStore();
   const subtotal = getSubtotal();
+  const totalItemCount = items.reduce((acc, it) => acc + it.quantity, 0);
 
   const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
 
@@ -31,9 +32,15 @@ function CheckoutContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [differentRecipient, setDifferentRecipient] = useState(false);
-  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "pickup_point" | "member_delivery">("home_delivery");
-  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"banking" | "cod">("banking");
+  const [deliveryType, setDeliveryType] = useState<"home_delivery" | "member_delivery">("home_delivery");
+  const [paymentMethod] = useState<"banking">("banking");
+
+  // Members for acquaintance / referral matching
+  const [activeMembers, setActiveMembers] = useState<StoredMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState<StoredMember | null>(null);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [showMemberSuggestions, setShowMemberSuggestions] = useState(false);
+  const [noIntroducer, setNoIntroducer] = useState(false);
 
   // Form Fields
   const [formData, setFormData] = useState({
@@ -64,29 +71,36 @@ function CheckoutContent() {
     }
   }, [searchParams]);
 
-  // Capture referral code from URL or stored
   useEffect(() => {
+    const members = getStoredMembers().filter((m) => m.status === "active");
+    setActiveMembers(members);
+
+    // Capture referral code from URL or stored
     const refParam = searchParams.get("ref");
-    if (refParam) {
-      localStorage.setItem("gieomo_referral_code", refParam);
-      setFormData((prev) => ({ ...prev, introducer_info: prev.introducer_info || refParam.toUpperCase() }));
-    } else {
-      const savedRef = localStorage.getItem("gieomo_referral_code");
-      if (savedRef) {
-        setFormData((prev) => ({ ...prev, introducer_info: prev.introducer_info || savedRef.toUpperCase() }));
+    const savedRef = refParam || (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null);
+
+    if (savedRef) {
+      const clean = savedRef.trim();
+      const matched = members.find(
+        (m) =>
+          m.referralCode?.toUpperCase() === clean.toUpperCase() ||
+          m.fullName?.toLowerCase() === clean.toLowerCase()
+      );
+
+      if (matched) {
+        setSelectedMember(matched);
+        setFormData((prev) => ({
+          ...prev,
+          introducer_info: `${matched.fullName} (${matched.referralCode})`,
+        }));
+      } else {
+        setMemberSearchQuery(clean);
+        setFormData((prev) => ({ ...prev, introducer_info: clean }));
       }
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    const pts = getStoredPickupPoints().filter((p) => p.status === "active");
-    setPickupPoints(pts);
-    if (pts.length > 0 && !formData.pickup_point_id) {
-      setFormData((prev) => ({ ...prev, pickup_point_id: pts[0].pickup_point_id }));
-    }
-  }, []);
-
-  const shippingFee = deliveryType !== "home_delivery" ? 0 : subtotal >= siteSettings.freeShippingThreshold ? 0 : siteSettings.flatShippingFee;
+  const rawShippingFee = deliveryType !== "home_delivery" ? 0 : siteSettings.flatShippingFee;
 
   const calculateDiscount = () => {
     const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
@@ -94,14 +108,21 @@ function CheckoutContent() {
     const vouchers = getStoredVouchers();
     const found = vouchers.find((v) => v.code === code && v.status === "active");
     if (!found) return 0;
-    if (subtotal < found.min_order_value) return 0;
-    if (found.discount_type === "percentage") {
-      return Math.round((subtotal * found.discount_value) / 100);
+    if (found.min_order_value && subtotal < found.min_order_value) return 0;
+    if (found.min_items_count && totalItemCount < found.min_items_count) return 0;
+
+    if (found.discount_type === "freeship") {
+      return rawShippingFee;
     }
-    return found.discount_value;
+    if (found.discount_type === "percentage") {
+      const calc = Math.round((subtotal * found.discount_value) / 100);
+      return found.max_discount_amount ? Math.min(calc, found.max_discount_amount) : calc;
+    }
+    return Math.min(subtotal, found.discount_value);
   };
 
   const discountAmount = calculateDiscount();
+  const shippingFee = rawShippingFee;
   const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
 
   const handleApplyVoucher = (codeOverride?: string) => {
@@ -117,9 +138,15 @@ function CheckoutContent() {
       setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn");
       return;
     }
-    if (subtotal < found.min_order_value) {
+    if (found.min_order_value && subtotal < found.min_order_value) {
       setVoucherError(
-        `Mã ${found.code} yêu cầu đơn từ ${found.min_order_value.toLocaleString("vi-VN")}đ trở lên`
+        `Mã ${found.code} yêu cầu đơn từ ${found.min_order_value.toLocaleString("vi-VN")}đ trở lên (hiện tại: ${subtotal.toLocaleString("vi-VN")}đ)`
+      );
+      return;
+    }
+    if (found.min_items_count && totalItemCount < found.min_items_count) {
+      setVoucherError(
+        `Mã ${found.code} yêu cầu mua từ ${found.min_items_count} món trở lên (hiện có ${totalItemCount} món)`
       );
       return;
     }
@@ -133,6 +160,37 @@ function CheckoutContent() {
       setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
+
+  const handleSelectMember = (mem: StoredMember) => {
+    setSelectedMember(mem);
+    setNoIntroducer(false);
+    setShowMemberSuggestions(false);
+    setMemberSearchQuery("");
+    setFormData((prev) => ({
+      ...prev,
+      introducer_info: `${mem.fullName} (${mem.referralCode})`,
+    }));
+    if (errors.introducer_info) {
+      setErrors((prev) => ({ ...prev, introducer_info: "" }));
+    }
+  };
+
+  const handleClearMember = () => {
+    setSelectedMember(null);
+    setMemberSearchQuery("");
+    setNoIntroducer(true);
+    setFormData((prev) => ({ ...prev, introducer_info: "Trực tiếp (Website)" }));
+  };
+
+  const filteredMembers = activeMembers.filter((m) => {
+    if (!memberSearchQuery.trim()) return true;
+    const q = memberSearchQuery.toLowerCase().trim();
+    return (
+      m.fullName.toLowerCase().includes(q) ||
+      m.referralCode.toLowerCase().includes(q) ||
+      m.phone.includes(q)
+    );
+  });
 
   const handleValidateForm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,10 +206,11 @@ function CheckoutContent() {
       receiver_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
       delivery_type: deliveryType,
       shipping_address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.province}` : undefined,
-      pickup_point_id: deliveryType === "pickup_point" ? formData.pickup_point_id || "pp-1" : undefined,
-      payment_method: paymentMethod,
+      pickup_point_id: undefined,
+      payment_method: "banking",
       customer_note: formData.note || undefined,
       voucher_code: formData.voucher_code || undefined,
+      referral_code: selectedMember ? selectedMember.referralCode : undefined,
     };
 
     const validation = checkoutSchema.safeParse(payload);
@@ -167,8 +226,6 @@ function CheckoutContent() {
         else if (path === "receiver_phone") formattedErrors["recipient_phone"] = issue.message;
         else if (path === "shipping_address") {
           if (!formData.address_detail.trim()) formattedErrors["address_detail"] = "Vui lòng nhập địa chỉ chi tiết nhận hàng";
-        } else if (path === "pickup_point_id") {
-          formattedErrors["pickup_point_id"] = issue.message;
         } else if (path) {
           formattedErrors[path] = issue.message;
         }
@@ -185,8 +242,8 @@ function CheckoutContent() {
       }
     }
 
-    if (deliveryType === "member_delivery" && !formData.introducer_info.trim()) {
-      setErrors({ introducer_info: "Vui lòng nhập tên hoặc mã thành viên Mầm Mơ bạn quen để nhận hàng" });
+    if (deliveryType === "member_delivery" && !selectedMember && !formData.introducer_info.trim()) {
+      setErrors({ introducer_info: "Vui lòng chọn hoặc nhập tên thành viên Mầm Mơ giao hàng cho bạn" });
       return;
     }
 
@@ -213,14 +270,12 @@ function CheckoutContent() {
       created_at: new Date().toISOString(),
     }));
 
-    // Match seller from stored members
-    const members = getStoredMembers();
-    const cleanRef = (formData.introducer_info || "").trim().toUpperCase();
-    const matchedSeller = members.find(
-      (m) =>
-        (m.referralCode && m.referralCode.toUpperCase() === cleanRef) ||
-        (m.fullName && m.fullName.toLowerCase() === (formData.introducer_info || "").trim().toLowerCase())
-    );
+    const finalSellerId = selectedMember ? selectedMember.memberId : null;
+    const finalIntroducerText = selectedMember
+      ? `${selectedMember.fullName} (${selectedMember.referralCode})`
+      : noIntroducer
+      ? "Trực tiếp (Website)"
+      : formData.introducer_info || "Trực tiếp (Website)";
 
     const newOrderRecord: Order = {
       order_id: newOrderId,
@@ -234,12 +289,10 @@ function CheckoutContent() {
       address_detail:
         deliveryType === "home_delivery"
           ? formData.address_detail
-          : deliveryType === "pickup_point"
-          ? (pickupPoints.find((p) => p.pickup_point_id === formData.pickup_point_id)?.name || "Điểm hẹn nhận hàng")
-          : `Giao qua tay thành viên: ${formData.introducer_info}`,
+          : `Giao qua tay thành viên: ${finalIntroducerText}`,
       district: "",
       province: formData.province || "TP. Hồ Chí Minh",
-      payment_method: paymentMethod,
+      payment_method: "banking",
       payment_status: "pending",
       order_status: "pending",
       delivery_status: "not_ready",
@@ -248,9 +301,9 @@ function CheckoutContent() {
       shipping_fee: shippingFee,
       final_amount: finalAmount,
       total_cost: Math.round(finalAmount * 0.4),
-      seller_id: matchedSeller ? matchedSeller.memberId : null,
-      introducer_info: formData.introducer_info ? formData.introducer_info : "Trực tiếp (Website)",
-      referral_code: formData.introducer_info ? formData.introducer_info.toUpperCase() : null,
+      seller_id: finalSellerId,
+      introducer_info: finalIntroducerText,
+      referral_code: selectedMember ? selectedMember.referralCode : null,
       customer_note: formData.note || "",
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
@@ -419,16 +472,16 @@ function CheckoutContent() {
                 <span>2.</span> Hình thức nhận hàng
               </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {[
-                  { id: "home_delivery", label: "Giao tận nơi", desc: "Ship cố định 14k toàn quốc" },
+                  { id: "home_delivery", label: "Giao tận nơi", desc: `Ship cố định ${(siteSettings.flatShippingFee / 1000)}k toàn quốc` },
                   { id: "member_delivery", label: "Qua người quen", desc: "Thành viên giao tay (0đ)" },
                 ].map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     onClick={() => setDeliveryType(option.id as any)}
-                    className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                       deliveryType === option.id
                         ? "bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
                         : "bg-white border-gray-200 hover:border-emerald-200"
@@ -473,34 +526,168 @@ function CheckoutContent() {
                     <span>Hình thức: Nhận hàng thông qua thành viên của Gieo Mơ</span>
                   </div>
                   <p className="text-[#386341] leading-relaxed">
-                    Bạn quen thành viên trong Gieo Mơ? Hãy nhập <strong>tên của bạn ấy</strong> bên dưới để đơn hàng được trao tận tay bạn nhé!
+                    Bạn quen thành viên trong Gieo Mơ? Hãy chọn hoặc nhập <strong>tên/mã của bạn ấy</strong> ở ô bên dưới để đơn hàng được trao tận tay bạn nhé!
                   </p>
                 </div>
               )}
             </div>
 
             {/* Introducer / Member referral input box */}
-            <div className={`bg-white rounded-3xl p-6 border shadow-xs space-y-3 transition-all ${
+            <div className={`bg-white rounded-3xl p-6 border shadow-xs space-y-4 transition-all ${
               deliveryType === "member_delivery" ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-emerald-100"
             }`}>
               <div className="flex items-center justify-between">
-                <h2 className="font-heading font-bold text-base text-emerald-950 flex items-center gap-2">
-                  <span>🌱</span>
-                  Bạn biết đến Gieo Mơ thông qua đâu?{deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
-                </h2>
-                <span className="text-[11px] text-gray-400">
-                  {deliveryType === "member_delivery" ? "Bắt buộc điền" : "Không bắt buộc"}
+                <div>
+                  <h2 className="font-heading font-bold text-base text-emerald-950 flex items-center gap-2">
+                    <span>🌱</span>
+                    Mã người quen / Tên Mầm-er bạn quen{deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Hỗ trợ ghi nhận đúng đóng góp cho thành viên và giúp bạn không bao giờ chọn nhầm.
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-cream text-emerald-800">
+                  {deliveryType === "member_delivery" ? "Bắt buộc xác nhận" : "Không bắt buộc"}
                 </span>
               </div>
-              <p className="text-xs text-gray-500">
-                Nếu bạn biết đến Tạp Hóa Gieo Mơ thông qua Mầm-ers, hãy nhập tên thành viên đó ở đây nhé!
-              </p>
-              <Input
-                placeholder="Ví dụ: Mai Lan hoặc MM-LAN (Nhập tên hoặc mã thành viên)..."
-                value={formData.introducer_info}
-                onChange={(e) => handleInputChange("introducer_info", e.target.value)}
-                error={errors.introducer_info}
-              />
+
+              {selectedMember ? (
+                /* Confirmed Member Card */
+                <div className="p-4 rounded-2xl bg-[#EAF7ED] border-2 border-emerald-500 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">
+                        {selectedMember.fullName.slice(0, 1)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-heading font-extrabold text-sm text-emerald-950">
+                            {selectedMember.fullName}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] border border-emerald-300">
+                            Mã: {selectedMember.referralCode}
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                          <span>✓</span> Đã xác nhận thành viên chính thức Mầm Mơ
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMember(null);
+                          setShowMemberSuggestions(true);
+                        }}
+                        className="text-xs font-bold text-emerald-900 hover:underline px-2.5 py-1.5 rounded-xl bg-white border border-emerald-300 cursor-pointer shadow-2xs"
+                      >
+                        Đổi người khác
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearMember}
+                        className="text-xs font-medium text-gray-500 hover:text-red-600 px-2 py-1.5 cursor-pointer"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+
+                  {deliveryType === "member_delivery" && (
+                    <div className="text-[11.5px] text-[#2D6338] bg-white/80 p-2.5 rounded-xl border border-emerald-200">
+                      📦 <strong>{selectedMember.fullName}</strong> ({selectedMember.phone}) sẽ trực tiếp nhận hàng và giao tận tay bạn.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Search / Suggestion Input */
+                <div className="space-y-2.5">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={memberSearchQuery}
+                      onChange={(e) => {
+                        setMemberSearchQuery(e.target.value);
+                        setShowMemberSuggestions(true);
+                        setNoIntroducer(false);
+                        setFormData((prev) => ({ ...prev, introducer_info: e.target.value }));
+                      }}
+                      onFocus={() => setShowMemberSuggestions(true)}
+                      placeholder="Gõ tên hoặc mã (Ví dụ: Mai Lan, MAM-LAN, Quang...)"
+                      className="w-full px-4 py-3 rounded-2xl border border-emerald-200 text-xs font-semibold outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 bg-white"
+                    />
+                    {memberSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberSearchQuery("");
+                          setShowMemberSuggestions(false);
+                        }}
+                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {showMemberSuggestions && (
+                    <div className="p-2 bg-cream/70 rounded-2xl border border-emerald-200 max-h-56 overflow-y-auto space-y-1 animate-in fade-in">
+                      <div className="px-2 py-1 text-[10.5px] font-bold text-gray-500 uppercase">
+                        {filteredMembers.length > 0 ? "Thành viên Mầm Mơ (nhấn để xác nhận):" : "Chưa có trong danh sách chính thức:"}
+                      </div>
+                      {filteredMembers.map((m) => (
+                        <button
+                          key={m.memberId}
+                          type="button"
+                          onClick={() => handleSelectMember(m)}
+                          className="w-full p-2.5 rounded-xl text-left hover:bg-white flex items-center justify-between border border-transparent hover:border-emerald-300 transition-all cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-soft-green text-emerald-950 font-extrabold flex items-center justify-center text-xs group-hover:scale-105 transition-transform">
+                              {m.fullName.slice(0, 1)}
+                            </div>
+                            <div>
+                              <span className="font-bold text-xs text-gray-900 block">{m.fullName}</span>
+                              <span className="text-[10.5px] text-gray-500 font-mono">Mã: {m.referralCode}</span>
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-xl bg-soft-green text-emerald-950 text-[11px] font-bold border border-emerald-200">
+                            Chọn người này ✓
+                          </span>
+                        </button>
+                      ))}
+
+                      {filteredMembers.length === 0 && memberSearchQuery && (
+                        <div className="p-3 text-center text-xs text-gray-600 bg-white rounded-xl">
+                          <span>Chưa tìm thấy thành viên có tên hoặc mã này. Bạn có thể lưu tên này để BTC kiểm tra đối chiếu sau.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleClearMember}
+                      className={`text-xs px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                        noIntroducer
+                          ? "bg-gray-100 text-gray-900 border-gray-300 font-bold"
+                          : "text-gray-500 hover:text-gray-800 border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {noIntroducer ? "✓ Đã chọn: Tôi không quen ai / Mua tự do" : "Tôi không quen ai / Không có người giới thiệu"}
+                    </button>
+                    <span className="text-[11px] text-gray-400">
+                      Gợi ý: Lan, Quang, Trúc Hân...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {errors.introducer_info && (
+                <p className="text-[11px] text-red-600 font-medium">{errors.introducer_info}</p>
+              )}
             </div>
 
             {/* Payment Method Box */}
@@ -510,30 +697,26 @@ function CheckoutContent() {
               </h2>
 
               <div className="space-y-3">
-                <label
-                  className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-all ${
-                    paymentMethod === "banking"
-                      ? "bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
-                      : "bg-white border-gray-200"
-                  }`}
+                <div
+                  className="flex items-start gap-3 p-4 rounded-2xl border bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
                 >
                   <input
                     type="radio"
                     name="payment"
                     value="banking"
-                    checked={paymentMethod === "banking"}
-                    onChange={() => setPaymentMethod("banking")}
+                    checked={true}
+                    readOnly
                     className="mt-1 text-emerald-600"
                   />
                   <div>
                     <span className="block text-sm font-bold text-emerald-950">
                       Chuyển khoản Ngân hàng (VietQR - Nhanh chóng)
                     </span>
-                    <span className="block text-xs text-gray-500 mt-0.5">
-                      Quét mã QR tự động điền số tiền và nội dung chuyển khoản sau khi hoàn tất đơn hàng.
+                    <span className="block text-xs text-gray-600 mt-0.5 leading-relaxed">
+                      Quét mã QR tự động điền số tiền và nội dung chuyển khoản sau khi bấm &quot;Xác nhận đặt hàng&quot;.
                     </span>
                   </div>
-                </label>
+                </div>
               </div>
             </div>
 
@@ -614,7 +797,7 @@ function CheckoutContent() {
                           onClick={() => handleApplyVoucher(v.code)}
                           className="px-2 py-0.5 rounded-lg bg-soft-green/40 hover:bg-soft-green text-emerald-900 text-[10.5px] font-bold border border-emerald-200 transition-colors cursor-pointer"
                         >
-                          🏷️ {v.code} ({v.discount_type === "percentage" ? `-${v.discount_value}%` : `-${Math.round(v.discount_value / 1000)}k`})
+                          🏷️ {v.code} ({v.discount_type === "freeship" ? "Freeship" : v.discount_type === "percentage" ? `-${v.discount_value}%` : `-${Math.round(v.discount_value / 1000)}k`})
                         </button>
                       ))}
                     </div>

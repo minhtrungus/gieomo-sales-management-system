@@ -36,7 +36,14 @@ export default function AdminPosPage() {
 
   // Cart items
   const [cartItems, setCartItems] = useState<
-    Array<{ productId: string; name: string; price: number; quantity: number }>
+    Array<{
+      productId: string;
+      variantId?: string;
+      name: string;
+      variantName?: string;
+      price: number;
+      quantity: number;
+    }>
   >([]);
 
   // Modals & Status
@@ -53,11 +60,15 @@ export default function AdminPosPage() {
   // Initialize with first product if cart empty
   useEffect(() => {
     if (products.length > 0 && cartItems.length === 0) {
+      const firstProd = products[0];
+      const firstVar = firstProd.variants?.[0];
       setCartItems([
         {
-          productId: products[0].product_id,
-          name: products[0].name,
-          price: products[0].price,
+          productId: firstProd.product_id,
+          variantId: firstVar?.variant_id || "",
+          name: firstProd.name,
+          variantName: firstVar?.name || "",
+          price: firstProd.price,
           quantity: 1,
         },
       ]);
@@ -74,8 +85,11 @@ export default function AdminPosPage() {
       : products[0];
     if (!targetProd) return;
 
-    // Check if already in cart
-    const existingIndex = cartItems.findIndex((it) => it.productId === targetProd.product_id);
+    const firstVar = targetProd.variants?.[0];
+    // Check if already in cart with same product and variant
+    const existingIndex = cartItems.findIndex(
+      (it) => it.productId === targetProd.product_id && (!firstVar || it.variantId === firstVar.variant_id)
+    );
     if (existingIndex >= 0) {
       setCartItems((prev) =>
         prev.map((it, i) => (i === existingIndex ? { ...it, quantity: it.quantity + 1 } : it))
@@ -85,7 +99,9 @@ export default function AdminPosPage() {
         ...prev,
         {
           productId: targetProd.product_id,
+          variantId: firstVar?.variant_id || "",
           name: targetProd.name,
+          variantName: firstVar?.name || "",
           price: targetProd.price,
           quantity: 1,
         },
@@ -96,10 +112,35 @@ export default function AdminPosPage() {
   const handleProductSelect = (index: number, newProdId: string) => {
     const prod = products.find((p) => p.product_id === newProdId);
     if (!prod) return;
+    const firstVar = prod.variants?.[0];
     setCartItems((prev) =>
       prev.map((item, i) =>
-        i === index ? { ...item, productId: prod.product_id, name: prod.name, price: prod.price } : item
+        i === index
+          ? {
+              ...item,
+              productId: prod.product_id,
+              variantId: firstVar?.variant_id || "",
+              name: prod.name,
+              variantName: firstVar?.name || "",
+              price: prod.price,
+            }
+          : item
       )
+    );
+  };
+
+  const handleVariantSelect = (index: number, newVariantId: string) => {
+    setCartItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const prod = products.find((p) => p.product_id === item.productId);
+        const matchedVar = prod?.variants?.find((v) => v.variant_id === newVariantId);
+        return {
+          ...item,
+          variantId: newVariantId,
+          variantName: matchedVar?.name || item.variantName,
+        };
+      })
     );
   };
 
@@ -142,15 +183,16 @@ export default function AdminPosPage() {
 
     const orderItemsSnapshot: OrderItem[] = cartItems.map((item, idx) => {
       const prod = products.find((p) => p.product_id === item.productId);
+      const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
       return {
         order_item_id: `item-${newOrderId}-${idx + 1}`,
         order_id: newOrderId,
         product_id: item.productId,
-        variant_id: prod?.variants?.[0]?.variant_id || null,
+        variant_id: item.variantId || variant?.variant_id || null,
         combo_id: null,
         product_name_snapshot: item.name,
         item_name_snapshot: item.name,
-        variant_name_snapshot: prod?.variants?.[0]?.name || null,
+        variant_name_snapshot: item.variantName || variant?.name || null,
         price_snapshot: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
@@ -345,17 +387,38 @@ export default function AdminPosPage() {
                         {idx + 1}
                       </td>
                       <td className="py-3 px-2">
-                        <select
-                          value={item.productId}
-                          onChange={(e) => handleProductSelect(idx, e.target.value)}
-                          className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white text-gray-900 outline-none focus:border-emerald-500"
-                        >
-                          {products.map((p) => (
-                            <option key={p.product_id} value={p.product_id}>
-                              {p.name} ({p.price.toLocaleString("vi-VN")}đ)
-                            </option>
-                          ))}
-                        </select>
+                        {(() => {
+                          const currentProd = products.find((p) => p.product_id === item.productId);
+                          const hasVariants = currentProd?.variants && currentProd.variants.length > 0;
+                          return (
+                            <div className="space-y-1">
+                              <select
+                                value={item.productId}
+                                onChange={(e) => handleProductSelect(idx, e.target.value)}
+                                className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white text-gray-900 outline-none focus:border-emerald-500"
+                              >
+                                {products.map((p) => (
+                                  <option key={p.product_id} value={p.product_id}>
+                                    {p.name} ({p.price.toLocaleString("vi-VN")}đ)
+                                  </option>
+                                ))}
+                              </select>
+                              {hasVariants && (
+                                <select
+                                  value={item.variantId}
+                                  onChange={(e) => handleVariantSelect(idx, e.target.value)}
+                                  className="w-full p-1.5 rounded-lg border border-emerald-200 text-[11px] font-semibold bg-emerald-50/50 text-emerald-900 outline-none focus:border-emerald-500"
+                                >
+                                  {currentProd.variants?.map((v) => (
+                                    <option key={v.variant_id} value={v.variant_id}>
+                                      Phân loại: {v.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-2 text-right font-mono font-semibold text-gray-700">
                         {item.price.toLocaleString("vi-VN")}đ

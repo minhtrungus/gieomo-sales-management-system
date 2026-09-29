@@ -60,9 +60,12 @@ export default function AdminVouchersPage() {
 
   // Form states
   const [code, setCode] = useState("");
-  const [discountType, setDiscountType] = useState<"percentage" | "fixed_amount">("fixed_amount");
+  const [discountType, setDiscountType] = useState<"percentage" | "fixed_amount" | "freeship">("fixed_amount");
   const [discountValue, setDiscountValue] = useState<number>(20000);
   const [minOrderValue, setMinOrderValue] = useState<number>(150000);
+  const [minItemsCount, setMinItemsCount] = useState<number>(0);
+  const [isGiftVoucher, setIsGiftVoucher] = useState<boolean>(false);
+  const [giftMinOrderValue, setGiftMinOrderValue] = useState<number>(150000);
   const [usageLimit, setUsageLimit] = useState<number>(50);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [status, setStatus] = useState<"active" | "inactive">("active");
@@ -115,8 +118,11 @@ export default function AdminVouchersPage() {
       voucher_id: `vouch-${Date.now()}`,
       code: code.toUpperCase().trim(),
       discount_type: discountType,
-      discount_value: discountValue,
+      discount_value: discountType === "freeship" ? 15000 : discountValue,
       min_order_value: minOrderValue,
+      min_items_count: minItemsCount,
+      is_gift_voucher: isGiftVoucher,
+      gift_min_order_value: isGiftVoucher ? giftMinOrderValue : 0,
       usage_limit: usageLimit,
       usage_count: 0,
       times_used: 0,
@@ -131,6 +137,8 @@ export default function AdminVouchersPage() {
     setVouchers(getStoredVouchers());
     setIsAddModalOpen(false);
     setCode("");
+    setMinItemsCount(0);
+    setIsGiftVoucher(false);
   };
 
   // Save Edit Voucher
@@ -279,13 +287,22 @@ export default function AdminVouchersPage() {
                   return (
                     <tr key={v.voucher_id} className="hover:bg-[#FFFDF9] transition-colors">
                       <td className="py-3.5 px-5 font-mono font-extrabold text-[#2D6338] text-sm">
-                        <span className="px-2 py-0.5 rounded-lg bg-[#EAF7ED] border border-[#BFE9C3]">
-                          {v.code}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-lg bg-[#EAF7ED] border border-[#BFE9C3]">
+                            {v.code}
+                          </span>
+                          {v.is_gift_voucher && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold">
+                              🎁 Tặng cuối đơn
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 font-bold text-[#342A24]">
                         {v.discount_type === "percentage" ? (
                           <span className="text-[#E2884E]">Giảm {v.discount_value}%</span>
+                        ) : v.discount_type === "freeship" ? (
+                          <span className="text-emerald-700 font-extrabold">🚚 Miễn phí vận chuyển (Freeship)</span>
                         ) : (
                           <span className="text-[#2D6338]">
                             Giảm <MoneyDisplay amount={v.discount_value} />
@@ -293,7 +310,19 @@ export default function AdminVouchersPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-[#7E7068]">
-                        <MoneyDisplay amount={v.min_order_value} />
+                        <div className="space-y-0.5">
+                          <div>Đơn từ: <MoneyDisplay amount={v.min_order_value || 0} /></div>
+                          {Boolean(v.min_items_count && v.min_items_count > 0) && (
+                            <div className="text-[10.5px] text-amber-800 font-bold">
+                              📦 Tối thiểu {v.min_items_count} món
+                            </div>
+                          )}
+                          {Boolean(v.is_gift_voucher && v.gift_min_order_value) && (
+                            <div className="text-[10px] text-purple-700">
+                              Tặng cho đơn từ <MoneyDisplay amount={v.gift_min_order_value || 0} />
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
@@ -412,16 +441,23 @@ export default function AdminVouchersPage() {
                   <label className="font-bold text-[#342A24] block">Hình thức giảm *</label>
                   <select
                     value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as "percentage" | "fixed_amount")}
+                    onChange={(e) => {
+                      const dt = e.target.value as "percentage" | "fixed_amount" | "freeship";
+                      setDiscountType(dt);
+                      if (dt === "freeship") setDiscountValue(15000);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
                   >
                     <option value="fixed_amount">Giảm cố định (VNĐ)</option>
                     <option value="percentage">Giảm theo phần trăm (%)</option>
+                    <option value="freeship">🚚 Miễn phí vận chuyển (Freeship)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Mức giảm *</label>
+                  <label className="font-bold text-[#342A24] block">
+                    {discountType === "freeship" ? "Giá trị Freeship (VNĐ)" : discountType === "percentage" ? "Mức giảm (%) *" : "Mức giảm (VNĐ) *"}
+                  </label>
                   <input
                     type="number"
                     required
@@ -444,14 +480,43 @@ export default function AdminVouchersPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Giới hạn số lượt dùng</label>
+                  <label className="font-bold text-[#342A24] block">Số món tối thiểu (món)</label>
                   <input
                     type="number"
-                    value={usageLimit}
-                    onChange={(e) => setUsageLimit(Number(e.target.value))}
+                    placeholder="0 (không yêu cầu)"
+                    value={minItemsCount}
+                    onChange={(e) => setMinItemsCount(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
                   />
                 </div>
+              </div>
+
+              {/* Gift Voucher Option */}
+              <div className="p-3 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isGiftVoucher}
+                    onChange={(e) => setIsGiftVoucher(e.target.checked)}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-purple-950">
+                    🎁 Làm Voucher Quà Tặng sau khi khách thanh toán thành công
+                  </span>
+                </label>
+                {isGiftVoucher && (
+                  <div className="pt-1 space-y-1">
+                    <label className="text-[11px] font-bold text-purple-900 block">
+                      Đơn hàng đạt từ bao nhiêu tiền thì được tặng voucher này? (VNĐ)
+                    </label>
+                    <input
+                      type="number"
+                      value={giftMinOrderValue}
+                      onChange={(e) => setGiftMinOrderValue(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-purple-300 text-xs font-bold bg-white outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -530,6 +595,26 @@ export default function AdminVouchersPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
+                  <label className="font-bold text-[#342A24] block">Hình thức giảm *</label>
+                  <select
+                    value={editingVoucher.discount_type || "fixed_amount"}
+                    onChange={(e) => {
+                      const dt = e.target.value as "percentage" | "fixed_amount" | "freeship";
+                      setEditingVoucher({
+                        ...editingVoucher,
+                        discount_type: dt,
+                        discount_value: dt === "freeship" ? 15000 : editingVoucher.discount_value,
+                      });
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
+                  >
+                    <option value="fixed_amount">Giảm cố định (VNĐ)</option>
+                    <option value="percentage">Giảm theo phần trăm (%)</option>
+                    <option value="freeship">🚚 Miễn phí vận chuyển (Freeship)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
                   <label className="font-bold text-[#342A24] block">Mức giảm *</label>
                   <input
                     type="number"
@@ -539,9 +624,11 @@ export default function AdminVouchersPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Đơn tối thiểu</label>
+                  <label className="font-bold text-[#342A24] block">Đơn tối thiểu (VNĐ)</label>
                   <input
                     type="number"
                     value={editingVoucher.min_order_value}
@@ -549,6 +636,44 @@ export default function AdminVouchersPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
                   />
                 </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-[#342A24] block">Số món tối thiểu (món)</label>
+                  <input
+                    type="number"
+                    value={editingVoucher.min_items_count ?? 0}
+                    onChange={(e) => setEditingVoucher({ ...editingVoucher, min_items_count: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                  />
+                </div>
+              </div>
+
+              {/* Gift Voucher Option */}
+              <div className="p-3 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingVoucher.is_gift_voucher)}
+                    onChange={(e) => setEditingVoucher({ ...editingVoucher, is_gift_voucher: e.target.checked })}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-purple-950">
+                    🎁 Làm Voucher Quà Tặng sau khi khách thanh toán thành công
+                  </span>
+                </label>
+                {editingVoucher.is_gift_voucher && (
+                  <div className="pt-1 space-y-1">
+                    <label className="text-[11px] font-bold text-purple-900 block">
+                      Đơn hàng đạt từ bao nhiêu tiền thì được tặng voucher này? (VNĐ)
+                    </label>
+                    <input
+                      type="number"
+                      value={editingVoucher.gift_min_order_value ?? 150000}
+                      onChange={(e) => setEditingVoucher({ ...editingVoucher, gift_min_order_value: Number(e.target.value) })}
+                      className="w-full px-3 py-1.5 rounded-xl border border-purple-300 text-xs font-bold bg-white outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

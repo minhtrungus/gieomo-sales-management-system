@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { verifyAdminLogin } from "@/lib/data/orderStore";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -19,13 +20,23 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     setTimeout(() => {
-      if (email.trim() && password.trim()) {
-        router.push("/admin/dashboard");
-      } else {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPass = password.trim();
+
+      if (!cleanEmail || !cleanPass) {
         setError("Vui lòng nhập đầy đủ Email và Mật khẩu!");
         setLoading(false);
+        return;
       }
-    }, 600);
+
+      const isValid = verifyAdminLogin(cleanPass);
+      if (isValid) {
+        router.push("/admin/dashboard");
+      } else {
+        setError("Mật khẩu không chính xác! Vui lòng kiểm tra lại.");
+        setLoading(false);
+      }
+    }, 400);
   };
 
   return (

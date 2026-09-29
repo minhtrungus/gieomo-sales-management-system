@@ -283,6 +283,20 @@ export default function AdminCombosPage() {
     setDeletingCombo(null);
   };
 
+  // Quick toggle between Active / Draft
+  const handleToggleComboStatus = (comboId: string, currentStatus?: string) => {
+    const nextStatus = currentStatus === "draft" ? "active" : "draft";
+    const found = combos.find((c) => c.combo_id === comboId);
+    if (!found) return;
+    const updated: ExtendedCombo = {
+      ...found,
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    };
+    updateStoredCombo(updated);
+    setCombos(getStoredCombos());
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -400,17 +414,26 @@ export default function AdminCombosPage() {
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
-                        {cb.status === "active" || !cb.status ? (
-                          <Badge variant="brand">Đang bán</Badge>
-                        ) : cb.status === "draft" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[10.5px] font-bold border border-gray-200">
-                            Bản nháp
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[10.5px] font-bold border border-red-200">
-                            Ngừng bán
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleComboStatus(cb.combo_id, cb.status)}
+                          className="cursor-pointer transition-transform hover:scale-105 active:scale-95 inline-block"
+                          title="Nhấn để đổi giữa Đang bán và Bản nháp"
+                        >
+                          {cb.status === "active" || !cb.status ? (
+                            <span className="px-2.5 py-1 rounded-full bg-[#EAF7ED] text-[#16381D] text-[11px] font-bold border border-emerald-300 shadow-2xs hover:bg-[#d8f3dc]">
+                              ✓ Đang bán (Bấm đổi)
+                            </span>
+                          ) : cb.status === "draft" ? (
+                            <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 text-[11px] font-bold border border-amber-300 shadow-2xs hover:bg-amber-100">
+                              📝 Bản nháp (Bấm mở bán)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-[11px] font-bold border border-red-200">
+                              Ngừng bán
+                            </span>
+                          )}
+                        </button>
                       </td>
 
                       <td className="py-3.5 px-5 text-right">

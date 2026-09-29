@@ -59,25 +59,43 @@ export default function AdminCreateOrderPage() {
 
   // Selected Order Items
   const [orderItems, setOrderItems] = useState<
-    Array<{ productId: string; name: string; price: number; quantity: number }>
+    Array<{
+      productId: string;
+      variantId: string;
+      name: string;
+      variantName: string;
+      price: number;
+      quantity: number;
+    }>
   >([
     {
       productId: defaultProd.product_id,
+      variantId: defaultProd.variants?.[0]?.variant_id || "",
       name: defaultProd.name,
+      variantName: defaultProd.variants?.[0]?.name || "",
       price: defaultProd.price,
       quantity: 1,
     },
   ]);
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shippingFee = deliveryType === "pickup_point" ? 0 : subtotal >= 200000 ? 0 : 25000;
+  const flatShippingFee = 15000;
+  const shippingFee = deliveryType === "member_delivery" ? 0 : flatShippingFee;
   const finalAmount = subtotal + shippingFee;
 
   const handleAddItem = () => {
     const firstProd = availableProducts[0] || defaultProd;
+    const firstVar = firstProd.variants?.[0];
     setOrderItems((prev) => [
       ...prev,
-      { productId: firstProd.product_id, name: firstProd.name, price: firstProd.price, quantity: 1 },
+      {
+        productId: firstProd.product_id,
+        variantId: firstVar?.variant_id || "",
+        name: firstProd.name,
+        variantName: firstVar?.name || "",
+        price: firstProd.price,
+        quantity: 1,
+      },
     ]);
   };
 
@@ -88,10 +106,35 @@ export default function AdminCreateOrderPage() {
   const handleProductSelect = (index: number, prodId: string) => {
     const prod = availableProducts.find((p) => p.product_id === prodId);
     if (!prod) return;
+    const firstVar = prod.variants?.[0];
     setOrderItems((prev) =>
       prev.map((item, i) =>
-        i === index ? { ...item, productId: prod.product_id, name: prod.name, price: prod.price } : item
+        i === index
+          ? {
+              ...item,
+              productId: prod.product_id,
+              variantId: firstVar?.variant_id || "",
+              name: prod.name,
+              variantName: firstVar?.name || "",
+              price: prod.price,
+            }
+          : item
       )
+    );
+  };
+
+  const handleVariantSelect = (index: number, varId: string) => {
+    setOrderItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const prod = availableProducts.find((p) => p.product_id === item.productId);
+        const matchedVar = prod?.variants?.find((v) => v.variant_id === varId);
+        return {
+          ...item,
+          variantId: varId,
+          variantName: matchedVar?.name || item.variantName,
+        };
+      })
     );
   };
 
@@ -108,15 +151,16 @@ export default function AdminCreateOrderPage() {
 
     const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
       const prod = availableProducts.find((p) => p.product_id === item.productId);
+      const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
       return {
         order_item_id: `item-${newOrderId}-${idx + 1}`,
         order_id: newOrderId,
         product_id: item.productId,
-        variant_id: prod?.variants?.[0]?.variant_id || null,
+        variant_id: item.variantId || variant?.variant_id || null,
         combo_id: null,
         product_name_snapshot: item.name,
         item_name_snapshot: item.name,
-        variant_name_snapshot: prod?.variants?.[0]?.name || null,
+        variant_name_snapshot: item.variantName || variant?.name || null,
         price_snapshot: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
@@ -310,45 +354,68 @@ export default function AdminCreateOrderPage() {
             </div>
 
             <div className="space-y-3">
-              {orderItems.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-200/60">
-                  <div className="flex-1">
-                    <select
-                      value={item.productId}
-                      onChange={(e) => handleProductSelect(idx, e.target.value)}
-                      className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white text-gray-800 outline-none"
-                    >
-                      {availableProducts.map((p) => (
-                        <option key={p.product_id} value={p.product_id}>
-                          {p.name} - {p.price.toLocaleString("vi-VN")}đ
-                        </option>
-                      ))}
-                    </select>
+              {orderItems.map((item, idx) => {
+                const currentProd = availableProducts.find((p) => p.product_id === item.productId);
+                const hasVariants = currentProd?.variants && currentProd.variants.length > 0;
+                return (
+                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-200/60">
+                    <div className="flex-1 space-y-1.5">
+                      <select
+                        value={item.productId}
+                        onChange={(e) => handleProductSelect(idx, e.target.value)}
+                        className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white text-gray-800 outline-none"
+                      >
+                        {availableProducts.map((p) => (
+                          <option key={p.product_id} value={p.product_id}>
+                            {p.name} - {p.price.toLocaleString("vi-VN")}đ
+                          </option>
+                        ))}
+                      </select>
+
+                      {hasVariants && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-gray-500 font-medium shrink-0">Phân loại:</span>
+                          <select
+                            value={item.variantId}
+                            onChange={(e) => handleVariantSelect(idx, e.target.value)}
+                            className="flex-1 p-1.5 rounded-lg border border-emerald-200 text-[11px] font-semibold bg-emerald-50/50 text-emerald-900 outline-none"
+                          >
+                            {currentProd.variants?.map((v) => (
+                              <option key={v.variant_id} value={v.variant_id}>
+                                {v.name} (Tồn: {v.stock ?? 0})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3">
+                      <div className="w-20">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleQuantityChange(idx, Number(e.target.value))}
+                          className="w-full p-2 text-center rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
+                        />
+                      </div>
+
+                      <MoneyDisplay amount={item.price * item.quantity} className="font-bold text-xs text-emerald-950 w-24 text-right" />
+
+                      {orderItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="w-20">
-                    <input
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(e) => handleQuantityChange(idx, Number(e.target.value))}
-                      className="w-full p-2 text-center rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
-                    />
-                  </div>
-
-                  <MoneyDisplay amount={item.price * item.quantity} className="font-bold text-xs text-emerald-950 w-24 text-right" />
-
-                  {orderItems.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(idx)}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -364,8 +431,8 @@ export default function AdminCreateOrderPage() {
                 value={deliveryType}
                 onChange={(e) => setDeliveryType(e.target.value)}
                 options={[
-                  { value: "home_delivery", label: "Giao tận nơi (25k - Freeship >200k)" },
-                  { value: "pickup_point", label: "Nhận tại điểm hẹn Mầm Mơ (0đ)" },
+                  { value: "home_delivery", label: "Giao tận nơi (15.000đ)" },
+                  { value: "member_delivery", label: "Nhận qua thành viên Mầm Mơ (0đ)" },
                 ]}
               />
 
@@ -375,25 +442,13 @@ export default function AdminCreateOrderPage() {
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 options={[
                   { value: "banking", label: "Chuyển khoản Ngân hàng (VietQR)" },
-                  { value: "cod", label: "Tiền mặt khi nhận hàng (COD)" },
                 ]}
               />
             </div>
 
-            {deliveryType === "pickup_point" && (
-              <div className="pt-2">
-                <Select
-                  label="Chọn điểm hẹn nhận hàng *"
-                  value={pickupPointId}
-                  onChange={(e) => setPickupPointId(e.target.value)}
-                  options={[
-                    { value: "", label: "-- Chọn điểm hẹn --" },
-                    ...pickupPoints.map((p) => ({
-                      value: p.pickup_point_id,
-                      label: `${p.name} (${p.address || p.address_detail || ""})`,
-                    })),
-                  ]}
-                />
+            {deliveryType === "member_delivery" && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-emerald-900 text-xs">
+                🌱 <strong>Giao qua người quen / Thành viên:</strong> Thành viên giới thiệu sẽ trực tiếp nhận hàng và trao tận tay khách hàng. Phí vận chuyển: <strong>0đ</strong>.
               </div>
             )}
 

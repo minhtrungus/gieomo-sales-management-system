@@ -74,22 +74,33 @@ export default function AdminInventoryPage() {
   useEffect(() => {
     const loadData = () => {
       const storedProds = getStoredProducts();
-      setProducts(
-        storedProds.map((p) => ({
-          ...p,
-          variants: p.variants?.map((v) => {
-            const wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-            const wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
-            return {
-              ...v,
-              stock_warehouse_1: wh1,
-              stock_warehouse_2: wh2,
-              stock: wh1 + wh2,
-            };
-          }),
-        }))
-      );
-      setWarehouses(getStoredWarehouses());
+      const mapped: ExtendedProduct[] = storedProds.map((p) => ({
+        ...p,
+        variants: p.variants?.map((v) => {
+          const wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
+          const wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+          return {
+            ...v,
+            stock_warehouse_1: wh1,
+            stock_warehouse_2: wh2,
+            stock: wh1 + wh2,
+          };
+        }),
+      }));
+      setProducts(mapped);
+      const whs = getStoredWarehouses();
+      setWarehouses(whs);
+
+      if (mapped.length > 0) {
+        setSelectedProductId((prev) => prev || mapped[0]?.product_id || "");
+        setSelectedVariantId((prev) => prev || mapped[0]?.variants?.[0]?.variant_id || "");
+        setTransferProductId((prev) => prev || mapped[0]?.product_id || "");
+        setTransferVariantId((prev) => prev || mapped[0]?.variants?.[0]?.variant_id || "");
+      }
+      if (whs.length > 1) {
+        setFromWarehouse((prev) => prev || whs[0].warehouse_id);
+        setToWarehouse((prev) => (prev && prev !== whs[0].warehouse_id ? prev : whs[1].warehouse_id));
+      }
     };
 
     loadData();
@@ -201,6 +212,20 @@ export default function AdminInventoryPage() {
   const [transferReason, setTransferReason] = useState("Chi viện cho bàn trực KTX Thủ Đức cuối tuần");
   const [transferError, setTransferError] = useState<string | null>(null);
 
+  // Stock Adjustment Modal state (Replaces direct table +/- buttons)
+  const [adjustingItem, setAdjustingItem] = useState<{
+    productId: string;
+    variantId: string;
+    productName: string;
+    variantName: string;
+    warehouseId: string;
+    warehouseName: string;
+    currentStock: number;
+  } | null>(null);
+  const [adjustDelta, setAdjustDelta] = useState<number>(0);
+  const [adjustReason, setAdjustReason] = useState("Kiểm kê định kỳ");
+  const [adjustApprovedBy, setAdjustApprovedBy] = useState("Mai Lan (Trưởng Kho)");
+
   // Inflow Logs State
   const [inflowLogs, setInflowLogs] = useState<InflowLog[]>([
     {
@@ -308,6 +333,45 @@ export default function AdminInventoryPage() {
 
       return updatedProducts;
     });
+  };
+
+  // Submit Stock Adjustment with mandatory confirmation and reason
+  const handleAdjustStockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingItem || adjustDelta === 0) {
+      setAdjustingItem(null);
+      return;
+    }
+
+    handleStockUpdate(
+      adjustingItem.productId,
+      adjustingItem.variantId,
+      adjustingItem.warehouseId,
+      adjustDelta
+    );
+
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} ${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
+
+    const newLog: InflowLog = {
+      logId: `adj-${Date.now()}`,
+      receiptCode: adjustDelta > 0 ? `PNK-${Date.now().toString().slice(-6)}` : `PXK-${Date.now().toString().slice(-6)}`,
+      warehouseId: adjustingItem.warehouseId,
+      warehouseName: adjustingItem.warehouseName,
+      productName: adjustingItem.productName,
+      variantName: adjustingItem.variantName,
+      quantityAdded: adjustDelta,
+      stockBefore: adjustingItem.currentStock,
+      stockAfter: Math.max(0, adjustingItem.currentStock + adjustDelta),
+      unitCost: 0,
+      approvedBy: adjustApprovedBy,
+      sourceNote: `Điều chỉnh tồn: ${adjustReason}`,
+      createdAt: timeStr,
+    };
+
+    setInflowLogs((prev) => [newLog, ...prev]);
+    setAdjustingItem(null);
+    setAdjustDelta(0);
   };
 
   // Submit Bulk Inflow
@@ -833,23 +897,29 @@ export default function AdminInventoryPage() {
                             const curStock = row.stocks[wh.warehouse_id] ?? 0;
                             return (
                               <td key={wh.warehouse_id} className="py-3 px-3 text-center">
-                                <div className="inline-flex items-center gap-1.5 p-1 rounded-xl bg-gray-50 border border-gray-200">
-                                  <button
-                                    onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, -1)}
-                                    className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                    title="Giảm 1"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <span className={`font-bold w-9 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
+                                <div className="inline-flex items-center justify-center gap-1.5 px-2 py-1 rounded-xl bg-gray-50 border border-gray-200">
+                                  <span className={`font-bold min-w-8 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
                                     {curStock}
                                   </span>
                                   <button
-                                    onClick={() => handleStockUpdate(row.productId, row.variantId, wh.warehouse_id, 1)}
-                                    className="w-5 h-5 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                    title="Tăng 1"
+                                    type="button"
+                                    onClick={() => {
+                                      setAdjustingItem({
+                                        productId: row.productId,
+                                        variantId: row.variantId,
+                                        productName: row.productName,
+                                        variantName: row.variantName,
+                                        warehouseId: wh.warehouse_id,
+                                        warehouseName: wh.name,
+                                        currentStock: curStock,
+                                      });
+                                      setAdjustDelta(0);
+                                      setAdjustReason("Kiểm kê định kỳ");
+                                    }}
+                                    className="w-5 h-5 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer transition-colors"
+                                    title="Điều chỉnh tồn kho (cần lý do xác nhận)"
                                   >
-                                    <Plus className="w-3 h-3" />
+                                    <Edit3 className="w-3 h-3" />
                                   </button>
                                 </div>
                               </td>
@@ -1553,7 +1623,16 @@ export default function AdminInventoryPage() {
                   </label>
                   <select
                     value={fromWarehouse}
-                    onChange={(e) => setFromWarehouse(e.target.value)}
+                    onChange={(e) => {
+                      const newFrom = e.target.value;
+                      setFromWarehouse(newFrom);
+                      if (toWarehouse === newFrom) {
+                        const alternative = warehouses.find((w) => w.warehouse_id !== newFrom);
+                        if (alternative) {
+                          setToWarehouse(alternative.warehouse_id);
+                        }
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-red-200 text-xs font-bold text-red-950 bg-white"
                   >
                     {warehouses.map((wh) => (
@@ -1573,11 +1652,13 @@ export default function AdminInventoryPage() {
                     onChange={(e) => setToWarehouse(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-950 bg-white"
                   >
-                    {warehouses.map((wh) => (
-                      <option key={wh.warehouse_id} value={wh.warehouse_id}>
-                        {wh.name}
-                      </option>
-                    ))}
+                    {warehouses
+                      .filter((wh) => wh.warehouse_id !== fromWarehouse)
+                      .map((wh) => (
+                        <option key={wh.warehouse_id} value={wh.warehouse_id}>
+                          {wh.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -1880,20 +1961,26 @@ export default function AdminInventoryPage() {
                             {curStock}
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <button
-                                onClick={() => handleStockUpdate(row.productId, row.variantId, viewingWarehouse.warehouse_id, -1)}
-                                className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => handleStockUpdate(row.productId, row.variantId, viewingWarehouse.warehouse_id, 1)}
-                                className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdjustingItem({
+                                  productId: row.productId,
+                                  variantId: row.variantId,
+                                  productName: row.productName,
+                                  variantName: row.variantName,
+                                  warehouseId: viewingWarehouse.warehouse_id,
+                                  warehouseName: viewingWarehouse.name,
+                                  currentStock: curStock,
+                                });
+                                setAdjustDelta(0);
+                                setAdjustReason("Kiểm kê tại kho " + viewingWarehouse.name);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-emerald-50 hover:text-emerald-800 text-gray-700 text-[11px] font-bold transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Sửa tồn</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -1912,6 +1999,169 @@ export default function AdminInventoryPage() {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* EXPLICIT STOCK ADJUSTMENT MODAL (NO ACCIDENTAL +/-) */}
+      {/* ======================================================== */}
+      {adjustingItem && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#F0E5D8] space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                    Xác nhận điều chỉnh tồn kho
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    Thao tác có lưu vết biên bản kiểm kê, không tự động tăng giảm
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustingItem(null)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Item Info */}
+            <div className="p-3.5 rounded-2xl bg-cream/70 border border-[#F0E5D8] text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sản phẩm:</span>
+                <span className="font-extrabold text-[#231B16] text-right">{adjustingItem.productName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Phân loại:</span>
+                <span className="font-bold text-emerald-800">{adjustingItem.variantName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Kho thực hiện:</span>
+                <span className="font-bold text-[#342A24]">{adjustingItem.warehouseName}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-[#F0E5D8]">
+                <span className="text-gray-500 font-medium">Tồn kho hiện tại:</span>
+                <span className="font-mono font-extrabold text-base text-stone-900">{adjustingItem.currentStock} cái</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleAdjustStockSubmit} className="space-y-4 text-xs">
+              <div className="space-y-2">
+                <label className="font-bold text-[#342A24] block">
+                  Số lượng thay đổi (+ để tăng, - để giảm) *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={adjustDelta === 0 ? "" : adjustDelta}
+                    onChange={(e) => setAdjustDelta(parseInt(e.target.value, 10) || 0)}
+                    placeholder="VD: +5 hoặc -2"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-sm font-mono font-bold text-center outline-none focus:border-[#FFB98A] bg-white"
+                  />
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setAdjustDelta((prev) => prev - 1)}
+                      className="px-2.5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 text-xs"
+                    >
+                      -1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustDelta((prev) => prev + 1)}
+                      className="px-2.5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 text-xs"
+                    >
+                      +1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustDelta((prev) => prev + 5)}
+                      className="px-2.5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 text-xs"
+                    >
+                      +5
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Preview */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs">
+                  <span className="text-gray-600 font-medium">Tồn sau điều chỉnh:</span>
+                  <span
+                    className={`font-mono font-extrabold text-sm ${
+                      adjustingItem.currentStock + adjustDelta < 0
+                        ? "text-red-600"
+                        : "text-emerald-700"
+                    }`}
+                  >
+                    {adjustingItem.currentStock + adjustDelta} cái
+                  </span>
+                </div>
+                {adjustingItem.currentStock + adjustDelta < 0 && (
+                  <p className="text-[11px] text-red-600 font-bold">
+                    ⚠️ Tồn kho không thể âm ({adjustingItem.currentStock + adjustDelta} cái). Vui lòng kiểm tra lại!
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Lý do điều chỉnh tồn kho *</label>
+                <select
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-medium text-[#342A24] bg-white outline-none focus:border-[#FFB98A] mb-1.5"
+                >
+                  <option value="Kiểm kê định kỳ">Kiểm kê định kỳ</option>
+                  <option value="Hàng may lỗi / rách chỉ">Hàng may lỗi / rách chỉ</option>
+                  <option value="Thất lạc / mất mát">Thất lạc / mất mát</option>
+                  <option value="Bổ sung xưởng may gia công">Bổ sung xưởng may gia công</option>
+                  <option value="Khác">Lý do khác...</option>
+                </select>
+                {adjustReason === "Khác" && (
+                  <input
+                    type="text"
+                    placeholder="Nhập lý do cụ thể..."
+                    onChange={(e) => setAdjustReason(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                    required
+                  />
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Người duyệt / thực hiện *</label>
+                <input
+                  type="text"
+                  value={adjustApprovedBy}
+                  onChange={(e) => setAdjustApprovedBy(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#F0E5D8]">
+                <button
+                  type="button"
+                  onClick={() => setAdjustingItem(null)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-100 font-bold text-xs cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={adjustDelta === 0 || adjustingItem.currentStock + adjustDelta < 0}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-xs cursor-pointer transition-colors"
+                >
+                  Xác nhận lưu
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

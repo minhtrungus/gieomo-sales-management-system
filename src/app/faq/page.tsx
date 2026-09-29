@@ -25,7 +25,24 @@ export default function FAQPage() {
     },
     {
       q: "Tôi có thể xem thông tin về các chiến dịch mà Gieo Mơ đóng góp ở đâu?",
-      a: "Bạn có thể theo dõi thông tin về các chiến dịch thiện nguyện mà Gieo Mơ đồng hành thông qua các kênh truyền thông chính thức của Tổ chức Thiện nguyện Mầm Mơ. Chúng mình sẽ cập nhật thông tin về từng chiến dịch, quá trình triển khai và những giá trị mà sự đóng góp của bạn đã cùng tạo nên.",
+      a: (
+        <div className="space-y-3">
+          <p>
+            Bạn có thể theo dõi thông tin về các chiến dịch thiện nguyện và hành trình lan toả yêu thương mà Gieo Mơ đồng hành thông qua trang Facebook chính thức của Mầm Mơ. Chúng mình luôn cập nhật chi tiết về từng chiến dịch, hình ảnh thực tế và giá trị mà bạn đã cùng tạo nên.
+          </p>
+          <a
+            href={settings.facebookUrl || "https://www.facebook.com/BanHangGieoMo"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1877F2]/10 text-[#1877F2] hover:bg-[#1877F2]/20 font-bold text-xs transition-colors"
+          >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+            <span>Ghé thăm Facebook Mầm Mơ ➔</span>
+          </a>
+        </div>
+      ),
     },
     {
       q: "Tôi muốn ủng hộ thêm hoặc hợp tác với Mầm Mơ thì làm thế nào?",

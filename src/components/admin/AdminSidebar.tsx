@@ -22,6 +22,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
+import { clearAdminSession } from "@/lib/data/orderStore";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -42,7 +43,6 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
     { href: "/admin/customers", label: "Khách hàng", icon: Users },
     { href: "/admin/payments", label: "Xác nhận thanh toán", icon: CreditCard },
-    { href: "/admin/pickup-points", label: "Điểm nhận hàng", icon: MapPin },
     { href: "/admin/messages", label: "Tin nhắn khách", icon: MessageSquare },
     { href: "/admin/vouchers", label: "Mã giảm giá", icon: Ticket },
     { href: "/admin/members", label: "Thành viên & Referral", icon: UserCheck },
@@ -142,9 +142,17 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             </div>
           </div>
 
-          <Link href="/admin/login" className="p-2 text-[#A39688] hover:text-[#FFB98A] transition-colors" title="Đăng xuất">
+          <button
+            type="button"
+            onClick={() => {
+              clearAdminSession();
+              window.location.href = "/admin/login";
+            }}
+            className="p-2 text-[#A39688] hover:text-[#FFB98A] transition-colors cursor-pointer"
+            title="Đăng xuất"
+          >
             <LogOut className="w-4 h-4" />
-          </Link>
+          </button>
         </div>
       </aside>
     </>

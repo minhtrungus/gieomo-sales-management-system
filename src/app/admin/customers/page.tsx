@@ -12,6 +12,7 @@ interface CustomerRecord {
   phone: string;
   email?: string | null;
   address?: string | null;
+  introducerInfo?: string | null;
   totalOrders: number;
   totalSpent: number;
   createdAt: string;
@@ -37,6 +38,7 @@ export default function AdminCustomersPage() {
         phone: "0901234567",
         email: "nguyenvana@example.com",
         address: "123 Nguyễn Huệ, Quận 1, TP.HCM",
+        introducerInfo: "Khánh Huyền (MM-102)",
         totalOrders: 3,
         totalSpent: 420000,
         createdAt: "2026-09-01",
@@ -48,6 +50,7 @@ export default function AdminCustomersPage() {
         phone: "0987654321",
         email: "tranthic@example.com",
         address: "45 Lê Lợi, Quận 3, TP.HCM",
+        introducerInfo: "Trực tiếp",
         totalOrders: 1,
         totalSpent: 85000,
         createdAt: "2026-09-10",
@@ -71,12 +74,14 @@ export default function AdminCustomersPage() {
         const cleanPhone = rawPhone.replace(/\s+/g, "");
 
         const existing = map.get(cleanPhone);
+        const intro = ord.introducer_info || (ord.referral_code ? `Mã: ${ord.referral_code}` : null);
         if (existing) {
           existing.totalOrders = Math.max(existing.totalOrders, orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).length);
           existing.totalSpent = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).reduce((sum, o) => sum + (o.final_amount || 0), 0);
           if (ord.buyer_name && !existing.fullName) existing.fullName = ord.buyer_name;
           if (ord.buyer_email && !existing.email) existing.email = ord.buyer_email;
           if (ord.address_detail && !existing.address) existing.address = `${ord.address_detail}, ${ord.district || ""}, ${ord.province || ""}`;
+          if (intro && (!existing.introducerInfo || existing.introducerInfo === "Trực tiếp")) existing.introducerInfo = intro;
         } else {
           const matchingOrders = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone);
           map.set(cleanPhone, {
@@ -85,6 +90,7 @@ export default function AdminCustomersPage() {
             phone: cleanPhone,
             email: ord.buyer_email || "",
             address: `${ord.address_detail || ""}, ${ord.district || ""}, ${ord.province || ""}`,
+            introducerInfo: intro || "Trực tiếp",
             totalOrders: matchingOrders.length,
             totalSpent: matchingOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0),
             createdAt: ord.created_at,
@@ -143,6 +149,7 @@ export default function AdminCustomersPage() {
                 <th className="py-3 px-3 w-12 text-center">STT</th>
                 <th className="py-3 px-4">Họ tên</th>
                 <th className="py-3 px-4">Số điện thoại / Email</th>
+                <th className="py-3 px-4">Người quen / Giới thiệu</th>
                 <th className="py-3 px-4">Địa chỉ giao hàng</th>
                 <th className="py-3 px-4 text-center">Số đơn đã đặt</th>
                 <th className="py-3 px-4 text-right">Tổng tiền ủng hộ</th>
@@ -151,7 +158,7 @@ export default function AdminCustomersPage() {
             <tbody className="divide-y divide-gray-100">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-gray-400">
+                  <td colSpan={7} className="py-10 text-center text-gray-400">
                     Không tìm thấy khách hàng nào phù hợp.
                   </td>
                 </tr>
@@ -167,6 +174,17 @@ export default function AdminCustomersPage() {
                     <td className="py-3.5 px-4">
                       <span className="font-mono text-gray-900 block">{c.phone}</span>
                       <span className="text-[11px] text-gray-500 block">{c.email}</span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {c.introducerInfo && c.introducerInfo !== "Trực tiếp" ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-[11px]">
+                          🌱 {c.introducerInfo}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs italic">
+                          Tự đặt trực tiếp
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-gray-600 max-w-[250px] truncate">
                       {c.address}

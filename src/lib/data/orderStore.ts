@@ -1,6 +1,6 @@
 "use client";
 
-import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo } from "@/types/database";
+import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
 import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
 
 export type { ExtendedProduct, ExtendedCombo };
@@ -1470,8 +1470,8 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   contactPhone: "0888670637",
   contactEmail: "support@gieomo.store",
   officeAddress: "TP. Hồ Chí Minh, Việt Nam",
-  flatShippingFee: 14000,
-  freeShippingThreshold: 1000000,
+  flatShippingFee: 15000,
+  freeShippingThreshold: 0,
   bankNumber: "0888670637",
   bankHolder: "NGUYEN THI TRUC HAN",
   bankName: "MB Bank (Quân Đội)",
@@ -1746,6 +1746,155 @@ export function deleteStoredCombo(comboId: string): void {
     console.error("Error deleting combo", e);
   }
 }
+
+// ==========================================
+// ADMIN AUTHENTICATION STORE
+// ==========================================
+export const DEFAULT_ADMIN_EMAIL = "admin@mammo.vn";
+export const DEFAULT_ADMIN_PASSWORD = "GieoMo@2026";
+
+export function getStoredAdminPassword(): string {
+  if (typeof window === "undefined") return DEFAULT_ADMIN_PASSWORD;
+  return localStorage.getItem("gieomo_admin_pwd") || DEFAULT_ADMIN_PASSWORD;
+}
+
+export function saveAdminPassword(newPass: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("gieomo_admin_pwd", newPass);
+  window.dispatchEvent(new Event("gieomo_admin_pwd_updated"));
+}
+
+export function verifyAdminLogin(password: string): boolean {
+  const currentPass = getStoredAdminPassword();
+  if (password === currentPass) {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gieomo_admin_session", JSON.stringify({
+        authenticated: true,
+        loginAt: new Date().toISOString(),
+      }));
+      window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+    }
+    return true;
+  }
+  return false;
+}
+
+export function clearAdminSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("gieomo_admin_session");
+  window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+}
+
+export function isAdminAuthenticated(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("gieomo_admin_session");
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed.authenticated);
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// PRODUCT REVIEWS STORE (Masked phone, Verified badge, Admin delete)
+// ==========================================
+const SEED_REVIEWS: ProductReview[] = [
+  {
+    review_id: "rev-1",
+    product_id: "prod-1",
+    author_name: "Nguyễn Thu Hà",
+    phone_masked: "0908***812",
+    rating: 5,
+    comment: "Pouch may cẩn thận từng đường kim mũi chỉ luôn á! Vải dày dặn, hoạ tiết thêu hạt mơ siêu dễ thương. Cảm ơn các bạn Mầm Mơ rất nhiều, chúc dự án lan toả thật nhiều giá trị!",
+    images: ["/images/products/pounch_1.png"],
+    is_verified_buyer: true,
+    created_at: "2026-09-15T14:30:00.000Z",
+  },
+  {
+    review_id: "rev-2",
+    product_id: "prod-1",
+    author_name: "Trần Minh Quân",
+    phone_masked: "0932***556",
+    rating: 5,
+    comment: "Đóng gói chỉn chu, có thiệp cảm ơn viết tay ấm áp. Mua làm quà tặng bạn thân ai cũng khen xinh!",
+    images: [],
+    is_verified_buyer: true,
+    created_at: "2026-09-18T09:15:00.000Z",
+  },
+  {
+    review_id: "rev-3",
+    product_id: "prod-2",
+    author_name: "Lê Bảo Trâm",
+    phone_masked: "0971***334",
+    rating: 5,
+    comment: "Kẹp tóc nút áo xinh xỉu, kẹp chắc không bị tuột tóc. Nhận hàng là muốn mua thêm mấy màu nữa để mix đồ luôn.",
+    images: ["/images/products/kep_toc.jpg"],
+    is_verified_buyer: true,
+    created_at: "2026-09-20T16:45:00.000Z",
+  },
+  {
+    review_id: "rev-4",
+    product_id: "prod-3",
+    author_name: "Hoàng Mai Linh",
+    phone_masked: "0912***908",
+    rating: 5,
+    comment: "Túi vải Canvas chất vải dày dặn đựng được cả laptop và sách vở. Cảm giác đeo chiếc túi mang ý nghĩa gây quỹ làm mình thấy vui cả ngày.",
+    images: ["/images/products/tui_1.png"],
+    is_verified_buyer: true,
+    created_at: "2026-09-22T11:20:00.000Z",
+  },
+];
+
+let cachedReviews: ProductReview[] | null = null;
+
+export function getStoredReviews(productId?: string): ProductReview[] {
+  if (typeof window === "undefined") {
+    return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
+  }
+  try {
+    const raw = localStorage.getItem("gieomo_product_reviews");
+    if (!raw) {
+      localStorage.setItem("gieomo_product_reviews", JSON.stringify(SEED_REVIEWS));
+      cachedReviews = SEED_REVIEWS;
+      return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
+    }
+    const list: ProductReview[] = JSON.parse(raw);
+    cachedReviews = list;
+    return productId ? list.filter((r) => r.product_id === productId) : list;
+  } catch (e) {
+    console.error("Error reading reviews", e);
+    return productId ? SEED_REVIEWS.filter((r) => r.product_id === productId) : SEED_REVIEWS;
+  }
+}
+
+export function saveNewReview(review: ProductReview): void {
+  if (typeof window === "undefined") return;
+  try {
+    const reviews = getStoredReviews();
+    const updated = [review, ...reviews.filter((r) => r.review_id !== review.review_id)];
+    cachedReviews = updated;
+    localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_reviews_updated"));
+  } catch (e) {
+    console.error("Error saving review", e);
+  }
+}
+
+export function deleteStoredReview(reviewId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const reviews = getStoredReviews();
+    const updated = reviews.filter((r) => r.review_id !== reviewId);
+    cachedReviews = updated;
+    localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_reviews_updated"));
+  } catch (e) {
+    console.error("Error deleting review", e);
+  }
+}
+
 
 
 

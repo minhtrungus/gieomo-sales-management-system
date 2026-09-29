@@ -8,6 +8,10 @@ import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import Image from "next/image";
 
+import { useState, useEffect } from "react";
+import { getStoredVouchers } from "@/lib/data/orderStore";
+import type { Voucher } from "@/types/database";
+
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -15,11 +19,24 @@ interface CartDrawerProps {
 
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, getSubtotal, getItemCount } = useCartStore();
+  const [freeshipVoucher, setFreeshipVoucher] = useState<Voucher | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const vouchers = getStoredVouchers().filter((v) => v.status === "active");
+      const found = vouchers.find((v) => v.discount_type === "freeship" && (v.min_order_value || 0) > 0);
+      setFreeshipVoucher(found || null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const subtotal = getSubtotal();
   const count = getItemCount();
+
+  const freeshipThreshold = freeshipVoucher?.min_order_value || 0;
+  const isFreeshipEligible = freeshipThreshold > 0 && subtotal >= freeshipThreshold;
+  const freeshipProgress = freeshipThreshold > 0 ? Math.min(100, Math.round((subtotal / freeshipThreshold) * 100)) : 0;
 
   return (
     <Drawer open={isOpen} onClose={onClose} title={`Giỏ hàng của bạn (${count})`}>
@@ -114,13 +131,37 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
 
             {/* Footer Summary & Checkout CTA */}
             <div className="pt-4 border-t border-gray-200 mt-auto space-y-3">
+              {freeshipThreshold > 0 && (
+                <div className="p-2.5 rounded-2xl bg-emerald-50/90 border border-emerald-100 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11.5px]">
+                    <span className="font-bold text-emerald-950 flex items-center gap-1">
+                      <span>🚚</span>
+                      {isFreeshipEligible ? (
+                        <span>Đã đủ điều kiện Freeship toàn quốc!</span>
+                      ) : (
+                        <span>Mua thêm <MoneyDisplay amount={freeshipThreshold - subtotal} className="font-bold text-emerald-800" /> để Freeship</span>
+                      )}
+                    </span>
+                    <span className="font-mono font-bold text-[11px] text-emerald-800">
+                      {freeshipProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-emerald-200/60 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-600 rounded-full transition-all duration-300"
+                      style={{ width: `${freeshipProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600 font-medium">Tạm tính:</span>
                 <MoneyDisplay amount={subtotal} className="text-lg font-bold text-emerald-950" />
               </div>
 
               <p className="text-[11px] text-gray-500 italic">
-                * Phí vận chuyển và mã giảm giá sẽ được tính tại bước thanh toán.
+                * Phí ship cố định 15.000đ &amp; mã giảm giá áp dụng tại bước thanh toán.
               </p>
 
               <div className="grid grid-cols-2 gap-2 pt-1">
