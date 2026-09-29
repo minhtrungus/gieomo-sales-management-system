@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     canonical: "./",
   },
   title: {
-    default: "Gieo Mơ | Trang chủ",
+    default: "Gieo Mơ",
     template: "Gieo Mơ | %s",
   },
   description:
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     telephone: false,
   },
   openGraph: {
-    title: "Gieo Mơ | Trang chủ",
+    title: "Gieo Mơ",
     description:
       "Tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm handmade may vá độc bản. Mỗi sản phẩm trao đi là một điều ước được gieo cho các em nhỏ khó khăn.",
     type: "website",
