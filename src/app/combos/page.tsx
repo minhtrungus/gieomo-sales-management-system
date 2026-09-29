@@ -69,10 +69,10 @@ export default function CombosPage() {
             </div>
             <div className="space-y-1">
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                Các set combo đang được chuẩn bị
+                Các combo đang được chuẩn bị
               </h3>
               <p className="text-xs text-[#7E7068] leading-relaxed max-w-sm mx-auto">
-                Ban tổ chức Mầm Mơ đang kết hợp các bộ quà tặng độc đáo. Bạn hãy quay lại sớm để cùng đón chờ nhé!
+                Ban tổ chức Gieo Mơ đang kết hợp các bộ quà tặng độc đáo. Bạn hãy quay lại sớm để cùng đón chờ nhé!
               </p>
             </div>
             <div className="pt-2">

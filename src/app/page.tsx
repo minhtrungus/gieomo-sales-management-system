@@ -144,7 +144,7 @@ export default function HomePage() {
               <h2 className="font-heading font-extrabold text-xl text-[#231B16] text-balance">
                 Gom từng mảnh nhỏ, dệt thành giấc mơ
               </h2>
-              <p className="text-xs sm:text-sm text-[#7E7068] text-justify hyphens-auto break-words leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#7E7068] text-left leading-relaxed">
                 Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
               </p>
             </div>

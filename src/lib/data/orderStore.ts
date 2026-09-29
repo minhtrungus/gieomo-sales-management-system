@@ -1128,24 +1128,33 @@ export function getStoredWarehouses(): Warehouse[] {
   if (cachedWarehouses !== null) return cachedWarehouses;
   try {
     const raw = localStorage.getItem("gieomo_warehouses");
-    let warehouses: Warehouse[] = raw ? JSON.parse(raw) : [...MOCK_WAREHOUSES];
 
-    let hasAdded = false;
-    for (const mockWh of MOCK_WAREHOUSES) {
-      if (!warehouses.some((w) => w.warehouse_id === mockWh.warehouse_id || w.code === mockWh.code)) {
-        warehouses.push(mockWh);
-        hasAdded = true;
+    // Clear legacy seed warehouses (wh-1, wh-2) so user starts fresh
+    if (raw) {
+      const parsed: Warehouse[] = JSON.parse(raw);
+      const LEGACY_IDS = ["wh-1", "wh-2"];
+      const isLegacyOnly = parsed.every((w) => LEGACY_IDS.includes(w.warehouse_id));
+      if (isLegacyOnly) {
+        localStorage.removeItem("gieomo_warehouses");
+        cachedWarehouses = [];
+        return [];
       }
+      // Keep user-created warehouses but strip out any legacy seeds
+      const cleaned = parsed.filter((w) => !LEGACY_IDS.includes(w.warehouse_id));
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem("gieomo_warehouses", JSON.stringify(cleaned));
+        cachedWarehouses = cleaned;
+        return cleaned;
+      }
+      cachedWarehouses = parsed;
+      return parsed;
     }
 
-    if (hasAdded || !raw) {
-      localStorage.setItem("gieomo_warehouses", JSON.stringify(warehouses));
-    }
-    cachedWarehouses = warehouses;
-    return warehouses;
+    cachedWarehouses = [];
+    return [];
   } catch (e) {
     console.error("Error reading gieomo_warehouses from localStorage", e);
-    return MOCK_WAREHOUSES;
+    return [];
   }
 }
 
