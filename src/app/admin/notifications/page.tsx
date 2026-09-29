@@ -646,7 +646,7 @@ export default function NotificationsPage() {
 
       {/* Detail Slide-over / Modal */}
       {selectedNotification && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95">
             {/* Header */}
             <div className="p-5 bg-[#FFF8EE] border-b border-[#F0E5D8] flex items-center justify-between">

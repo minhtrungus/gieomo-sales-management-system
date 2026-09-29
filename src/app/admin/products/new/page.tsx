@@ -554,7 +554,7 @@ export default function AdminNewProductPage() {
 
       {/* Modal Quick Add Category */}
       {isAddCatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-gray-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">

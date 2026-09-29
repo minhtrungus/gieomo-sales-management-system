@@ -1456,9 +1456,18 @@ export function getStoredCategories(): ProductCategory[] {
   if (cachedCategories !== null) return cachedCategories;
   try {
     const raw = localStorage.getItem("gieomo_categories");
-    const categories: ProductCategory[] = raw ? JSON.parse(raw) : [...MOCK_CATEGORIES];
 
-    // Deduplicate any corrupted/duplicated entries by slug
+    // If no data in localStorage yet, seed with MOCK_CATEGORIES (first time only)
+    if (!raw) {
+      const seeded = [...MOCK_CATEGORIES].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      cachedCategories = seeded;
+      localStorage.setItem("gieomo_categories", JSON.stringify(seeded));
+      return seeded;
+    }
+
+    const categories: ProductCategory[] = JSON.parse(raw);
+
+    // Deduplicate corrupted/duplicated entries by slug (keep first occurrence)
     const map = new Map<string, ProductCategory>();
     for (const c of categories) {
       if (!map.has(c.slug)) {
@@ -1466,16 +1475,12 @@ export function getStoredCategories(): ProductCategory[] {
       }
     }
 
-    // Ensure mock categories are present by slug if not in store
-    for (const mockCat of MOCK_CATEGORIES) {
-      if (!map.has(mockCat.slug)) {
-        map.set(mockCat.slug, mockCat);
-      }
-    }
+    // NOTE: Do NOT auto-restore MOCK_CATEGORIES here — that would undo user deletions.
+    // MOCK_CATEGORIES are only used as the initial seed (see above).
 
     const uniqueCategories = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-    if (uniqueCategories.length !== categories.length || !raw) {
+    if (uniqueCategories.length !== categories.length) {
       localStorage.setItem("gieomo_categories", JSON.stringify(uniqueCategories));
     }
     cachedCategories = uniqueCategories;
@@ -1560,28 +1565,31 @@ export function deleteStoredCategory(categoryId: string): void {
     window.dispatchEvent(new Event("gieomo_categories_updated"));
 
     // Reassign products to fallback category
-    const fallbackCat = updated[0];
-    if (fallbackCat) {
-      const products = getStoredProducts();
-      let prodsChanged = false;
-      const updatedProds = products.map((p) => {
-        if (p.category_id === categoryId || p.category?.category_id === categoryId) {
-          prodsChanged = true;
-          return {
-            ...p,
-            category_id: fallbackCat.category_id,
-            category: fallbackCat,
-          };
-        }
-        return p;
-      });
-
-      if (prodsChanged) {
-        cachedProducts = updatedProds;
-        localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
-        window.dispatchEvent(new Event("gieomo_products_updated"));
+    const fallbackCat = updated[0] || null;
+    const products = getStoredProducts();
+    let prodsChanged = false;
+    const updatedProds = products.map((p) => {
+      if (p.category_id === categoryId || p.category?.category_id === categoryId) {
+        prodsChanged = true;
+        return {
+          ...p,
+          category_id: fallbackCat?.category_id || null,
+          category: fallbackCat || undefined,
+        };
       }
+      return p;
+    });
+
+    if (prodsChanged) {
+      cachedProducts = updatedProds;
+      localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
     }
+
+    // Sync deletion to Supabase in background
+    fetch(`/api/categories?id=${encodeURIComponent(categoryId)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete category on server:", err));
   } catch (e) {
     console.error("Error deleting category", e);
   }
@@ -1694,9 +1702,18 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
 
   const isMasterMatch = password === currentPass;
   const isMemberMatch = matchedMember ? (matchedMember.password === password || password === "MamMo@123") : false;
-  const isFallbackMatch = password === "MamMo@123" || password === "admin123" || password === "GieoMo@2026";
 
-  if (isMasterMatch || isMemberMatch || isFallbackMatch) {
+  // Fallback passwords (MamMo@123, admin123, GieoMo@2026) only work when the email
+  // belongs to a known member — prevents unknown actors from using default passwords.
+  const isFallbackMatch =
+    Boolean(matchedMember) &&
+    (password === "MamMo@123" || password === "admin123" || password === "GieoMo@2026");
+
+  // Master password without a matched email: only allow generic (no-email) admin logins.
+  // If an unknown email is provided with master password, deny access.
+  const masterAllowed = isMasterMatch && (!cleanEmail || Boolean(matchedMember));
+
+  if (masterAllowed || isMemberMatch || isFallbackMatch) {
     if (typeof window !== "undefined") {
       const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
       const name = matchedMember?.fullName || (cleanEmail === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
@@ -1714,6 +1731,7 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
   }
   return false;
 }
+
 
 export function clearAdminSession(): void {
   if (typeof window === "undefined") return;

@@ -219,7 +219,7 @@ export default function AdminPickupPointsPage() {
 
       {/* Modal Add / Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-[#F0E5D8] shadow-soft space-y-5 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
@@ -338,7 +338,7 @@ export default function AdminPickupPointsPage() {
 
       {/* Delete Confirmation Modal */}
       {deletingPoint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-red-100 shadow-soft space-y-4 animate-in fade-in">
             <div className="flex items-center gap-3 text-red-600">
               <AlertCircle className="w-6 h-6" />

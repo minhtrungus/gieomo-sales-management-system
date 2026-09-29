@@ -326,7 +326,7 @@ export function AdminCategoriesTab() {
 
       {/* Modal: Thêm danh mục */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-left animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
@@ -429,7 +429,7 @@ export function AdminCategoriesTab() {
 
       {/* Modal: Sửa danh mục */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-left animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
@@ -545,7 +545,7 @@ export function AdminCategoriesTab() {
 
       {/* Modal: Xác nhận xóa danh mục */}
       {deletingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95">
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />

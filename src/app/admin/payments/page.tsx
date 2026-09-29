@@ -98,7 +98,7 @@ export default function AdminPaymentsPage() {
 
       {/* MODAL: XÁC NHẬN DUYỆT THANH TOÁN */}
       {approvingPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
             <div className="w-12 h-12 rounded-2xl bg-[#BFE9C3] text-[#16381D] flex items-center justify-center mx-auto">
               <Check className="w-6 h-6" />

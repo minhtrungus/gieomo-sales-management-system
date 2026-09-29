@@ -450,7 +450,7 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
       {zoomedImage && (
         <div
           onClick={() => setZoomedImage(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs cursor-pointer animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 cursor-pointer animate-in fade-in"
         >
           <div className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden bg-white p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}

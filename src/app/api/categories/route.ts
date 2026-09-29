@@ -65,3 +65,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu danh mục" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const categoryId = searchParams.get("id");
+
+    if (!categoryId) {
+      return NextResponse.json({ success: false, error: "category_id là bắt buộc" }, { status: 400 });
+    }
+
+    const supabase = createAdminClient();
+
+    // Only attempt delete if it's a valid UUID (client-side IDs like "cat-123" don't exist on server)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryId);
+    if (!isUuid) {
+      return NextResponse.json({ success: true, message: "Local-only ID, no server record to delete" });
+    }
+
+    const { error } = await supabase
+      .from("product_categories")
+      .delete()
+      .eq("category_id", categoryId);
+
+    if (error) {
+      console.error("[DELETE /api/categories] Error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[DELETE /api/categories] Exception:", err);
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa danh mục" }, { status: 500 });
+  }
+}
+

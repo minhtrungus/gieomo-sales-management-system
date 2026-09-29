@@ -2007,7 +2007,7 @@ export default function AdminInventoryPage() {
       {/* EXPLICIT STOCK ADJUSTMENT MODAL (NO ACCIDENTAL +/-) */}
       {/* ======================================================== */}
       {adjustingItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#F0E5D8] space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">

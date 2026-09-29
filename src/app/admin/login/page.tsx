@@ -55,10 +55,12 @@ export default function AdminLoginPage() {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleLogin} className="space-y-4">
+      <form onSubmit={handleLogin} className="space-y-4" autoComplete="on">
         <Input
           label="Email / Tài khoản *"
           type="email"
+          name="username"
+          autoComplete="username"
           placeholder="baotri@gieomo.store"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -68,6 +70,8 @@ export default function AdminLoginPage() {
         <Input
           label="Mật khẩu *"
           type="password"
+          name="password"
+          autoComplete="current-password"
           placeholder="••••••••"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
