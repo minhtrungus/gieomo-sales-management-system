@@ -27,14 +27,11 @@ export function FeaturedProductsSection() {
     <section className="py-16 sm:py-20 container mx-auto px-4 sm:px-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 text-center sm:text-left">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#BFE9C3]/50 text-[#1B3622] text-xs font-bold mb-2">
-            <span>✨ Vật phẩm lưu niệm</span>
-          </div>
           <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16]">
-            Sản phẩm handmade nổi bật
+            Sản phẩm nổi bật
           </h2>
-          <p className="text-xs sm:text-sm text-[#7E7068] mt-1">
-            Từng đường kim mũi chỉ được hoàn thiện bởi tình nguyện viên Mầm Mơ.
+          <p className="text-xs sm:text-sm text-[#7E7068] mt-1 text-balance">
+            Những thiết kế mang dấu ấn riêng của Tạp hóa Gieo Mơ, nơi yêu thương được gửi gắm qua từng đường kim mũi chỉ.
           </p>
         </div>
 
