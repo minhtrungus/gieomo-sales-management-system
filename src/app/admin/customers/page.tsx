@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { Search, Users, Phone, Mail, ShoppingBag } from "lucide-react";
+import { Users, Phone, Mail, ShoppingBag } from "lucide-react";
 import { getStoredOrders } from "@/lib/data/orderStore";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 
 interface CustomerRecord {
   customerId: string;
@@ -125,14 +126,10 @@ export default function AdminCustomersPage() {
 
       {/* Search Bar */}
       <div className="bg-white rounded-3xl p-4 border border-gray-200/80 shadow-2xs">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <div className="w-full md:w-80">
+          <AdminSearchInput
             placeholder="Tìm theo tên, SĐT, Email..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-soft-green"
+            onSearch={setSearchQuery}
           />
         </div>
       </div>

@@ -13,19 +13,19 @@ export default function FAQPage() {
   const faqs = [
     {
       q: "Gieo Mơ là dự án gì?",
-      a: "Gieo Mơ là kênh bán hàng gây quỹ chính thức của dự án Mầm Mơ. 100% nguồn lợi nhuận thu được từ việc bán các sản phẩm handmade may vá (như Pouch, Kẹp tóc, Túi tote...) sẽ được dùng để tài trợ sách vở, dụng cụ học tập và cơ sở vật chất cho trẻ em vùng cao.",
+      a: "Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương. Mỗi sản phẩm là một “hạt mơ” góp mang đến hy vọng và cơ hội tốt đẹp hơn cho trẻ em khó khăn.",
     },
     {
-      q: "Sản phẩm của Gieo Mơ được sản xuất như thế nào?",
-      a: "Tất cả sản phẩm đều được may và thêu hoàn toàn thủ công bởi đội ngũ tình nguyện viên khéo tay của Mầm Mơ. Mỗi sản phẩm là duy nhất và mang theo tâm huyết, sự tỉ mỉ của người làm.",
+      q: "Sản phẩm của Gieo Mơ có ý nghĩa như thế nào?",
+      a: "Tựa như sợi chỉ nối liền khoảng cách hay chiếc nút gom những mảnh rời lại gần nhau, mỗi món đồ ở Gieo Mơ thành hình từ sự góp nhặt những điều giản dị. Khi bạn sở hữu một sản phẩm từ Gieo Mơ, hành trình ấy không dừng lại ở một vật dụng thường ngày, mà vòng tay sẻ chia lại được nối dài thêm một nhịp. Bởi đôi khi, thay đổi thế giới không cần những điều kỳ vĩ, mà chính tình yêu thương nhỏ bé bạn gieo xuống hôm nay sẽ cùng nhau vun đắp nên một cuộc đời tốt đẹp hơn cho ai đó ngày mai.",
     },
     {
       q: "Phí giao hàng được tính như thế nào?",
-      a: `Phí giao hàng mặc định cho đơn giao tận nơi là ${settings.flatShippingFee.toLocaleString("vi-VN")}đ toàn quốc. Đặc biệt, các đơn hàng từ ${settings.freeShippingThreshold.toLocaleString("vi-VN")}đ trở lên sẽ được MIỄN PHÍ VẬN CHUYỂN hoàn toàn.`,
+      a: `Phí giao hàng mặc định cho đơn giao tận nơi là ${settings.flatShippingFee.toLocaleString("vi-VN")}đ toàn quốc.`,
     },
     {
-      q: "Tôi có thể theo dõi đơn hàng của mình bằng cách nào?",
-      a: "Bạn có thể vào mục 'Tra cứu đơn hàng' trên trang web, nhập Mã đơn hàng (dạng GM-XXXXXX) được cấp sau khi thanh toán để xem tiến độ đóng gói và giao nhận.",
+      q: "Tôi có thể xem thông tin về các chiến dịch mà Gieo Mơ đóng góp ở đâu?",
+      a: "Bạn có thể theo dõi thông tin về các chiến dịch thiện nguyện mà Gieo Mơ đồng hành thông qua các kênh truyền thông chính thức của Tổ chức Thiện nguyện Mầm Mơ. Chúng mình sẽ cập nhật thông tin về từng chiến dịch, quá trình triển khai và những giá trị mà sự đóng góp của bạn đã cùng tạo nên.",
     },
     {
       q: "Tôi muốn ủng hộ thêm hoặc hợp tác với Mầm Mơ thì làm thế nào?",

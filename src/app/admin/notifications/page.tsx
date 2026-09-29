@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useDebounce } from "@/lib/hooks/useDebounce";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
   useNotifications,
   NotificationItem,
@@ -53,7 +53,6 @@ export default function NotificationsPage() {
 
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearch = useDebounce(searchQuery, 250);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
@@ -74,8 +73,8 @@ export default function NotificationsPage() {
       }
 
       // Search filter
-      if (debouncedSearch.trim()) {
-        const query = debouncedSearch.toLowerCase();
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
         const matchesTitle = item.title.toLowerCase().includes(query);
         const matchesDesc = item.desc.toLowerCase().includes(query);
         const matchesCode = item.meta?.order_code?.toLowerCase().includes(query);
@@ -85,7 +84,7 @@ export default function NotificationsPage() {
 
       return true;
     });
-  }, [notifications, activeTab, debouncedSearch]);
+  }, [notifications, activeTab, searchQuery]);
 
   // Pagination calculation: 50 items per page
   const totalItems = filteredNotifications.length;
@@ -505,26 +504,14 @@ export default function NotificationsPage() {
           {/* Right Actions: Live Search + Gmail Pagination (50 items per page) */}
           <div className="flex items-center gap-3">
             {/* Search Input */}
-            <div className="relative w-44 sm:w-60">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+            <div className="w-44 sm:w-60">
+              <AdminSearchInput
+                placeholder="Tìm kiếm thông báo..."
+                onSearch={(q) => {
+                  setSearchQuery(q);
                   setCurrentPage(1);
                 }}
-                placeholder="Tìm kiếm thông báo..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-[#F0E5D8] bg-white focus:border-[#2D6338] outline-none"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
             </div>
 
             {/* Pagination Range & Controls */}

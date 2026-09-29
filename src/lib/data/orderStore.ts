@@ -257,10 +257,10 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
     const updated = orders.map((o) =>
       o.order_id === orderId || o.order_code === orderId
         ? {
-            ...o,
-            order_status: newStatus,
-            completed_at: newStatus === "completed" ? new Date().toISOString() : o.completed_at,
-          }
+          ...o,
+          order_status: newStatus,
+          completed_at: newStatus === "completed" ? new Date().toISOString() : o.completed_at,
+        }
         : o
     );
     cachedOrders = updated;
@@ -400,11 +400,11 @@ export function updateStoredOrderNotes(orderId: string, notes: { customer_note?:
     const updated = orders.map((o) =>
       o.order_id === orderId || o.order_code === orderId
         ? {
-            ...o,
-            customer_note: notes.customer_note !== undefined ? notes.customer_note : o.customer_note,
-            internal_note: notes.internal_note !== undefined ? notes.internal_note : o.internal_note,
-            updated_at: new Date().toISOString(),
-          }
+          ...o,
+          customer_note: notes.customer_note !== undefined ? notes.customer_note : o.customer_note,
+          internal_note: notes.internal_note !== undefined ? notes.internal_note : o.internal_note,
+          updated_at: new Date().toISOString(),
+        }
         : o
     );
     cachedOrders = updated;
@@ -423,11 +423,11 @@ export function updateStoredOrderWarehouse(orderId: string, warehouseId: string)
     const updated = orders.map((o) =>
       o.order_id === orderId || o.order_code === orderId
         ? {
-            ...o,
-            warehouse_id: warehouseId,
-            warehouse_name: warehouseName,
-            updated_at: new Date().toISOString(),
-          }
+          ...o,
+          warehouse_id: warehouseId,
+          warehouse_name: warehouseName,
+          updated_at: new Date().toISOString(),
+        }
         : o
     );
     cachedOrders = updated;
@@ -1467,13 +1467,13 @@ export interface SiteSettings {
 
 export const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "Gieo Mơ",
-  contactPhone: "0123456789",
-  contactEmail: "gieomo@mammo.vn",
+  contactPhone: "0888670637",
+  contactEmail: "support@gieomo.store",
   officeAddress: "TP. Hồ Chí Minh, Việt Nam",
-  flatShippingFee: 25000,
-  freeShippingThreshold: 200000,
-  bankNumber: "03456789999",
-  bankHolder: "CLB MAM MO GIEO MO",
+  flatShippingFee: 14000,
+  freeShippingThreshold: 1000000,
+  bankNumber: "0888670637",
+  bankHolder: "NGUYEN THI TRUC HAN",
   bankName: "MB Bank (Quân Đội)",
   qrMode: "auto",
   qrImageUrl: "/images/logo_gieo mơ.jpg",

@@ -31,9 +31,9 @@ export function Navbar() {
   const navLinks = [
     { href: "/", label: "Trang chủ" },
     { href: "/products", label: "Sản phẩm" },
-    { href: "/combos", label: "Set Combo" },
-    { href: "/track", label: "Tra cứu đơn" },
-    { href: "/faq", label: "Hỏi đáp" },
+    { href: "/combos", label: "Combo" },
+    { href: "/track", label: "Tra cứu đơn hàng" },
+    { href: "/faq", label: "FAQ" },
   ];
 
   return (

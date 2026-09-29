@@ -5,16 +5,16 @@ import Link from "next/link";
 import { QrCode, Banknote, ShieldCheck, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Hướng dẫn thanh toán an toàn | Gieo Mơ",
+  title: "Gieo Mơ | Hướng dẫn thanh toán an toàn",
   description:
-    "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 3 giây hoặc thanh toán tiền mặt khi nhận hàng (COD).",
+    "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 5 giây.",
   alternates: {
     canonical: "/policy/payment",
   },
   openGraph: {
-    title: "Hướng dẫn thanh toán an toàn | Gieo Mơ",
+    title: "Gieo Mơ | Hướng dẫn thanh toán an toàn",
     description:
-      "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 3 giây hoặc thanh toán tiền mặt khi nhận hàng (COD).",
+      "Hướng dẫn các hình thức thanh toán khi mua hàng tại Gieo Mơ: chuyển khoản quét mã VietQR tự động xác nhận trong 5 giây.",
   },
 };
 
@@ -33,16 +33,16 @@ export default function PaymentPolicyPage() {
             Hướng dẫn thanh toán Gieo Mơ
           </h1>
           <p className="text-gray-600 text-sm max-w-xl mx-auto">
-            Hỗ trợ chuyển khoản VietQR tự động khớp đơn 3s hoặc thanh toán khi nhận hàng (COD).
+            Hỗ trợ chuyển khoản VietQR tự động khớp đơn 5s.
           </p>
         </div>
 
         {/* Payment Methods */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-8">
           {/* VietQR Method */}
           <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-2xs space-y-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-soft-green text-emerald-950 text-[11px] font-bold px-3 py-1 rounded-bl-xl">
-              Nhanh nhất & Khuyên dùng ✨
+              Nhanh nhất ✨
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800">
               <QrCode className="w-6 h-6" />
@@ -61,39 +61,11 @@ export default function PaymentPolicyPage() {
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Hệ thống tự động xác nhận đơn trong vài giây</span>
+                <span>Hệ thống tự động xác nhận đơn trong 5 giây</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>An toàn tuyệt đối, không lo nhầm số tài khoản</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* COD Method */}
-          <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-2xs space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-800">
-              <Banknote className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-extrabold text-xl text-emerald-950">
-              Thanh toán khi nhận hàng (COD)
-            </h3>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Nhận hàng tận tay và trả tiền mặt trực tiếp cho nhân viên giao hàng (Shipper).
-            </p>
-
-            <ul className="space-y-2 text-xs text-gray-700">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Kiểm tra bao bì đóng gói trước khi nhận</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Áp dụng cho mọi tỉnh thành trên toàn quốc</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Không phát sinh thêm bất kỳ chi phí ẩn nào</span>
               </li>
             </ul>
           </div>
@@ -113,13 +85,6 @@ export default function PaymentPolicyPage() {
             <li>Màn hình web sẽ tự động chuyển sang trang Đặt hàng thành công sau khi giao dịch hoàn tất.</li>
           </ol>
 
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-start gap-3 text-xs text-emerald-900">
-            <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold block mb-0.5">Cam kết minh bạch tài chính gây quỹ</span>
-              100% số tiền chuyển khoản được chuyển trực tiếp vào tài khoản ngân hàng gây quỹ chính thức của CLB Mầm Mơ và được báo cáo công khai định kỳ.
-            </div>
-          </div>
         </div>
       </main>
 

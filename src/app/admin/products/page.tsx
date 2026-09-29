@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useDebounce } from "@/lib/hooks/useDebounce";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -18,7 +17,8 @@ import {
 } from "@/lib/data/orderStore";
 import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
-import { Plus, Search, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
+import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -40,7 +40,6 @@ export default function AdminProductsPage() {
     };
   }, []);
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedCategory, setSelectedCategory] = useState("all");
 
   // Modal States
@@ -62,15 +61,15 @@ export default function AdminProductsPage() {
         return false;
       }
       if (
-        debouncedSearch.trim() !== "" &&
-        !p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
-        !p.slug.toLowerCase().includes(debouncedSearch.toLowerCase())
+        searchQuery.trim() !== "" &&
+        !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !p.slug.toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
       return true;
     });
-  }, [products, selectedCategory, debouncedSearch]);
+  }, [products, selectedCategory, searchQuery]);
 
   // Toggle active/draft status
   const handleToggleStatus = (productId: string) => {
@@ -196,14 +195,10 @@ export default function AdminProductsPage() {
 
       {/* Search & Category Filter */}
       <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#A89B92]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <div className="w-full sm:w-80">
+          <AdminSearchInput
             placeholder="Tìm tên sản phẩm, mã slug..."
-            className="w-full pl-9 pr-4 py-2 rounded-2xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
+            onSearch={setSearchQuery}
           />
         </div>
 

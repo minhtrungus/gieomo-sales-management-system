@@ -8,17 +8,17 @@ import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
+    absolute: "Gieo Mơ - Tạp hoá gây quỹ thuộc Mầm Mơ",
   },
   description:
-    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ. Cung cấp các sản phẩm may vá handmade độc bản, dễ thương. Mỗi sản phẩm rước về là một điều ước được gieo cho các em nhỏ khó khăn.",
+    "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
   alternates: {
     canonical: "https://gieomo.store",
   },
   openGraph: {
-    title: "Gieo Mơ — Tạp hoá Gây quỹ của Mầm Mơ | Sản phẩm Handmade",
+    title: "Gieo Mơ - Tạp hoá gây quỹ thuộc Mầm Mơ",
     description:
-      "Tạp hoá gây quỹ của Mầm Mơ. Những sản phẩm handmade nhỏ xinh mang theo ước mơ lớn cho trẻ em khó khăn.",
+      "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
     url: "https://gieomo.store",
     siteName: "Gieo Mơ",
     locale: "vi_VN",
@@ -59,7 +59,7 @@ export default function HomePage() {
                 {/* Floating Campaign Badge - Crisp bg without backdrop-filter to prevent layer invalidation */}
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#FFB98A] shadow-soft text-xs font-bold text-[#4A2603] animate-float">
                   <Sparkles className="w-3.5 h-3.5 text-[#FFB98A]" />
-                  <span>Dự án gây quỹ thiện nguyện của Mầm Mơ</span>
+                  <span>Dự án gây quỹ của Mầm Mơ</span>
                 </div>
 
                 {/* Main Headline */}
@@ -72,7 +72,7 @@ export default function HomePage() {
                     </span>
                   </h1>
                   <p className="text-sm sm:text-base text-[#6B5A50] max-w-xl mx-auto lg:mx-0 leading-relaxed font-medium">
-                    Chào mừng bạn đến với thế giới may vá nhỏ xinh của Mầm! Mỗi chiếc pouch, kẹp tóc handmade bạn rước về là một điều ước được gieo cho các em nhỏ vùng cao.
+                    Chào mừng bạn đến với Tạp hóa Gieo Mơ, một dự án gây quỹ thuộc Mầm Mơ. Tại đây, mỗi món đồ bạn chọn không chỉ mang đến một điều nhỏ xinh cho riêng mình, mà còn trở thành một mảnh ghép góp phần vun đắp để những ước mơ được lớn lên từng ngày.
                   </p>
                 </div>
 
@@ -83,7 +83,7 @@ export default function HomePage() {
                     prefetch={true}
                     className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-xs hover:shadow-md transition-[transform,background-color,box-shadow] active:scale-95 border border-[#9ed4a3]"
                   >
-                    <span>Khám phá sản phẩm handmade</span>
+                    <span>Khám phá sản phẩm Gieo Mơ</span>
                     <ArrowRight className="w-4 h-4" />
                   </Link>
 
@@ -95,22 +95,6 @@ export default function HomePage() {
                     <Heart className="w-4 h-4 text-[#FF85A1]" />
                     <span>Ý nghĩa dự án</span>
                   </Link>
-                </div>
-
-                {/* Small Trust Metrics */}
-                <div className="pt-4 flex items-center justify-center lg:justify-start gap-6 text-xs text-[#7E7068]">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#BFE9C3] border border-[#65B374]" />
-                    <span className="font-semibold text-[#342A24]">100% Thủ công</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#FFE7A8] border border-[#FFB98A]" />
-                    <span className="font-semibold text-[#342A24]">Gây quỹ 100%</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#FFD1E1] border border-[#FF85A1]" />
-                    <span className="font-semibold text-[#342A24]">Freeship từ 200k</span>
-                  </div>
                 </div>
               </div>
 
@@ -157,10 +141,13 @@ export default function HomePage() {
                 <span>Ý nghĩa thương hiệu</span>
               </div>
               <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16]">
-                Thế giới may vá của Mầm
+                LITTLE PIECES, BIGGER DREAMS
+              </h2>
+              <h2 className="font-heading font-extrabold text-xl text-[#231B16]">
+                Gom từng mảnh nhỏ, dệt thành giấc mơ
               </h2>
               <p className="text-xs sm:text-sm text-[#7E7068]">
-                Mỗi chi tiết nhỏ tại Gieo Mơ đều mang một câu chuyện ấm áp về sự sẻ chia và nuôi dưỡng ước mơ.
+                Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
               </p>
             </div>
 
@@ -171,10 +158,10 @@ export default function HomePage() {
                   🌱
                 </div>
                 <h3 className="font-heading font-bold text-base text-[#16381D]">
-                  Mầm và Sự Phát Triển
+                  Gieo Mơ & Sự Phát Triển
                 </h3>
                 <p className="text-xs text-[#285031] leading-relaxed">
-                  Đại diện cho hy vọng và sự đâm chồi. Từng món đồ nhỏ được gieo là một ước mơ lớn được chắp cánh.
+                  Tạp hóa Gieo Mơ là dự án thiện nguyện trực thuộc Mầm Mơ, với mong muốn đồng hành cùng các em nhỏ có hoàn cảnh khó khăn trong hành trình nuôi dưỡng ước mơ và hỗ trợ các em trên hành trình trưởng thành.
                 </p>
               </div>
 
@@ -184,10 +171,10 @@ export default function HomePage() {
                   🧵
                 </div>
                 <h3 className="font-heading font-bold text-base text-[#153B61]">
-                  Sợi Chỉ & Chiếc Túi Pouch
+                  Quá trình hình thành sản phẩm
                 </h3>
                 <p className="text-xs text-[#214D78] leading-relaxed">
-                  Sợi chỉ mềm mại kết nối cộng đồng, cùng chiếc pouch diệu kỳ chứa đựng biết bao điều may vá bất ngờ.
+                  Sợi chỉ nối những khoảng cách, chiếc nút giữ những mảnh rời lại bên nhau, những mảnh vải khi được kết hợp có thể trở thành một sản phẩm hoàn chỉnh. 
                 </p>
               </div>
 
@@ -197,10 +184,10 @@ export default function HomePage() {
                   ☀️
                 </div>
                 <h3 className="font-heading font-bold text-base text-[#523F07]">
-                  Ánh Sáng & Sự Ấm Áp
+                  Ý nghĩa sản phẩm
                 </h3>
                 <p className="text-xs text-[#5C480E] leading-relaxed">
-                  Màu của nắng sớm và sự lạc quan. Tình nguyện viên đặt trọn sự tận tụy trong từng đường may.
+                  Gieo Mơ mong mỗi món đồ bạn mang về không chỉ là một vật dụng để sử dụng mỗi ngày, mà còn là một lời nhắc rằng, những điều bé nhỏ của bạn cũng đáng được trân trọng. Điều làm nên một phiên bản tốt đẹp hơn của chúng ta không phải là một điều thật lớn, mà là rất nhiều điều nhỏ bé được vun đắp qua từng ngày.
                 </p>
               </div>
 
@@ -210,10 +197,10 @@ export default function HomePage() {
                   🌸
                 </div>
                 <h3 className="font-heading font-bold text-base text-[#52132A]">
-                  Tình Yêu & Sự Sẻ Chia
+                  Ý nghĩa với cộng đồng
                 </h3>
                 <p className="text-xs text-[#6B203B] leading-relaxed">
-                  100% lợi nhuận thu được trực tiếp hỗ trợ sách vở và cơ sở vật chất cho các em nhỏ vùng cao khó khăn.
+                  Từ những món đồ tại Gieo Mơ, những giá trị nhỏ được tiếp nối thành những đóng góp dành cho cộng đồng. Bởi với Gieo Mơ, giá trị của một món đồ không chỉ nằm ở điều bạn nhận về, mà còn ở những điều tốt đẹp mà nó tiếp tục trao đi.
                 </p>
               </div>
             </div>
@@ -227,10 +214,10 @@ export default function HomePage() {
           <div className="rounded-3xl gradient-main p-8 sm:p-12 text-center space-y-4 border border-[#BFE9C3] shadow-soft max-w-3xl mx-auto">
             <span className="text-4xl">🌱✨🧵</span>
             <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#1B3622]">
-              Sẵn sàng cùng Mầm gieo một giấc mơ?
+              Sẵn sàng cùng Mầm gieo một "hạt mơ"?
             </h2>
             <p className="text-xs sm:text-sm text-[#2D5636] max-w-md mx-auto leading-relaxed">
-              Hãy chọn cho mình hoặc người thân một món quà thủ công nhỏ để cùng lan tỏa yêu thương ngay hôm nay.
+              Hãy chọn cho mình và người mình thương một món quà nhỏ xinh tại Gieo Mơ để “gieo” yêu thương, lan tỏa những điều tốt đẹp.
             </p>
             <div className="pt-2">
               <Link
@@ -238,7 +225,7 @@ export default function HomePage() {
                 prefetch={true}
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-sm shadow-md transition-[transform,background-color] active:scale-95"
               >
-                <span>Rước quà handmade ngay ➔</span>
+                <span>Rước sản phẩm Gieo Mơ ngay ➔</span>
               </Link>
             </div>
           </div>

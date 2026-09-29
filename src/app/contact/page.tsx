@@ -55,7 +55,7 @@ export default function ContactPage() {
         {/* Header section */}
         <div className="text-center space-y-3 mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-soft-green/50 text-emerald-900 text-xs font-bold">
-            🌱 Kế nối cùng Mầm Mơ
+            🌱 Kết nối cùng Gieo Mơ
           </div>
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
             Liên hệ Ban Tổ Chức Gieo Mơ
@@ -77,7 +77,7 @@ export default function ContactPage() {
                   Thông tin liên hệ
                 </h3>
                 <p className="text-xs text-emerald-300/80 mt-1">
-                  Đội ngũ tình nguyện viên Mầm Mơ luôn sẵn sàng phản hồi bạn sớm nhất.
+                  Đội ngũ BTC Gieo Mơ luôn sẵn sàng phản hồi bạn sớm nhất.
                 </p>
               </div>
 
@@ -203,7 +203,7 @@ export default function ContactPage() {
                   Cảm ơn bạn đã gửi lời nhắn!
                 </h3>
                 <p className="text-xs text-gray-600 max-w-sm mx-auto leading-relaxed">
-                  Mầm Mơ đã nhận được tin nhắn và sẽ phản hồi qua email <strong>{email}</strong> trong thời gian sớm nhất.
+                  Gieo Mơ đã nhận được tin nhắn và sẽ phản hồi qua email <strong>{email}</strong> trong thời gian sớm nhất.
                 </p>
                 <button
                   onClick={() => {
@@ -220,7 +220,7 @@ export default function ContactPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <h3 className="font-heading font-bold text-xl text-emerald-950 mb-2">
-                  Gửi lời nhắn cho Mầm
+                  Gửi lời nhắn cho Gieo Mơ
                 </h3>
 
                 <div className="space-y-1.5">
@@ -286,7 +286,7 @@ export default function ContactPage() {
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Gửi tin nhắn cho Mầm ➔</span>
+                      <span>Gửi tin nhắn cho Gieo Mơ ➔</span>
                     </>
                   )}
                 </button>

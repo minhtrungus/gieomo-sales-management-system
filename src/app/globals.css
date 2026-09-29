@@ -200,3 +200,13 @@ footer h1, footer h2, footer h3, footer h4, footer h5, footer h6 {
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
 }
+
+/* ===========================
+   PERFORMANCE & INP OPTIMIZATIONS
+   =========================== */
+
+/* Defer off-screen table rows layout & painting to keep INP under 50ms */
+table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 48px;
+}

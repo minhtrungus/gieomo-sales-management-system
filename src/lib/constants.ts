@@ -7,11 +7,11 @@ export const DEFAULT_SITE_URL = "https://gieomo.store";
  */
 export const OFFICIAL_STORE_CONFIG = {
   name: "Gieo Mơ",
-  alternateName: "Tạp hoá Gây quỹ Mầm Mơ",
+  alternateName: "Little Pieces, Bigger Dreams",
   url: "https://gieomo.store",
   logo: "https://gieomo.store/images/logo_gieo%20m%C6%A1.jpg",
   description:
-    "Gieo Mơ là tạp hoá gây quỹ của Mầm Mơ với các sản phẩm may vá handmade độc bản. Mỗi sản phẩm bạn rước về là một điều ước được gieo cho các em nhỏ vùng cao.",
+    "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
   socialLinks: {
     facebook:
       process.env.NEXT_PUBLIC_FACEBOOK_URL || "https://www.facebook.com/BanHangGieoMo",
@@ -164,7 +164,7 @@ export const PRODUCT_BADGES = {
 export const SITE_CONFIG = {
   name: "Gieo Mơ",
   tagline: "Little Pieces, Bigger Dreams",
-  description: "Mỗi món hàng, một điều tốt đẹp",
+  description: "Gom từng mảnh nhỏ, dệt thành giấc mơ",
   currency: "VND",
   currencySymbol: "đ",
   locale: "vi-VN",

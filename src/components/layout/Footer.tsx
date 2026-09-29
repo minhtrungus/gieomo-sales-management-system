@@ -46,13 +46,13 @@ export function Footer() {
                   Gieo Mơ
                 </span>
                 <span className="text-[11px] text-[#BFE9C3] font-bold tracking-wide">
-                  Tạp hoá gây quỹ Mầm Mơ
+                  Tạp hoá gây quỹ thuộc Mầm Mơ
                 </span>
               </div>
             </Link>
 
             <p className="text-xs text-white/90 leading-relaxed font-normal">
-              Thế giới may vá nhỏ xinh của Mầm Mơ. Mỗi chiếc túi, chiếc kẹp handmade được tạo ra với tình thương và ước mơ gieo mầm tươi sáng cho trẻ em vùng cao.
+              Một thế giới may vá nhỏ xinh, nơi mỗi chiếc túi, chiếc kẹp, chiếc charm hay đôi vớ đều được chăm chút để không chỉ mang đến niềm vui cho bạn, mà còn góp phần vun đắp một tương lai tươi sáng hơn cho cộng đồng.
             </p>
 
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#293A2E] border border-[#3E5544] text-xs text-[#FFE7A8] font-bold shadow-2xs">
@@ -75,17 +75,17 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/products" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/products")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
-                  <span>Tất cả sản phẩm handmade</span>
+                  <span>Tất cả sản phẩm</span>
                 </Link>
               </li>
               <li>
                 <Link href="/combos" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/combos")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
-                  <span>Set Combo quà tặng tiết kiệm</span>
+                  <span>Combo Gieo Mơ</span>
                 </Link>
               </li>
               <li>
                 <Link href="/track" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/track")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
-                  <span>Tra cứu hành trình đơn hàng</span>
+                  <span>Tra cứu đơn hàng</span>
                 </Link>
               </li>
             </ul>
@@ -105,17 +105,17 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/policy/delivery" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/policy/delivery")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
-                  <span>Chính sách giao hàng (Freeship từ 200k)</span>
+                  <span>Chính sách giao hàng</span>
                 </Link>
               </li>
               <li>
                 <Link href="/policy/payment" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/policy/payment")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
-                  <span>Hướng dẫn thanh toán VietQR & COD</span>
+                  <span>Hướng dẫn thanh toán</span>
                 </Link>
               </li>
               <li>
                 <Link href="/contact" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/contact")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
-                  <span>Liên hệ Ban Tổ Chức Mầm Mơ</span>
+                  <span>Liên hệ Ban Tổ Chức Gieo Mơ</span>
                 </Link>
               </li>
             </ul>
@@ -125,7 +125,7 @@ export function Footer() {
           <div>
             <h3 className="font-heading font-bold text-white !text-white text-sm mb-4 flex items-center gap-2" style={{ color: '#FFFFFF' }}>
               <span className="w-2 h-2 rounded-full bg-[#FFD1E1]" />
-              Kết nối với Mầm
+              Kết nối với Gieo Mơ
             </h3>
             <div className="space-y-3.5 text-xs text-white/90 font-medium">
               <p className="flex items-center gap-2.5">
@@ -228,7 +228,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-[#2F4234] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/80 font-normal">
           <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-center sm:text-left">
-            <p suppressHydrationWarning>© {new Date().getFullYear()} Gieo Mơ — Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
+            <p suppressHydrationWarning>© {new Date().getFullYear()} Gieo Mơ - Dự án gây quỹ của Mầm Mơ. Little Pieces, Bigger Dreams.</p>
             <span className="hidden sm:inline text-white/30">•</span>
             <span className="text-[11px] text-white/60 tracking-wide">
               Made with ❤️ by <span className="font-semibold text-white/90 hover:text-[#FFE7A8] transition-colors">mtus</span>

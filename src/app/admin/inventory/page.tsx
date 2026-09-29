@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useDebounce } from "@/lib/hooks/useDebounce";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
@@ -12,8 +11,8 @@ import {
   deleteStoredWarehouse,
 } from "@/lib/data/orderStore";
 import type { Warehouse } from "@/types/database";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
-  Search,
   AlertTriangle,
   Plus,
   Minus,
@@ -108,7 +107,6 @@ export default function AdminInventoryPage() {
   }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>("all");
   const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all");
   const [activeLogTab, setActiveLogTab] = useState<"inflow" | "transfer">("inflow");
@@ -458,15 +456,15 @@ export default function AdminInventoryPage() {
       )
       .filter((item) => {
         if (
-          debouncedSearch.trim() !== "" &&
-          !item.productName.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
-          !item.sku.toLowerCase().includes(debouncedSearch.toLowerCase())
+          searchQuery.trim() !== "" &&
+          !item.productName.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !item.sku.toLowerCase().includes(searchQuery.toLowerCase())
         ) {
           return false;
         }
         return true;
       });
-  }, [products, warehouses, debouncedSearch]);
+  }, [products, warehouses, searchQuery]);
 
   // Filtered rows based on selected warehouse and stock availability
   const inventoryRows = useMemo(() => {
@@ -659,14 +657,10 @@ export default function AdminInventoryPage() {
 
           {/* Filter & Search Bar */}
           <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+            <div className="w-full sm:w-80">
+              <AdminSearchInput
                 placeholder="Tìm theo tên sản phẩm, SKU..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
+                onSearch={setSearchQuery}
               />
             </div>
 

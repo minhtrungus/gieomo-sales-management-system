@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useDebounce } from "@/lib/hooks/useDebounce";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
@@ -9,12 +8,12 @@ import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
 import { getStoredOrders, updateStoredOrderStatus } from "@/lib/data/orderStore";
 import type { Order, OrderStatus } from "@/types/database";
-import { Search, Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
+import { Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearch = useDebounce(searchQuery, 250);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
@@ -75,17 +74,17 @@ export default function AdminOrdersPage() {
         if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) return false;
       }
       if (
-        debouncedSearch &&
-        !ord.order_code.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
-        !ord.buyer_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
-        !ord.buyer_phone?.includes(debouncedSearch) &&
-        !ord.introducer_info?.toLowerCase().includes(debouncedSearch.toLowerCase())
+        searchQuery &&
+        !ord.order_code.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !ord.buyer_name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !ord.buyer_phone?.includes(searchQuery) &&
+        !ord.introducer_info?.toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
       return true;
     });
-  }, [orders, statusFilter, introducerFilter, debouncedSearch]);
+  }, [orders, statusFilter, introducerFilter, searchQuery]);
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);
@@ -127,14 +126,10 @@ export default function AdminOrdersPage() {
 
       {/* Filter & Search Bar */}
       <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#A89B92]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <div className="w-full md:w-80">
+          <AdminSearchInput
             placeholder="Tìm mã đơn, tên khách, số điện thoại..."
-            className="w-full pl-9 pr-4 py-2 rounded-2xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-[#FFFDF9]"
+            onSearch={setSearchQuery}
           />
         </div>
 

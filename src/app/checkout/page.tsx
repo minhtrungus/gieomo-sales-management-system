@@ -348,12 +348,12 @@ function CheckoutContent() {
             {/* Customer Info Box */}
             <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs space-y-4">
               <h2 className="font-heading font-bold text-lg text-emerald-950 flex items-center gap-2">
-                <span>1.</span> Thông tin người đặt
+                <span>1.</span> Thông tin nhận hàng
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Họ và tên người đặt *"
+                  label="Họ và tên *"
                   placeholder="Ví dụ: Nguyễn Văn A"
                   value={formData.buyer_name}
                   onChange={(e) => handleInputChange("buyer_name", e.target.value)}
@@ -421,8 +421,7 @@ function CheckoutContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {[
-                  { id: "home_delivery", label: "Giao tận nơi", desc: "Nội thành 25k (Freeship >200k)" },
-                  { id: "pickup_point", label: "Điểm tập kết", desc: "Điểm hẹn Mầm Mơ (0đ)" },
+                  { id: "home_delivery", label: "Giao tận nơi", desc: "Ship cố định 14k toàn quốc" },
                   { id: "member_delivery", label: "Qua người quen", desc: "Thành viên giao tay (0đ)" },
                 ].map((option) => (
                   <button
@@ -450,8 +449,9 @@ function CheckoutContent() {
                     options={[
                       { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
                       { value: "Hà Nội", label: "Hà Nội" },
+                      { value: "Tây Ninh", label: "Tây Ninh" },
                       { value: "Đà Nẵng", label: "Đà Nẵng" },
-                      { value: "Bình Dương", label: "Bình Dương" },
+                      { value: "Đồng Tháp", label: "Đồng Tháp" },
                       { value: "Đồng Nai", label: "Đồng Nai" },
                       { value: "Tỉnh khác", label: "Các tỉnh thành khác" },
                     ]}
@@ -466,63 +466,14 @@ function CheckoutContent() {
                 </div>
               )}
 
-              {deliveryType === "pickup_point" && (
-                <div className="pt-2 space-y-3">
-                  <Select
-                    label="Chọn điểm hẹn nhận hàng *"
-                    value={formData.pickup_point_id}
-                    onChange={(e) => handleInputChange("pickup_point_id", e.target.value)}
-                    options={pickupPoints.map((p) => ({
-                      value: p.pickup_point_id,
-                      label: `${p.name} — ${p.address}`,
-                    }))}
-                  />
-
-                  {/* Rich details for selected pickup point */}
-                  {(() => {
-                    const selectedPt = pickupPoints.find((p) => p.pickup_point_id === formData.pickup_point_id);
-                    if (!selectedPt) return null;
-                    return (
-                      <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2 text-xs animate-in fade-in">
-                        <div className="flex items-center justify-between font-bold text-[#231B16]">
-                          <span>📍 {selectedPt.name}</span>
-                          <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
-                            Miễn phí nhận
-                          </span>
-                        </div>
-                        <p className="text-[#5C4D44] leading-relaxed">
-                          <strong>Địa chỉ:</strong> {selectedPt.address}
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[#342A24]">
-                          {selectedPt.contact_name && (
-                            <p><strong>Người trực:</strong> {selectedPt.contact_name}</p>
-                          )}
-                          {selectedPt.contact_phone && (
-                            <p><strong>Hotline:</strong> <a href={`tel:${selectedPt.contact_phone}`} className="text-[#2D6338] font-bold underline">{selectedPt.contact_phone}</a></p>
-                          )}
-                        </div>
-                        {selectedPt.opening_hours && (
-                          <p className="text-[#7E7068]"><strong>Khung giờ trực:</strong> {selectedPt.opening_hours}</p>
-                        )}
-                        {selectedPt.location_guide && (
-                          <div className="p-2.5 rounded-xl bg-white border border-[#E5DACD] text-[11px] text-[#542B07]">
-                            💡 <strong>Vị trí bàn trực:</strong> {selectedPt.location_guide}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
               {deliveryType === "member_delivery" && (
                 <div className="p-4 rounded-2xl bg-[#EAF7ED] border border-[#BFE9C3] text-xs space-y-2 animate-in fade-in">
                   <div className="flex items-center gap-2 font-bold text-[#16381D]">
                     <span>🌱</span>
-                    <span>Hình thức: Giao qua người quen trong Mầm Mơ (Miễn phí vận chuyển)</span>
+                    <span>Hình thức: Nhận hàng thông qua thành viên của Gieo Mơ</span>
                   </div>
                   <p className="text-[#386341] leading-relaxed">
-                    Bạn quen một bạn thành viên trong CLB Mầm Mơ? Hãy nhập <strong>Tên hoặc Mã thành viên</strong> của bạn ấy bên dưới. Ban Hậu cần sẽ chuyển gói quà cho bạn ấy để trao tận tay bạn nhé!
+                    Bạn quen thành viên trong Gieo Mơ? Hãy nhập <strong>tên của bạn ấy</strong> bên dưới để đơn hàng được trao tận tay bạn nhé!
                   </p>
                 </div>
               )}
@@ -535,14 +486,14 @@ function CheckoutContent() {
               <div className="flex items-center justify-between">
                 <h2 className="font-heading font-bold text-base text-emerald-950 flex items-center gap-2">
                   <span>🌱</span>
-                  Bạn quen ai trong Mầm Mơ? {deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
+                  Bạn biết đến Gieo Mơ thông qua đâu?{deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
                 </h2>
                 <span className="text-[11px] text-gray-400">
                   {deliveryType === "member_delivery" ? "Bắt buộc điền" : "Không bắt buộc"}
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                Nếu bạn được thành viên Mầm Mơ giới thiệu hoặc chọn giao qua tay người quen, hãy nhập Tên hoặc Mã thành viên ở đây nhé:
+                Nếu bạn biết đến Tạp Hóa Gieo Mơ thông qua Mầm-ers, hãy nhập tên thành viên đó ở đây nhé!
               </p>
               <Input
                 placeholder="Ví dụ: Mai Lan hoặc MM-LAN (Nhập tên hoặc mã thành viên)..."
@@ -583,43 +534,18 @@ function CheckoutContent() {
                     </span>
                   </div>
                 </label>
-
-                <label
-                  className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-all ${
-                    paymentMethod === "cod"
-                      ? "bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
-                      : "bg-white border-gray-200"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="cod"
-                    checked={paymentMethod === "cod"}
-                    onChange={() => setPaymentMethod("cod")}
-                    className="mt-1 text-emerald-600"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-emerald-950">
-                      Thanh toán khi nhận hàng (COD)
-                    </span>
-                    <span className="block text-xs text-gray-500 mt-0.5">
-                      Thanh toán bằng tiền mặt trực tiếp cho nhân viên giao hàng khi nhận sản phẩm.
-                    </span>
-                  </div>
-                </label>
               </div>
             </div>
 
             {/* Note Input */}
             <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs">
               <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
-                Ghi chú đơn hàng (nếu có):
+                Ghi chú (nếu có):
               </label>
               <textarea
                 value={formData.note}
                 onChange={(e) => handleInputChange("note", e.target.value)}
-                placeholder="Nhắn gửi điều gì đó cho Mầm Mơ hoặc lưu ý giao hàng..."
+                placeholder="Bạn cần Gieo Mơ lưu ý điều khi khi giao hàng, hoặc muốn nhắn nhủ gì cho tụi mình, hãy điền vào đây nhé"
                 rows={3}
                 className="w-full p-3 rounded-2xl border border-gray-200 text-sm outline-none focus:border-soft-green"
               />
@@ -660,7 +586,7 @@ function CheckoutContent() {
                       handleInputChange("voucher_code", e.target.value.toUpperCase());
                       setVoucherError(null);
                     }}
-                    placeholder="GIEOMO10 hoặc WELCOME20K"
+                    placeholder="Nhập mã giảm giá Gieo Mơ..."
                     className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold outline-none focus:border-soft-green uppercase"
                   />
                   <button

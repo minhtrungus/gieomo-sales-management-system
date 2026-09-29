@@ -43,8 +43,8 @@ function OrderSuccessContent() {
 
   const bankAccount = {
     bankName: settings.bankName || "Ngân hàng MB Bank (Quân Đội)",
-    accountNumber: settings.bankNumber || "03456789999",
-    accountHolder: settings.bankHolder || "CLB MAM MO GIEO MO",
+    accountNumber: settings.bankNumber || "0888670637",
+    accountHolder: settings.bankHolder || "NGUYEN THI TRUC HAN",
     transferMemo: orderCode,
   };
 
@@ -306,7 +306,7 @@ function OrderSuccessContent() {
                     onClick={() => setIsConfirmModalOpen(true)}
                     className="w-full sm:w-auto px-6 py-3 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-sm border border-[#9ed4a3] transition-all active:scale-95 cursor-pointer inline-flex items-center justify-center gap-2"
                   >
-                    <span>✓ Tôi đã chuyển khoản xong — Xác nhận thanh toán</span>
+                    <span>✓ Tôi đã chuyển khoản xong - Xác nhận thanh toán</span>
                   </button>
                 </div>
               )}

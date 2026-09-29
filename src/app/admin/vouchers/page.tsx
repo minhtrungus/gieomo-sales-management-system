@@ -12,6 +12,7 @@ import {
   deleteStoredVoucher,
 } from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
   Plus,
   Edit3,
@@ -191,23 +192,11 @@ export default function AdminVouchersPage() {
       <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-[#F0E5D8] shadow-soft space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Search Input */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+          <div className="flex-1 max-w-md">
+            <AdminSearchInput
               placeholder="Tìm theo mã voucher (VD: GIEO10, WELCOME)..."
-              className="w-full pl-9 pr-4 py-2 rounded-2xl border border-[#F0E5D8] text-xs font-mono uppercase focus:border-[#FFB98A] outline-none bg-[#FFFDF9]"
+              onSearch={setSearchQuery}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
 
           {/* Visibility Tabs */}

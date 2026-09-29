@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { MessageSquare, Mail, Phone, Clock, Check, Reply, Search, Filter } from "lucide-react";
 import { getStoredContactMessages, updateContactMessageStatus } from "@/lib/data/orderStore";
 import type { ContactMessage } from "@/types/database";
+import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 
 export default function AdminMessagesPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
@@ -69,14 +70,10 @@ export default function AdminMessagesPage() {
 
       {/* Filter and Search Bar */}
       <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <div className="w-full sm:w-80">
+          <AdminSearchInput
             placeholder="Tìm theo tên, email, SĐT, nội dung..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-[#BFE9C3]"
+            onSearch={setSearchQuery}
           />
         </div>
 

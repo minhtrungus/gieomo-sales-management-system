@@ -5,14 +5,14 @@ import { Lock, Shield, EyeOff, UserCheck } from "lucide-react";
 import { getSystemSettingsServer } from "@/lib/services/configService";
 
 export const metadata: Metadata = {
-  title: "Chính sách bảo mật thông tin | Gieo Mơ",
+  title: "Gieo Mơ | Chính sách bảo mật thông tin",
   description:
     "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
   alternates: {
     canonical: "/policy/privacy",
   },
   openGraph: {
-    title: "Chính sách bảo mật thông tin | Gieo Mơ",
+    title: "Gieo Mơ | Chính sách bảo mật thông tin",
     description:
       "Cam kết bảo mật tuyệt đối thông tin khách hàng ủng hộ dự án gây quỹ Gieo Mơ. Minh bạch chính sách lưu trữ, bảo mật dữ liệu và quyền riêng tư cá nhân.",
   },
@@ -33,9 +33,6 @@ export default async function PrivacyPolicyPage() {
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
             Chính sách bảo mật Gieo Mơ
           </h1>
-          <p className="text-gray-600 text-sm max-w-xl mx-auto">
-            Cam kết tôn trọng và bảo vệ tuyệt đối thông tin cá nhân của khách hàng ủng hộ dự án gây quỹ.
-          </p>
         </div>
 
         {/* Feature Cards Grid */}
@@ -90,7 +87,7 @@ export default async function PrivacyPolicyPage() {
             <ul className="list-disc list-inside space-y-1 text-xs sm:text-sm pl-2 text-gray-700">
               <li>Xác nhận đơn hàng và in nhãn giao hàng cho đối tác vận chuyển.</li>
               <li>Gửi thông báo tiến độ giao hàng hoặc liên hệ hỗ trợ khi có sự cố.</li>
-              <li>Báo cáo tổng kết gây quỹ (chỉ hiển thị thông tin danh tính ẩn danh như N.V.A).</li>
+              <li>Báo cáo tổng kết gây quỹ.</li>
             </ul>
           </section>
 

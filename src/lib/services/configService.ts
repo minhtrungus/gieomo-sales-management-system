@@ -1,5 +1,4 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 export interface SiteSettings {
   siteName: string;
@@ -28,13 +27,13 @@ export interface SiteSettings {
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: "Gieo Mơ",
-  contactPhone: "0123456789",
-  contactEmail: "gieomo@mammo.vn",
+  contactPhone: "0888670637",
+  contactEmail: "support@gieomo.store",
   officeAddress: "TP. Hồ Chí Minh, Việt Nam",
-  flatShippingFee: 25000,
-  freeShippingThreshold: 200000,
-  bankNumber: "03456789999",
-  bankHolder: "CLB MAM MO GIEO MO",
+  flatShippingFee: 14000,
+  freeShippingThreshold: 1000000,
+  bankNumber: "0888670637",
+  bankHolder: "NGUYEN THI TRUC HAN",
   bankName: "MB Bank (Quân Đội)",
   qrMode: "auto",
   qrImageUrl: "/images/logo_gieo mơ.jpg",
@@ -42,8 +41,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   coverTheme: "emerald",
   faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
-  shippingNote: "Giao hàng trong 3-5 ngày làm việc tại TP.HCM. Các tỉnh khác 5-7 ngày.",
-  paymentNote: "Chuyển khoản ngân hàng hoặc thanh toán khi nhận hàng (COD).",
+  shippingNote: "Giao hàng trong 3-5 ngày.",
+  paymentNote: "Thanh toán qua chuyển khoản ngân hàng.",
   facebookUrl: "https://www.facebook.com/BanHangGieoMo",
   tiktokUrl: "https://www.tiktok.com/@vuongquocmam",
   instagramUrl: "https://www.instagram.com/mam.mer.oii",
