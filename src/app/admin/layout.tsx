@@ -42,12 +42,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         router.replace("/admin/login");
         return;
       }
+      const session = getAdminSession();
+      if (session?.role === "btc_sale") {
+        router.replace("/sale");
+        return;
+      }
     }
     setIsAuthChecked(true);
 
     const handleAuthChange = () => {
-      if (!isLoginPage && !isAdminAuthenticated()) {
-        router.replace("/admin/login");
+      if (!isLoginPage) {
+        if (!isAdminAuthenticated()) {
+          router.replace("/admin/login");
+          return;
+        }
+        const s = getAdminSession();
+        if (s?.role === "btc_sale") {
+          router.replace("/sale");
+          return;
+        }
       }
     };
 

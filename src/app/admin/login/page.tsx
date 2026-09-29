@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { verifyAdminLogin } from "@/lib/data/orderStore";
+import { verifyAdminLogin, getAdminSession } from "@/lib/data/orderStore";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -31,9 +31,14 @@ export default function AdminLoginPage() {
 
       const isValid = verifyAdminLogin(cleanPass, cleanEmail);
       if (isValid) {
-        router.push("/admin/dashboard");
+        const session = getAdminSession();
+        if (session?.role === "btc_sale") {
+          router.push("/sale");
+        } else {
+          router.push("/admin/dashboard");
+        }
       } else {
-        setError("Mật khẩu không chính xác!");
+        setError("Tài khoản hoặc mật khẩu không chính xác!");
         setLoading(false);
       }
     }, 400);
@@ -47,10 +52,10 @@ export default function AdminLoginPage() {
           🌱
         </div>
         <h1 className="font-heading font-extrabold text-2xl text-emerald-950 tracking-tight">
-          Cổng Quản Trị Gieo Mơ
+          Hệ Thống Gieo Mơ
         </h1>
         <p className="text-xs text-gray-500">
-          Đăng nhập hệ thống quản lý bán hàng gây quỹ Mầm Mơ
+          Đăng nhập Ban Tổ Chức & Thành Viên Gây Quỹ
         </p>
       </div>
 
@@ -89,12 +94,8 @@ export default function AdminLoginPage() {
           disabled={loading}
           className="w-full h-11 inline-flex items-center justify-center font-bold text-xs sm:text-sm text-white bg-[#342A24] hover:bg-[#231B16] rounded-full shadow-xs transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
-          {loading ? "Đang xử lý..." : "Đăng nhập Quản trị"}
+          {loading ? "Đang xử lý..." : "Đăng nhập"}
         </button>
-
-        <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900 text-center">
-          🔑 Mật khẩu quản trị mặc định: <code className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-amber-200">GieoMo@2026</code> hoặc <code className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-amber-200">MamMo@123</code> (Đổi được trong Cài đặt).
-        </div>
       </form>
 
       <div className="text-center pt-2 border-t border-gray-100">

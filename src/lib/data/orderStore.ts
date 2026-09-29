@@ -1722,6 +1722,9 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
         email: cleanEmail || DEFAULT_ADMIN_EMAIL,
         name,
         role,
+        referralCode: matchedMember?.referralCode || "",
+        memberId: matchedMember?.memberId || "",
+        phone: matchedMember?.phone || "",
         isSystemProtected: matchedMember?.isSystemProtected || false,
         loginAt: new Date().toISOString(),
       }));
@@ -1760,6 +1763,9 @@ export interface AdminSession {
   email: string;
   name: string;
   role?: "admin" | "btc_sale";
+  referralCode?: string;
+  memberId?: string;
+  phone?: string;
   isSystemProtected?: boolean;
   loginAt: string;
 }
@@ -1775,16 +1781,37 @@ export function getAdminSession(): AdminSession | null {
       clearAdminSession();
       return null;
     }
+    const members = getStoredMembers();
+    const cleanEmail = parsed.email?.trim().toLowerCase();
+    const matched = members.find((m) => m.email.toLowerCase() === cleanEmail);
     if (!parsed.role) {
-      const members = getStoredMembers();
-      const cleanEmail = parsed.email?.trim().toLowerCase();
-      const matched = members.find((m) => m.email.toLowerCase() === cleanEmail);
       parsed.role = matched?.role || "admin";
+    }
+    if (!parsed.referralCode && matched?.referralCode) {
+      parsed.referralCode = matched.referralCode;
+    }
+    if (!parsed.memberId && matched?.memberId) {
+      parsed.memberId = matched.memberId;
+    }
+    if (!parsed.phone && matched?.phone) {
+      parsed.phone = matched.phone;
     }
     return parsed;
   } catch {
     return null;
   }
+}
+
+export function updateMemberPassword(emailOrMemberId: string, newPass: string): boolean {
+  if (typeof window === "undefined") return false;
+  const members = getStoredMembers();
+  const index = members.findIndex(
+    (m) => m.memberId === emailOrMemberId || m.email.toLowerCase() === emailOrMemberId.toLowerCase()
+  );
+  if (index === -1) return false;
+  members[index].password = newPass;
+  saveStoredMembers(members);
+  return true;
 }
 
 // ==========================================
