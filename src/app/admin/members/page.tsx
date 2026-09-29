@@ -97,7 +97,8 @@ export default function AdminMembersPage() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const handleCopy = (code: string) => {
-    navigator.clipboard.writeText(`https://gieomo.vn/?ref=${code}`);
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
+    navigator.clipboard.writeText(`${origin}/?ref=${code}`);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
   };
@@ -448,16 +449,17 @@ export default function AdminMembersPage() {
                         <button
                           onClick={() => handleCopy(m.referralCode)}
                           className="px-2.5 py-1 rounded-lg border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Sao chép link bán hàng gắn mã giới thiệu của ${m.fullName}: ?ref=${m.referralCode}`}
                         >
                           {copiedCode === m.referralCode ? (
                             <>
                               <Check className="w-3 h-3 text-[#2D6338]" />
-                              <span className="text-[#2D6338]">Đã chép</span>
+                              <span className="text-[#2D6338]">Đã chép link</span>
                             </>
                           ) : (
                             <>
                               <Copy className="w-3 h-3 text-[#7E7068]" />
-                              <span>Link</span>
+                              <span>Link ref</span>
                             </>
                           )}
                         </button>
@@ -911,9 +913,13 @@ export default function AdminMembersPage() {
                   (o.introducer_info && o.introducer_info.includes(viewingOrdersMember.referralCode))
               );
               const modalOrdersCount = memberOrders.length > 0 ? memberOrders.length : viewingOrdersMember.totalOrders;
+              const validOrders = memberOrders.filter((o) => o.order_status !== "cancelled");
               const modalRevenue = memberOrders.length > 0 
-                ? memberOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) 
+                ? validOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) 
                 : viewingOrdersMember.totalRevenue;
+
+              const pendingPaymentOrders = validOrders.filter((o) => o.payment_status === "pending");
+              const cancelledOrders = memberOrders.filter((o) => o.order_status === "cancelled");
 
               return (
                 <>
@@ -931,10 +937,25 @@ export default function AdminMembersPage() {
                     </div>
                     <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
                       <span className="text-[11px] font-bold text-[#7E7068] block">Tình trạng ghi nhận</span>
-                      <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
-                      </span>
+                      {modalOrdersCount === 0 ? (
+                        <span className="text-xs font-semibold text-gray-400 mt-1.5 inline-flex items-center gap-1">
+                          <span>Chưa phát sinh đơn hàng</span>
+                        </span>
+                      ) : pendingPaymentOrders.length > 0 ? (
+                        <span className="text-xs font-bold text-amber-700 mt-1.5 inline-flex items-center gap-1" title="Có đơn hàng đang chờ khách chuyển khoản hoặc xác nhận thanh toán">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                          <span>Có {pendingPaymentOrders.length} đơn chờ thanh toán</span>
+                        </span>
+                      ) : cancelledOrders.length === modalOrdersCount ? (
+                        <span className="text-xs font-bold text-red-600 mt-1.5 inline-flex items-center gap-1">
+                          <span>Tất cả đơn đã bị hủy</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
