@@ -18,6 +18,7 @@ import {
 import {
   getAdminSession,
   getStoredOrders,
+  touchMemberActive,
   type AdminSession,
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -62,9 +63,16 @@ export default function SaleDashboardPage() {
       }
     };
 
+    touchMemberActive();
+    const heartbeatInterval = setInterval(() => touchMemberActive(), 45000);
+    const onFocus = () => touchMemberActive();
+    window.addEventListener("focus", onFocus);
+
     window.addEventListener("gieomo_orders_updated", handleUpdate);
     window.addEventListener("gieomo_admin_auth_changed", handleUpdate);
     return () => {
+      clearInterval(heartbeatInterval);
+      window.removeEventListener("focus", onFocus);
       window.removeEventListener("gieomo_orders_updated", handleUpdate);
       window.removeEventListener("gieomo_admin_auth_changed", handleUpdate);
     };

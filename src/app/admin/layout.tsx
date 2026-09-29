@@ -6,7 +6,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NotificationProvider } from "@/lib/notifications/NotificationContext";
 import { NotificationToastContainer } from "@/components/admin/NotificationToast";
-import { isAdminAuthenticated, getAdminSession } from "@/lib/data/orderStore";
+import { isAdminAuthenticated, getAdminSession, touchMemberActive } from "@/lib/data/orderStore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -48,7 +48,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return;
       }
     }
+    if (!isLoginPage && isAdminAuthenticated()) {
+      touchMemberActive();
+    }
     setIsAuthChecked(true);
+
+    const heartbeatInterval = !isLoginPage && isAdminAuthenticated() 
+      ? setInterval(() => touchMemberActive(), 45000) 
+      : null;
+
+    const onFocus = () => {
+      if (!isLoginPage && isAdminAuthenticated()) {
+        touchMemberActive();
+      }
+    };
+    window.addEventListener("focus", onFocus);
 
     const handleAuthChange = () => {
       if (!isLoginPage) {
@@ -56,6 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           router.replace("/admin/login");
           return;
         }
+        touchMemberActive();
         const s = getAdminSession();
         if (s?.role === "btc_sale") {
           router.replace("/sale");
@@ -65,7 +80,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
 
     window.addEventListener("gieomo_admin_auth_changed", handleAuthChange);
-    return () => window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
+    return () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
+    };
   }, [isLoginPage, router]);
 
   if (isLoginPage) {

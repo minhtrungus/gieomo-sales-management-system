@@ -20,12 +20,15 @@ import {
   ShoppingBag,
   KeyRound,
   Edit3,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { MOCK_ORDERS } from "@/lib/data/mockData";
 import {
   getStoredOrders,
   getStoredMembers,
   saveStoredMembers,
+  getMemberPresence,
   type StoredMember,
 } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
@@ -60,7 +63,14 @@ export default function AdminMembersPage() {
 
     window.addEventListener("gieomo_orders_updated", handleOrdersUpdate);
     window.addEventListener("gieomo_members_updated", handleMembersUpdate);
+
+    // Tự động làm mới trạng thái trực tuyến mỗi 15 giây
+    const presenceTimer = setInterval(() => {
+      setMembers(getStoredMembers());
+    }, 15000);
+
     return () => {
+      clearInterval(presenceTimer);
       window.removeEventListener("gieomo_orders_updated", handleOrdersUpdate);
       window.removeEventListener("gieomo_members_updated", handleMembersUpdate);
     };
@@ -329,8 +339,9 @@ export default function AdminMembersPage() {
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-2.5 text-center w-10">STT</th>
                 <th className="py-2.5 px-3">Thành viên</th>
-                <th className="py-2.5 px-2.5">Trạng thái</th>
-                <th className="py-2.5 px-2.5">Vai trò (Phân quyền)</th>
+                <th className="py-2.5 px-2.5">Hiện diện web</th>
+                <th className="py-2.5 px-2.5">Quyền tài khoản</th>
+                <th className="py-2.5 px-2.5">Vai trò</th>
                 <th className="py-2.5 px-2.5">Ngày tham gia</th>
                 <th className="py-2.5 px-2.5">Mã Referral</th>
                 <th className="py-2.5 px-2.5">Đơn đã chốt</th>
@@ -355,6 +366,8 @@ export default function AdminMembersPage() {
                   m.memberId === "baotri-system"
                 );
 
+                const presence = getMemberPresence(m);
+
                 return (
                   <tr key={m.memberId} className="hover:bg-[#FFFDF9] transition-colors">
                     <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
@@ -372,19 +385,56 @@ export default function AdminMembersPage() {
                       <span className="text-[10px] text-[#7E7068] block">{m.email} • {m.phone}</span>
                     </td>
 
+                    {/* Hiện diện web (Trạng thái thực tế người dùng có đang mở web hay không) */}
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      {presence.isOnline ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs"
+                          title="Thành viên đang mở web thao tác"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                          <span>Đang trong web</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1.5 text-[10px] text-[#8C7E74] font-medium"
+                          title={m.lastActiveAt ? `Hoạt động gần nhất: ${new Date(m.lastActiveAt).toLocaleString("vi-VN")}` : "Chưa từng đăng nhập"}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                          <span>{presence.label}</span>
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Quyền tài khoản (Admin chủ động khóa hoặc cấp quyền) */}
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => handleToggleStatus(m)}
-                        title="Nhấn để chuyển đổi trạng thái (Đang hoạt động ⟷ Tạm dừng)"
+                        title={
+                          isProtected
+                            ? "Tài khoản bảo vệ hệ thống không thể khóa"
+                            : m.status === "active"
+                            ? "Nhấn để TẠM KHÓA tài khoản (chặn quyền đăng nhập)"
+                            : "Nhấn để MỞ KHÓA tài khoản (cho phép đăng nhập lại)"
+                        }
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                           m.status === "active"
-                            ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3] hover:bg-[#BFE9C3]"
+                            ? "bg-[#BFE9C3]/50 text-[#16381D] border-[#9ed4a3] hover:bg-[#BFE9C3]"
                             : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-red-500"}`} />
-                        <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
+                        {m.status === "active" ? (
+                          <>
+                            <Unlock className="w-2.5 h-2.5 text-[#2D6338]" />
+                            <span>Cho phép</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-2.5 h-2.5 text-red-600" />
+                            <span>Đã khóa</span>
+                          </>
+                        )}
                       </button>
                     </td>
 
@@ -407,13 +457,6 @@ export default function AdminMembersPage() {
                         <Calendar className="w-3 h-3 text-[#A89B92]" />
                         <span>{m.joinedDate}</span>
                       </span>
-                      {m.lastLoginAt ? (
-                        <span className="text-[9.5px] text-emerald-800 font-bold block mt-0.5" title={m.lastLoginAt}>
-                          Online: {new Date(m.lastLoginAt).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })} {new Date(m.lastLoginAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      ) : (
-                        <span className="text-[9.5px] text-gray-400 block mt-0.5">Chưa đăng nhập</span>
-                      )}
                     </td>
 
                     <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">

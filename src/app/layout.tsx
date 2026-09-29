@@ -4,6 +4,7 @@ import { Montserrat } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { ReferralTracker } from "@/components/common/ReferralTracker";
 import { SEO_KEYWORD_LIST } from "@/lib/seo/keywords";
 import "./globals.css";
 
@@ -88,6 +89,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="vi" className={`${montserrat.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <OrganizationJsonLd />
+        <ReferralTracker />
         <ThemeProvider>{children}</ThemeProvider>
         {GA_MEASUREMENT_ID && (
           <>

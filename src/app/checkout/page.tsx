@@ -75,12 +75,29 @@ function CheckoutContent() {
     const members = getStoredMembers().filter((m) => m.status === "active");
     setActiveMembers(members);
 
-    // Capture referral code from URL or stored
-    const refParam = searchParams.get("ref");
-    const savedRef = refParam || (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null);
+    // Capture referral code from URL (ref, refby, referrer, gioithieu), localStorage, or cookie
+    const refParam =
+      searchParams.get("ref") ||
+      searchParams.get("refby") ||
+      searchParams.get("referrer") ||
+      searchParams.get("gioithieu");
+
+    const getCookieRef = () => {
+      if (typeof document === "undefined") return null;
+      const match = document.cookie.match(/(^|;)\s*gieomo_referral_code=([^;]+)/);
+      return match ? decodeURIComponent(match[2]) : null;
+    };
+
+    const savedRef =
+      refParam ||
+      (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||
+      getCookieRef();
 
     if (savedRef) {
       const clean = savedRef.trim();
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gieomo_referral_code", clean);
+      }
       const matched = members.find(
         (m) =>
           m.referralCode?.toUpperCase() === clean.toUpperCase() ||

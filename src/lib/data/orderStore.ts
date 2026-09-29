@@ -656,6 +656,7 @@ export interface StoredMember {
   status: "active" | "inactive";
   joinedDate: string;
   lastLoginAt?: string;
+  lastActiveAt?: string;
   password?: string;
   isSystemProtected?: boolean;
 }
@@ -768,6 +769,97 @@ export function saveStoredMembers(members: StoredMember[]): void {
   } catch (e) {
     console.error("Error saving members to storage", e);
   }
+}
+
+/**
+ * Cập nhật tín hiệu hoạt động (heartbeat) khi thành viên đang mở tab website.
+ * Tự động ghi nhận mốc thời gian gần nhất (lastActiveAt).
+ */
+export function touchMemberActive(emailOrMemberId?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const rawSession = localStorage.getItem("gieomo_admin_session");
+    let target = emailOrMemberId;
+    if (!target && rawSession) {
+      const s = JSON.parse(rawSession);
+      target = s.memberId || s.email;
+    }
+    if (!target) return;
+
+    const members = getStoredMembers();
+    const clean = target.trim().toLowerCase();
+    const matched = members.find(
+      (m) => m.memberId?.toLowerCase() === clean || m.email.toLowerCase() === clean
+    );
+
+    if (matched) {
+      const now = Date.now();
+      const prev = matched.lastActiveAt ? new Date(matched.lastActiveAt).getTime() : 0;
+      // Chỉ lưu nếu khoảng cách > 20 giây để tránh ghi localStorage liên tục
+      if (!matched.lastActiveAt || now - prev > 20000) {
+        matched.lastActiveAt = new Date(now).toISOString();
+        saveStoredMembers(members);
+      }
+    }
+  } catch (err) {
+    console.error("Error updating member heartbeat", err);
+  }
+}
+
+/**
+ * Tính toán trạng thái trực tuyến (online/offline) dựa trên việc có ở trong web gần đây hay không
+ */
+export function getMemberPresence(m: StoredMember): {
+  isOnline: boolean;
+  label: string;
+  subtext: string;
+} {
+  const ts = m.lastActiveAt || m.lastLoginAt;
+  if (!ts) {
+    return {
+      isOnline: false,
+      label: "Chưa từng đăng nhập",
+      subtext: "Chưa từng đăng nhập",
+    };
+  }
+
+  const diffMs = Math.max(0, Date.now() - new Date(ts).getTime());
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+
+  // Trong vòng 5 phút kể từ tín hiệu heartbeat cuối cùng -> coi như đang mở web
+  if (diffMinutes < 5) {
+    return {
+      isOnline: true,
+      label: "Đang trong web",
+      subtext: "Đang online",
+    };
+  }
+
+  if (diffMinutes < 60) {
+    return {
+      isOnline: false,
+      label: `Rời web ${diffMinutes} phút trước`,
+      subtext: `${diffMinutes} phút trước`,
+    };
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return {
+      isOnline: false,
+      label: `Rời web ${diffHours} giờ trước`,
+      subtext: `${diffHours} giờ trước`,
+    };
+  }
+
+  const dateObj = new Date(ts);
+  const timeStr = dateObj.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = dateObj.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  return {
+    isOnline: false,
+    label: `Rời web ${dateStr} ${timeStr}`,
+    subtext: `${dateStr} ${timeStr}`,
+  };
 }
 
 export function updateOrderShipper(
