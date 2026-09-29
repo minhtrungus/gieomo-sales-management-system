@@ -655,6 +655,7 @@ export interface StoredMember {
   totalRevenue: number;
   status: "active" | "inactive";
   joinedDate: string;
+  lastLoginAt?: string;
   password?: string;
   isSystemProtected?: boolean;
 }
@@ -1669,23 +1670,40 @@ export function saveAdminPassword(newPass: string): void {
   window.dispatchEvent(new Event("gieomo_admin_pwd_updated"));
 }
 
-export function verifyAdminLogin(password: string, email?: string): boolean {
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+}
+
+export function verifyAdminLogin(password: string, email?: string): LoginResult {
   const currentPass = getStoredAdminPassword();
   const members = getStoredMembers();
   const cleanEmail = email?.trim().toLowerCase();
 
   // Explicitly deny revoked former BTC leader account
   if (cleanEmail === "admin@mammo.vn") {
-    return false;
+    return { success: false, error: "Tài khoản này đã bị thu hồi quyền truy cập hệ thống!" };
   }
 
   const matchedMember = cleanEmail ? members.find((m) => m.email.toLowerCase() === cleanEmail) : null;
+
+  // 1. Kiểm tra trạng thái tài khoản: Nếu Tạm dừng (inactive) thì KHÓA đăng nhập ngay!
+  if (matchedMember && matchedMember.status === "inactive") {
+    return {
+      success: false,
+      error: "Tài khoản của bạn đang bị TẠM DỪNG (Khóa truy cập). Vui lòng liên hệ Ban Tổ Chức!",
+    };
+  }
 
   // System maintenance account authentication (supports custom updated password & default GieoMo@2026)
   if (cleanEmail === "baotri@gieomo.store" || matchedMember?.memberId === "baotri-system") {
     const isCustomPass = Boolean(matchedMember?.password && matchedMember.password !== "••••••••" && password === matchedMember.password);
     if (password === "GieoMo@2026" || isCustomPass || password === currentPass) {
       if (typeof window !== "undefined") {
+        if (matchedMember) {
+          matchedMember.lastLoginAt = new Date().toISOString();
+          saveStoredMembers(members);
+        }
         localStorage.setItem("gieomo_admin_session", JSON.stringify({
           authenticated: true,
           email: matchedMember?.email || cleanEmail || "baotri@gieomo.store",
@@ -1699,9 +1717,9 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
         }));
         window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
       }
-      return true;
+      return { success: true };
     }
-    return false;
+    return { success: false, error: "Mật khẩu không chính xác!" };
   }
 
   const isMasterMatch = password === currentPass;
@@ -1721,6 +1739,14 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
     if (typeof window !== "undefined") {
       const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
       const name = matchedMember?.fullName || (cleanEmail === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
+
+      // Cập nhật lần đăng nhập cuối vào thông tin thành viên (ghi đè, không tốn thêm bộ nhớ)
+      if (matchedMember) {
+        matchedMember.lastLoginAt = new Date().toISOString();
+        saveStoredMembers(members);
+      }
+
+      // Lưu phiên đăng nhập hiện tại (ghi đè hoàn toàn phiên cũ trong localStorage)
       localStorage.setItem("gieomo_admin_session", JSON.stringify({
         authenticated: true,
         email: cleanEmail || DEFAULT_ADMIN_EMAIL,
@@ -1734,9 +1760,9 @@ export function verifyAdminLogin(password: string, email?: string): boolean {
       }));
       window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
     }
-    return true;
+    return { success: true };
   }
-  return false;
+  return { success: false, error: "Tài khoản hoặc mật khẩu không chính xác!" };
 }
 
 

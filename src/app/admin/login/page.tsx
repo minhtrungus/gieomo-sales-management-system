@@ -29,8 +29,8 @@ export default function AdminLoginPage() {
         return;
       }
 
-      const isValid = verifyAdminLogin(cleanPass, cleanEmail);
-      if (isValid) {
+      const result = verifyAdminLogin(cleanPass, cleanEmail);
+      if (result.success) {
         const session = getAdminSession();
         if (session?.role === "btc_sale") {
           router.push("/sale");
@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
           router.push("/admin/dashboard");
         }
       } else {
-        setError("Tài khoản hoặc mật khẩu không chính xác!");
+        setError(result.error || "Tài khoản hoặc mật khẩu không chính xác!");
         setLoading(false);
       }
     }, 400);

@@ -77,6 +77,7 @@ export default function AdminMembersPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState<"admin" | "btc_sale">("btc_sale");
+  const [editStatus, setEditStatus] = useState<"active" | "inactive">("active");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
@@ -159,8 +160,22 @@ export default function AdminMembersPage() {
     setEditEmail(m.email);
     setEditPhone(m.phone === "Chưa cập nhật" ? "" : m.phone);
     setEditRole(m.role);
+    setEditStatus(m.status || "active");
     setEditError(null);
     setEditSuccess(null);
+  };
+
+  const handleToggleStatus = (m: MemberItem) => {
+    if (m.memberId === "baotri-system") {
+      alert("Tài khoản Bảo trì Hệ thống luôn ở trạng thái hoạt động!");
+      return;
+    }
+    const nextStatus: "active" | "inactive" = m.status === "active" ? "inactive" : "active";
+    const updated = members.map((item) =>
+      item.memberId === m.memberId ? { ...item, status: nextStatus } : item
+    );
+    setMembers(updated);
+    saveStoredMembers(updated);
   };
 
   const handleSaveMemberInfo = (e: React.FormEvent) => {
@@ -205,6 +220,7 @@ export default function AdminMembersPage() {
             email: trimmedEmail,
             phone: trimmedPhone || "Chưa cập nhật",
             role: editRole,
+            status: editStatus,
           }
         : m
     );
@@ -356,16 +372,19 @@ export default function AdminMembersPage() {
                     </td>
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(m)}
+                        title="Nhấn để chuyển đổi trạng thái (Đang hoạt động ⟷ Tạm dừng)"
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                           m.status === "active"
-                            ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3]"
-                            : "bg-gray-100 text-gray-500 border-gray-300"
+                            ? "bg-[#BFE9C3]/60 text-[#16381D] border-[#9ed4a3] hover:bg-[#BFE9C3]"
+                            : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-gray-400"}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${m.status === "active" ? "bg-emerald-600 animate-pulse" : "bg-red-500"}`} />
                         <span>{m.status === "active" ? "Đang hoạt động" : "Tạm dừng"}</span>
-                      </span>
+                      </button>
                     </td>
 
                     <td className="py-2.5 px-2.5 font-semibold whitespace-nowrap">
@@ -387,6 +406,13 @@ export default function AdminMembersPage() {
                         <Calendar className="w-3 h-3 text-[#A89B92]" />
                         <span>{m.joinedDate}</span>
                       </span>
+                      {m.lastLoginAt ? (
+                        <span className="text-[9.5px] text-emerald-800 font-bold block mt-0.5" title={m.lastLoginAt}>
+                          Online: {new Date(m.lastLoginAt).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })} {new Date(m.lastLoginAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] text-gray-400 block mt-0.5">Chưa đăng nhập</span>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">
@@ -551,6 +577,18 @@ export default function AdminMembersPage() {
                 >
                   <option value="btc_sale">Thành viên gây quỹ (BTC Sale)</option>
                   <option value="admin">Quản trị viên (Admin)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Trạng thái tài khoản</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as "active" | "inactive")}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
+                >
+                  <option value="active">🟢 Đang hoạt động (Cho phép đăng nhập)</option>
+                  <option value="inactive">🔴 Tạm dừng (Khóa đăng nhập)</option>
                 </select>
               </div>
 
