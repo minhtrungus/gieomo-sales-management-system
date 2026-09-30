@@ -89,13 +89,43 @@ export async function createOrderServer(orderData: Partial<Order> & { items: Ord
     if (orderData.payment_method === "cod") dbPaymentMethod = "cod";
     else if (orderData.payment_method === "momo") dbPaymentMethod = "momo";
 
+    // Resolve seller_id & source_type safely
+    let sellerId = orderData.seller_id || null;
+    const isUuid = (id: string | null | undefined): boolean =>
+      Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+    if (!isUuid(sellerId)) {
+      sellerId = null;
+    }
+
+    const refCode = (orderData.referral_code || "").trim();
+
+    // If sellerId is not yet a valid UUID, attempt lookup by referral_code in Supabase members table
+    if (!sellerId && refCode) {
+      try {
+        const { data: matchedMember } = await supabase
+          .from("members")
+          .select("member_id")
+          .ilike("referral_code", refCode)
+          .maybeSingle();
+        if (matchedMember?.member_id) {
+          sellerId = matchedMember.member_id;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const sourceType = (sellerId || refCode) ? "member_referral" : "landing_page";
+
     const { data: createdOrder, error: orderError } = await supabase
       .from("orders")
       .insert({
         order_code: orderCode,
         customer_id: customerId!,
-        source_type: "landing_page",
-        introducer_info: orderData.introducer_info || "Trực tiếp (Website)",
+        seller_id: sellerId,
+        source_type: sourceType,
+        introducer_info: orderData.introducer_info || (refCode ? `Mã giới thiệu: ${refCode}` : "Trực tiếp (Website)"),
         receiver_name: orderData.recipient_name || fullName,
         receiver_phone: orderData.recipient_phone || phone,
         delivery_type: dbDeliveryType,

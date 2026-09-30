@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  ExternalLink,
 } from "lucide-react";
 import {
   getAdminSession,
@@ -26,6 +27,7 @@ export default function SaleProfilePage() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [member, setMember] = useState<StoredMember | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Change password states
   const [newPassword, setNewPassword] = useState("");
@@ -50,6 +52,15 @@ export default function SaleProfilePage() {
     navigator.clipboard.writeText(session.referralCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleCopyLink = () => {
+    const code = session?.referralCode || member?.referralCode;
+    if (!code) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
+    navigator.clipboard.writeText(`${origin}/?ref=${code}`);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -151,14 +162,25 @@ export default function SaleProfilePage() {
               </span>
             </div>
 
-            {session?.referralCode && (
-              <button
-                onClick={handleCopyCode}
-                className="px-3.5 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-50 transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-emerald-600" />}
-                <span>{copiedCode ? "Đã sao chép!" : "Sao chép mã"}</span>
-              </button>
+            {(session?.referralCode || member?.referralCode) && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? "Đã chép link!" : "Sao chép link web"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-50 transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
+                  <span>{copiedCode ? "Đã sao chép!" : "Sao chép mã"}</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

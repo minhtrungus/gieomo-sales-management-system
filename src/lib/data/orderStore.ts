@@ -687,19 +687,40 @@ export function syncMembersFromServer(): void {
     .then((data) => {
       if (data?.success && Array.isArray(data.members)) {
         if (data.members.length > 0) {
-          const mapped: StoredMember[] = data.members.map((m: any) => ({
-            memberId: m.member_id,
-            fullName: m.full_name,
-            email: m.email || "",
-            role: m.role || "btc_sale",
-            referralCode: m.referral_code || "",
-            phone: m.phone || "Chưa cập nhật",
-            totalOrders: 0,
-            totalRevenue: 0,
-            status: m.status || "active",
-            joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : "01/09/2026",
-            password: m.password || m.password_hash || "MamMo@123",
-          }));
+          const currentLocal = cachedMembers || [];
+          const localMap = new Map<string, StoredMember>();
+          currentLocal.forEach((m) => {
+            if (m.memberId) localMap.set(m.memberId.toLowerCase(), m);
+            if (m.email) localMap.set(m.email.toLowerCase(), m);
+          });
+
+          // Check presence store fallback
+          let presenceMap: Record<string, string> = {};
+          try {
+            presenceMap = JSON.parse(localStorage.getItem("gieomo_presence") || "{}");
+          } catch {}
+
+          const mapped: StoredMember[] = data.members.map((m: any) => {
+            const loc = localMap.get(m.member_id?.toLowerCase()) || (m.email ? localMap.get(m.email.toLowerCase()) : undefined);
+            const savedPresence = presenceMap[m.member_id] || (m.email ? presenceMap[m.email.toLowerCase()] : undefined);
+            const finalLastActive = loc?.lastActiveAt || savedPresence || undefined;
+
+            return {
+              memberId: m.member_id,
+              fullName: m.full_name,
+              email: m.email || "",
+              role: m.role || "btc_sale",
+              referralCode: m.referral_code || "",
+              phone: m.phone || "Chưa cập nhật",
+              totalOrders: loc?.totalOrders || 0,
+              totalRevenue: loc?.totalRevenue || 0,
+              status: m.status || "active",
+              joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : (loc?.joinedDate || "01/09/2026"),
+              password: m.password || m.password_hash || loc?.password || "MamMo@123",
+              lastActiveAt: finalLastActive,
+              lastLoginAt: loc?.lastLoginAt || undefined,
+            };
+          });
 
           const hasMaintenance = mapped.some(
             (m) => m.email.toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
@@ -864,10 +885,21 @@ export function touchMemberActive(emailOrMemberId?: string): void {
     if (matched) {
       const now = Date.now();
       const prev = matched.lastActiveAt ? new Date(matched.lastActiveAt).getTime() : 0;
-      // Chỉ lưu nếu khoảng cách > 20 giây để tránh ghi localStorage liên tục
-      if (!matched.lastActiveAt || now - prev > 20000) {
+      // Chỉ lưu nếu khoảng cách > 15 giây để tránh ghi liên tục
+      if (!matched.lastActiveAt || now - prev > 15000) {
         matched.lastActiveAt = new Date(now).toISOString();
-        saveStoredMembers(members);
+        cachedMembers = members;
+        localStorage.setItem("gieomo_members", JSON.stringify(members));
+
+        // Lưu vào presence store tách biệt để không bao giờ bị xóa khi sync server
+        try {
+          const presenceMap = JSON.parse(localStorage.getItem("gieomo_presence") || "{}");
+          presenceMap[matched.memberId] = matched.lastActiveAt;
+          if (matched.email) presenceMap[matched.email.toLowerCase()] = matched.lastActiveAt;
+          localStorage.setItem("gieomo_presence", JSON.stringify(presenceMap));
+        } catch {}
+
+        window.dispatchEvent(new Event("gieomo_members_updated"));
       }
     }
   } catch (err) {
@@ -883,7 +915,17 @@ export function getMemberPresence(m: StoredMember): {
   label: string;
   subtext: string;
 } {
-  const ts = m.lastActiveAt || m.lastLoginAt;
+  let ts = m.lastActiveAt || m.lastLoginAt;
+  if (typeof window !== "undefined") {
+    try {
+      const presenceMap = JSON.parse(localStorage.getItem("gieomo_presence") || "{}");
+      const fallbackTs = presenceMap[m.memberId] || (m.email ? presenceMap[m.email.toLowerCase()] : null);
+      if (fallbackTs && (!ts || new Date(fallbackTs).getTime() > new Date(ts).getTime())) {
+        ts = fallbackTs;
+      }
+    } catch {}
+  }
+
   if (!ts) {
     return {
       isOnline: false,

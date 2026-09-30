@@ -280,7 +280,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
           <div className="hidden md:block text-left leading-tight">
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-[#231B16]">Admin Mầm Mơ</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Online" />
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.7)]" title="Online" />
             </div>
             <span className="text-[10px] text-[#2D6338] font-bold bg-[#BFE9C3]/40 px-1.5 py-0.2 rounded-md">
               Ban Tổ Chức

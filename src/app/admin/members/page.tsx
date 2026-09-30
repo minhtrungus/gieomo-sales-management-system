@@ -952,7 +952,7 @@ export default function AdminMembersPage() {
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs"
                           title="Thành viên đang mở web thao tác"
                         >
-                          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
                           <span>Đang trong web</span>
                         </span>
                       ) : (

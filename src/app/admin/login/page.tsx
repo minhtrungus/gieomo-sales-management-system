@@ -139,8 +139,8 @@ export default function AdminLoginPage() {
 
       <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] space-y-1">
         <p className="font-bold text-[#231B16]">💡 Hướng dẫn đăng nhập:</p>
-        <p>• Đăng nhập bằng <strong>Email</strong> hoặc <strong>Số điện thoại</strong> đã đăng ký.</p>
-        <p>• Mật khẩu mặc định khởi tạo: <span className="font-mono font-bold text-[#16381D]">MamMo@123</span>.</p>
+        <p>• Đăng nhập bằng <strong>Email</strong> hoặc <strong>Số điện thoại</strong> đã được cấp quyền.</p>
+        <p>• Nếu quên mật khẩu hoặc cần tạo tài khoản mới, vui lòng liên hệ Ban Quản Trị Mầm Mơ.</p>
       </div>
 
       <div className="text-center pt-2 border-t border-gray-100">

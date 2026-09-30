@@ -42,7 +42,8 @@ export default function SaleDashboardPage() {
         (o) =>
           (s.referralCode && o.referral_code?.toLowerCase() === s.referralCode.toLowerCase()) ||
           (s.memberId && o.seller_id === s.memberId) ||
-          (s.memberId && o.created_by_member_id === s.memberId)
+          (s.memberId && o.created_by_member_id === s.memberId) ||
+          (s.referralCode && o.introducer_info?.toLowerCase().includes(s.referralCode.toLowerCase()))
       );
       setOrders(myOrders);
     }
@@ -57,7 +58,9 @@ export default function SaleDashboardPage() {
             (currentSession.referralCode &&
               o.referral_code?.toLowerCase() === currentSession.referralCode.toLowerCase()) ||
             (currentSession.memberId && o.seller_id === currentSession.memberId) ||
-            (currentSession.memberId && o.created_by_member_id === currentSession.memberId)
+            (currentSession.memberId && o.created_by_member_id === currentSession.memberId) ||
+            (currentSession.referralCode &&
+              o.introducer_info?.toLowerCase().includes(currentSession.referralCode.toLowerCase()))
         );
         setOrders(filtered);
       }

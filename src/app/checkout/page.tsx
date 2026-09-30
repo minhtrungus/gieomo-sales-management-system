@@ -14,6 +14,12 @@ import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
 import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers, type StoredMember, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 
+function getCookieRef(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(^|;)\s*gieomo_referral_code=([^;]+)/);
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,12 +88,6 @@ function CheckoutContent() {
       searchParams.get("referrer") ||
       searchParams.get("gioithieu");
 
-    const getCookieRef = () => {
-      if (typeof document === "undefined") return null;
-      const match = document.cookie.match(/(^|;)\s*gieomo_referral_code=([^;]+)/);
-      return match ? decodeURIComponent(match[2]) : null;
-    };
-
     const savedRef =
       refParam ||
       (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||
@@ -117,7 +117,26 @@ function CheckoutContent() {
     }
 
     const handleMembersUpdated = () => {
-      setActiveMembers(getStoredMembers().filter((m) => m.status === "active"));
+      const updated = getStoredMembers().filter((m) => m.status === "active");
+      setActiveMembers(updated);
+      const currentStoredRef =
+        (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||
+        getCookieRef();
+      if (currentStoredRef) {
+        const clean = currentStoredRef.trim();
+        const matched = updated.find(
+          (m) =>
+            m.referralCode?.toUpperCase() === clean.toUpperCase() ||
+            m.fullName?.toLowerCase() === clean.toLowerCase()
+        );
+        if (matched) {
+          setSelectedMember(matched);
+          setFormData((prev) => ({
+            ...prev,
+            introducer_info: `${matched.fullName} (${matched.referralCode})`,
+          }));
+        }
+      }
     };
     window.addEventListener("gieomo_members_updated", handleMembersUpdated);
     return () => window.removeEventListener("gieomo_members_updated", handleMembersUpdated);
@@ -197,6 +216,12 @@ function CheckoutContent() {
       ...prev,
       introducer_info: `${mem.fullName} (${mem.referralCode})`,
     }));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gieomo_referral_code", mem.referralCode);
+      document.cookie = `gieomo_referral_code=${encodeURIComponent(
+        mem.referralCode
+      )}; path=/; max-age=2592000; SameSite=Lax`;
+    }
     setErrors((prev) => (prev.introducer_info ? { ...prev, introducer_info: "" } : prev));
   }, []);
 
@@ -205,6 +230,10 @@ function CheckoutContent() {
     setMemberSearchQuery("");
     setNoIntroducer(true);
     setFormData((prev) => ({ ...prev, introducer_info: "Trực tiếp (Website)" }));
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("gieomo_referral_code");
+      document.cookie = "gieomo_referral_code=; path=/; max-age=0; SameSite=Lax";
+    }
   }, []);
 
   const filteredMembers = useMemo(() => {
@@ -296,9 +325,35 @@ function CheckoutContent() {
       created_at: new Date().toISOString(),
     }));
 
-    const finalSellerId = selectedMember ? selectedMember.memberId : null;
+    const storedRef =
+      (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||
+      getCookieRef();
+
+    let finalSellerId = selectedMember ? selectedMember.memberId : null;
+    let finalReferralCode = selectedMember ? selectedMember.referralCode : null;
+
+    if (!selectedMember && !noIntroducer) {
+      const candidate = storedRef || (formData.introducer_info !== "Trực tiếp (Website)" ? formData.introducer_info : null);
+      if (candidate) {
+        const cleanCandidate = candidate.trim().toUpperCase();
+        const matched = activeMembers.find(
+          (m) =>
+            m.referralCode?.toUpperCase() === cleanCandidate ||
+            m.fullName?.toLowerCase() === candidate.toLowerCase()
+        );
+        if (matched) {
+          finalSellerId = matched.memberId;
+          finalReferralCode = matched.referralCode;
+        } else {
+          finalReferralCode = cleanCandidate;
+        }
+      }
+    }
+
     const finalIntroducerText = selectedMember
       ? `${selectedMember.fullName} (${selectedMember.referralCode})`
+      : finalReferralCode
+      ? `Mã giới thiệu: ${finalReferralCode}`
       : noIntroducer
       ? "Trực tiếp (Website)"
       : formData.introducer_info || "Trực tiếp (Website)";
@@ -329,7 +384,7 @@ function CheckoutContent() {
       total_cost: Math.round(finalAmount * 0.4),
       seller_id: finalSellerId,
       introducer_info: finalIntroducerText,
-      referral_code: selectedMember ? selectedMember.referralCode : null,
+      referral_code: finalReferralCode,
       customer_note: formData.note || "",
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
