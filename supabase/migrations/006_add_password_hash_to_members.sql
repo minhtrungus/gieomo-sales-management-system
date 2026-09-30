@@ -1,19 +1,14 @@
 -- ========================================================
--- GIEO MƠ — DATABASE MIGRATION 006 (BULLETPROOF & SELF-HEALING)
--- Thêm cột password_hash cho bảng members & xóa bỏ event trigger lỗi cú pháp
+-- GIEO MƠ — DATABASE MIGRATION 006 (HOÀN CHỈNH & TỰ SỬA LỖI)
+-- Tạo hoặc cập nhật bảng members & mật khẩu tài khoản
 -- ========================================================
 
--- 1. Xóa bỏ event trigger lỗi cú pháp "auto_enable_rls_on_new_table" trong database (nếu có)
--- Trigger cũ này có lỗi: format('ALTER TABLE %I.%I', obj.schema_name, obj.object_identity)
--- dẫn đến PostgreSQL tự sinh câu lệnh sai: ALTER TABLE public."public.members"
-DO $$ BEGIN
-  EXECUTE 'DROP EVENT TRIGGER IF EXISTS auto_enable_rls_on_new_table CASCADE';
-  EXECUTE 'DROP EVENT TRIGGER IF EXISTS trg_auto_enable_rls CASCADE';
-  EXECUTE 'DROP EVENT TRIGGER IF EXISTS auto_enable_rls CASCADE';
-  EXECUTE 'DROP FUNCTION IF EXISTS auto_enable_rls_on_new_table() CASCADE';
-EXCEPTION
-  WHEN OTHERS THEN null;
-END $$;
+-- 1. Xóa hàm trigger lỗi cú pháp (CASCADE sẽ tự động xóa luôn event trigger gọi nó)
+-- Tránh lỗi "ALTER TABLE public."public.members" ENABLE ROW LEVEL SECURITY"
+DROP FUNCTION IF EXISTS auto_enable_rls_on_new_table() CASCADE;
+DROP EVENT TRIGGER IF EXISTS auto_enable_rls_on_new_table CASCADE;
+DROP EVENT TRIGGER IF EXISTS trg_auto_enable_rls CASCADE;
+DROP EVENT TRIGGER IF EXISTS auto_enable_rls CASCADE;
 
 -- 2. Đảm bảo Enums đã được tạo
 DO $$ BEGIN
@@ -28,15 +23,30 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
--- 3. Thêm cột password_hash vào bảng members (bảng đã được tạo từ migration 001)
-ALTER TABLE IF EXISTS public.members ADD COLUMN IF NOT EXISTS password_hash TEXT;
+-- 3. Tạo bảng members nếu chưa có (khi trigger lỗi đã bị xóa ở bước 1, CREATE TABLE sẽ chạy an toàn 100%)
+CREATE TABLE IF NOT EXISTS public.members (
+  member_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  auth_user_id UUID,
+  full_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  role member_role NOT NULL DEFAULT 'btc_sale',
+  status member_status NOT NULL DEFAULT 'active',
+  referral_code TEXT UNIQUE,
+  password_hash TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- 4. Tạo chỉ mục tìm kiếm siêu tốc theo email và số điện thoại
+-- 4. Bổ sung cột password_hash nếu bảng đã tồn tại từ trước mà chưa có cột này
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+-- 5. Tạo chỉ mục tìm kiếm siêu tốc
 CREATE INDEX IF NOT EXISTS idx_members_email_lower ON public.members (lower(email));
 CREATE INDEX IF NOT EXISTS idx_members_phone ON public.members (phone);
 
--- 5. Kích hoạt RLS & Cấp quyền
-ALTER TABLE IF EXISTS public.members ENABLE ROW LEVEL SECURITY;
+-- 6. Kích hoạt RLS & Cấp quyền truy cập
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   DROP POLICY IF EXISTS "Service role all members" ON public.members;
@@ -55,7 +65,7 @@ END $$;
 GRANT ALL ON TABLE public.members TO service_role;
 GRANT SELECT ON TABLE public.members TO anon, authenticated;
 
--- 6. Nạp / cập nhật tài khoản BTC Sale (Mầm Mơ Sale)
+-- 7. Khởi tạo / Cập nhật tài khoản BTC Sale (Mầm Mơ Sale)
 INSERT INTO public.members (member_id, full_name, email, phone, role, status, referral_code, password_hash)
 VALUES (
   'e2b4c5d6-789a-4bc1-9def-0123456789ab',
