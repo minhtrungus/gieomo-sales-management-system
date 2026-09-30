@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
@@ -27,6 +27,7 @@ import {
   getStoredOrders,
   getStoredMembers,
   saveStoredMembers,
+  deleteStoredMember,
   getMemberPresence,
   type StoredMember,
 } from "@/lib/data/orderStore";
@@ -48,10 +49,703 @@ function generateReferralFromName(fullName: string): string {
   return `MAM-${normalized || Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 }
 
+// ==========================================
+// SUB-COMPONENT: MODAL ĐỔI MẬT KHẨU (ISOLATED STATE TO PREVENT INP DELAY)
+// ==========================================
+const ChangePasswordModal = memo(function ChangePasswordModal({
+  member,
+  onClose,
+  onSave,
+}: {
+  member: MemberItem;
+  onClose: () => void;
+  onSave: (newPassword: string) => void;
+}) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword.length < 6) {
+      setError("Mật khẩu mới phải có tối thiểu 6 ký tự.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+
+    onSave(newPassword);
+    setSuccess(`Đã cập nhật mật khẩu mới cho ${member.fullName}!`);
+    setTimeout(() => {
+      onClose();
+    }, 1200);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+      <div
+        className="w-full max-w-md bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 p-6 space-y-5"
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+      >
+        <div className="flex items-center justify-between pb-3 border-b border-[#F0E5D8]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                Đổi mật khẩu thành viên
+              </h3>
+              <p className="text-xs text-[#7E7068]">
+                {member.fullName} ({member.email})
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-xl text-gray-400 hover:text-gray-600 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="font-bold text-xs text-[#342A24] block">Mật khẩu mới *</label>
+            <input
+              type="password"
+              required
+              autoFocus
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Tối thiểu 6 ký tự"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-xs text-[#342A24] block">Xác nhận mật khẩu mới *</label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Nhập lại mật khẩu mới"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600" />
+              <span>{success}</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              Lưu mật khẩu mới
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+});
+
+// ==========================================
+// SUB-COMPONENT: MODAL CẤP TÀI KHOẢN MỚI
+// ==========================================
+const CreateMemberModal = memo(function CreateMemberModal({
+  isOpen,
+  members,
+  onClose,
+  onCreate,
+}: {
+  isOpen: boolean;
+  members: MemberItem[];
+  onClose: () => void;
+  onCreate: (newMember: MemberItem) => void;
+}) {
+  const [newFullName, setNewFullName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "btc_sale">("btc_sale");
+  const [newReferralCode, setNewReferralCode] = useState("");
+  const [newPassword, setNewPassword] = useState("MamMo@123");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleNameChange = (name: string) => {
+    setNewFullName(name);
+    if (!newReferralCode || newReferralCode.startsWith("MAM-")) {
+      setNewReferralCode(generateReferralFromName(name));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    if (!newFullName || !newEmail) return;
+
+    const refCode = (newReferralCode.trim() || generateReferralFromName(newFullName)).toUpperCase();
+
+    if (members.some((m) => m.referralCode.toUpperCase() === refCode)) {
+      setFormError(`Mã referral "${refCode}" đã tồn tại. Vui lòng đặt mã khác.`);
+      return;
+    }
+
+    const today = new Date();
+    const joinedDateStr = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+
+    const newMember: MemberItem = {
+      memberId: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `mem-${Date.now()}`,
+      fullName: newFullName,
+      email: newEmail.trim().toLowerCase(),
+      phone: newPhone || "Chưa cập nhật",
+      role: newRole,
+      referralCode: refCode,
+      totalOrders: 0,
+      totalRevenue: 0,
+      status: "active",
+      joinedDate: joinedDateStr,
+      password: newPassword,
+    };
+
+    onCreate(newMember);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+      <div
+        className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95"
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+      >
+        <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
+              <UserPlus className="w-4 h-4" />
+            </div>
+            <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+              Cấp tài khoản mới
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Họ và tên *</label>
+            <input
+              type="text"
+              required
+              autoFocus
+              value={newFullName}
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="Ví dụ: Lê Thị Thanh"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Email đăng nhập *</label>
+            <input
+              type="email"
+              required
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="thanhle@mammo.vn"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-bold text-[#342A24] block">Số điện thoại</label>
+              <input
+                type="tel"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="0912345678"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-bold text-[#342A24] block">Vai trò (Role) *</label>
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as "admin" | "btc_sale")}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
+              >
+                <option value="btc_sale">Thành viên (BTC Sale)</option>
+                <option value="admin">Quản trị viên (Admin)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-bold text-[#342A24] block">Mã giới thiệu (Referral)</label>
+              <input
+                type="text"
+                value={newReferralCode}
+                onChange={(e) => setNewReferralCode(e.target.value.toUpperCase())}
+                placeholder="Tự sinh nếu để trống"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-mono uppercase"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-bold text-[#342A24] block">Mật khẩu khởi tạo</label>
+              <input
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-mono bg-[#FFFDF9]"
+              />
+            </div>
+          </div>
+
+          {formError && (
+            <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium text-center">
+              {formError}
+            </div>
+          )}
+
+          <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] leading-relaxed">
+            💡 <strong>Lưu ý:</strong> Quản trị viên (Admin) có toàn quyền cấu hình và tài chính. Thành viên (BTC Sale) chỉ có thể xem số liệu của bản thân và dùng tính năng Nhập đơn hộ.
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
+            >
+              Xác nhận cấp tài khoản ➔
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+});
+
+// ==========================================
+// SUB-COMPONENT: MODAL SỬA THÔNG TIN THÀNH VIÊN
+// ==========================================
+const EditMemberModal = memo(function EditMemberModal({
+  member,
+  members,
+  onClose,
+  onSave,
+}: {
+  member: MemberItem;
+  members: MemberItem[];
+  onClose: () => void;
+  onSave: (updated: MemberItem) => void;
+}) {
+  const [fullName, setFullName] = useState(member.fullName);
+  const [email, setEmail] = useState(member.email);
+  const [phone, setPhone] = useState(member.phone === "Chưa cập nhật" ? "" : member.phone);
+  const [role, setRole] = useState<"admin" | "btc_sale">(member.role);
+  const [status, setStatus] = useState<"active" | "inactive">(member.status || "active");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPhone = phone.trim();
+
+    if (!trimmedName) {
+      setError("Vui lòng nhập họ và tên thành viên.");
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setError("Vui lòng nhập email/Gmail.");
+      return;
+    }
+
+    if (trimmedEmail === "admin@mammo.vn") {
+      setError("Tài khoản admin cũ đã bị thu hồi, không thể dùng email này.");
+      return;
+    }
+
+    const duplicate = members.find(
+      (m) => m.memberId !== member.memberId && m.email.toLowerCase() === trimmedEmail
+    );
+    if (duplicate) {
+      setError(`Email "${trimmedEmail}" đã được sử dụng bởi ${duplicate.fullName}.`);
+      return;
+    }
+
+    const updated: MemberItem = {
+      ...member,
+      fullName: trimmedName,
+      email: trimmedEmail,
+      phone: trimmedPhone || "Chưa cập nhật",
+      role,
+      status,
+    };
+
+    onSave(updated);
+    setSuccess("Đã cập nhật thông tin thành viên thành công!");
+    setTimeout(() => {
+      onClose();
+    }, 1000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+      <div
+        className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95"
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+      >
+        <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+              <Edit3 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                Chỉnh sửa thành viên
+              </h3>
+              <span className="text-[11px] font-mono text-[#7E7068]">{member.referralCode}</span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Họ và tên *</label>
+            <input
+              type="text"
+              required
+              autoFocus
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Ví dụ: Nguyễn Thị Trúc Hân"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Số điện thoại *</label>
+            <input
+              type="tel"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0888670637"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Email / Gmail đăng nhập *</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="truchan16092005@gmail.com"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Vai trò (Phân quyền)</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as "admin" | "btc_sale")}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
+            >
+              <option value="btc_sale">Thành viên gây quỹ (BTC Sale)</option>
+              <option value="admin">Quản trị viên (Admin)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-bold text-[#342A24] block">Trạng thái tài khoản</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "active" | "inactive")}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
+            >
+              <option value="active">🟢 Đang hoạt động (Cho phép đăng nhập)</option>
+              <option value="inactive">🔴 Tạm dừng (Khóa đăng nhập)</option>
+            </select>
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600" />
+              <span>{success}</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F0E5D8]">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2.5 rounded-xl bg-[#2D6338] hover:bg-[#23502D] text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              Lưu thay đổi
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+});
+
+// ==========================================
+// SUB-COMPONENT: MODAL CHI TIẾT ĐƠN HÀNG CỦA THÀNH VIÊN
+// ==========================================
+const MemberOrdersModal = memo(function MemberOrdersModal({
+  member,
+  orders,
+  onClose,
+}: {
+  member: MemberItem;
+  orders: Order[];
+  onClose: () => void;
+}) {
+  const memberOrders = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        o.created_by_member_id === member.memberId ||
+        o.referral_code === member.referralCode ||
+        (o.introducer_info && o.introducer_info.includes(member.referralCode))
+    );
+  }, [orders, member]);
+
+  const totalRevenue = useMemo(() => {
+    return memberOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
+  }, [memberOrders]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+      <div
+        className="w-full max-w-4xl bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]"
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+      >
+        {/* Header */}
+        <div className="p-5 bg-[#FFF8EE] border-b border-[#F0E5D8] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D] font-extrabold text-base shadow-xs">
+              🌱
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
+                  Đơn hàng do {member.fullName} giới thiệu
+                </h3>
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-full bg-white text-[#2D6338] border border-[#9ed4a3]">
+                  {member.referralCode}
+                </span>
+              </div>
+              <p className="text-xs text-[#7E7068] mt-0.5">
+                {member.email} • {member.phone} • Tham gia từ {member.joinedDate}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-white text-gray-400 hover:text-gray-700 cursor-pointer transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-[#FFFDF9] p-3.5 rounded-2xl border border-[#F0E5D8]">
+              <span className="text-[11px] text-[#7E7068] font-bold block">Tổng số đơn đã chốt</span>
+              <span className="text-xl font-extrabold text-[#231B16]">{memberOrders.length}</span>
+            </div>
+            <div className="bg-[#FFFDF9] p-3.5 rounded-2xl border border-[#F0E5D8]">
+              <span className="text-[11px] text-[#7E7068] font-bold block">Tổng doanh số gây quỹ</span>
+              <MoneyDisplay amount={totalRevenue} className="text-xl font-extrabold text-[#2D6338]" />
+            </div>
+            <div className="bg-[#FFFDF9] p-3.5 rounded-2xl border border-[#F0E5D8]">
+              <span className="text-[11px] text-[#7E7068] font-bold block">Tỷ lệ thanh toán</span>
+              <span className="text-xl font-extrabold text-[#231B16]">
+                {memberOrders.length > 0
+                  ? `${Math.round((memberOrders.filter((o) => o.payment_status === "paid").length / memberOrders.length) * 100)}%`
+                  : "0%"}
+              </span>
+            </div>
+          </div>
+
+          {/* Orders Table */}
+          {memberOrders.length === 0 ? (
+            <div className="py-12 text-center space-y-2">
+              <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto" />
+              <p className="font-bold text-sm text-[#231B16]">Chưa có đơn hàng nào</p>
+              <p className="text-xs text-[#7E7068]">
+                Các đơn hàng tiếp theo được đặt với mã {member.referralCode} sẽ tự động hiển thị tại đây.
+              </p>
+            </div>
+          ) : (
+            <div className="border border-[#F0E5D8] rounded-2xl overflow-x-auto shadow-2xs">
+              <table className="w-full min-w-[750px] text-left text-xs">
+                <thead>
+                  <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase text-[10px]">
+                    <th className="py-2.5 px-3 text-center w-12 whitespace-nowrap">STT</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Mã đơn</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Thời gian đặt</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Khách hàng</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Địa chỉ nhận</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Tổng tiền</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Thanh toán</th>
+                    <th className="py-2.5 px-3.5 whitespace-nowrap">Trạng thái</th>
+                    <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0E5D8]">
+                  {memberOrders.map((ord, idx) => (
+                    <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
+                      <td className="py-3 px-3 text-center font-bold text-[#7E7068] text-[11px]">
+                        {idx + 1}
+                      </td>
+                      <td className="py-3 px-3.5 font-mono font-bold text-[#1B3622]">
+                        {ord.order_code}
+                      </td>
+                      <td className="py-3 px-3.5 text-[#7E7068] whitespace-nowrap">
+                        {new Date(ord.created_at).toLocaleDateString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          day: "2-digit",
+                          month: "2-digit",
+                        })}
+                      </td>
+                      <td className="py-3 px-3.5">
+                        <span className="font-bold text-[#231B16] block">{ord.buyer_name}</span>
+                        <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
+                      </td>
+                      <td className="py-3 px-3.5 text-[#7E7068] max-w-[160px] truncate" title={`${ord.address_detail}, ${ord.district}, ${ord.province}`}>
+                        {ord.address_detail}, {ord.district}
+                      </td>
+                      <td className="py-3 px-3.5">
+                        <MoneyDisplay amount={ord.final_amount} className="font-extrabold text-[#1B3622]" />
+                      </td>
+                      <td className="py-3 px-3.5">
+                        <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
+                          {PAYMENT_STATUS_LABELS[ord.payment_status]}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-3.5">
+                        <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                          {ORDER_STATUS_LABELS[ord.order_status]}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-3.5 text-right">
+                        <Link
+                          href={`/admin/orders/${ord.order_id}`}
+                          className="px-2.5 py-1 rounded-lg bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[11px] font-bold border border-[#F0E5D8] inline-flex items-center gap-1 transition-colors"
+                        >
+                          <span>Xem</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-[#FFF8EE] border-t border-[#F0E5D8] flex items-center justify-between">
+          <Link
+            href="/admin/orders"
+            className="text-xs font-bold text-[#2D6338] hover:underline inline-flex items-center gap-1"
+          >
+            <span>Chuyển đến trang Tất cả đơn hàng</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Link>
+          <button
+            onClick={onClose}
+            className="px-5 py-2 rounded-full bg-white border border-[#F0E5D8] text-xs font-bold text-[#5C4D44] hover:bg-gray-100 cursor-pointer shadow-2xs transition-colors"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ==========================================
+// MAIN COMPONENT: ADMIN MEMBERS PAGE
+// ==========================================
 export default function AdminMembersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
   const [members, setMembers] = useState<MemberItem[]>([]);
+  const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
 
   useEffect(() => {
     setOrders(getStoredOrders());
@@ -63,13 +757,7 @@ export default function AdminMembersPage() {
     window.addEventListener("gieomo_orders_updated", handleOrdersUpdate);
     window.addEventListener("gieomo_members_updated", handleMembersUpdate);
 
-    // Tự động làm mới trạng thái trực tuyến mỗi 15 giây
-    const presenceTimer = setInterval(() => {
-      setMembers(getStoredMembers());
-    }, 15000);
-
     return () => {
-      clearInterval(presenceTimer);
       window.removeEventListener("gieomo_orders_updated", handleOrdersUpdate);
       window.removeEventListener("gieomo_members_updated", handleMembersUpdate);
     };
@@ -79,100 +767,33 @@ export default function AdminMembersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
   const [passwordMember, setPasswordMember] = useState<MemberItem | null>(null);
-
-  // Edit member modal states
   const [editingMember, setEditingMember] = useState<MemberItem | null>(null);
-  const [editFullName, setEditFullName] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editRole, setEditRole] = useState<"admin" | "btc_sale">("btc_sale");
-  const [editStatus, setEditStatus] = useState<"active" | "inactive">("active");
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
-  // Form states for new member
-  const [newFullName, setNewFullName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "btc_sale">("btc_sale");
-  const [newReferralCode, setNewReferralCode] = useState("");
-  const [newPassword, setNewPassword] = useState("MamMo@123");
-  const [formError, setFormError] = useState<string | null>(null);
+  // O(N) Order lookup calculation indexed by memberId & referralCode
+  const { statsByMemberId, statsByReferralCode } = useMemo(() => {
+    const byId = new Map<string, { count: number; revenue: number }>();
+    const byRef = new Map<string, { count: number; revenue: number }>();
 
-  // Password modal states
-  const [changePasswordInput, setChangePasswordInput] = useState("");
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+    for (const o of orders) {
+      const rev = o.final_amount || 0;
+      if (o.created_by_member_id) {
+        const cur = byId.get(o.created_by_member_id) || { count: 0, revenue: 0 };
+        byId.set(o.created_by_member_id, { count: cur.count + 1, revenue: cur.revenue + rev });
+      }
+      if (o.referral_code) {
+        const cleanRef = o.referral_code.toUpperCase();
+        const cur = byRef.get(cleanRef) || { count: 0, revenue: 0 };
+        byRef.set(cleanRef, { count: cur.count + 1, revenue: cur.revenue + rev });
+      }
+    }
+    return { statsByMemberId: byId, statsByReferralCode: byRef };
+  }, [orders]);
 
   const handleCopy = (code: string) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
     navigator.clipboard.writeText(`${origin}/?ref=${code}`);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
-  };
-
-  const handleNameChange = (name: string) => {
-    setNewFullName(name);
-    // Auto generate referral code if not manually set or matching previous auto format
-    if (!newReferralCode || newReferralCode.startsWith("MAM-")) {
-      setNewReferralCode(generateReferralFromName(name));
-    }
-  };
-
-  const handleCreateMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-    if (!newFullName || !newEmail) return;
-
-    const refCode = (newReferralCode.trim() || generateReferralFromName(newFullName)).toUpperCase();
-
-    // Check duplicate referral code
-    if (members.some((m) => m.referralCode.toUpperCase() === refCode)) {
-      setFormError(`Mã referral "${refCode}" đã tồn tại. Vui lòng đặt mã khác.`);
-      return;
-    }
-
-    const today = new Date();
-    const joinedDateStr = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
-
-    const newMember: MemberItem = {
-      memberId: `mem-${Date.now()}`,
-      fullName: newFullName,
-      email: newEmail,
-      phone: newPhone || "Chưa cập nhật",
-      role: newRole,
-      referralCode: refCode,
-      totalOrders: 0,
-      totalRevenue: 0,
-      status: "active",
-      joinedDate: joinedDateStr,
-      password: newPassword,
-    };
-
-    const updated = [newMember, ...members];
-    setMembers(updated);
-    saveStoredMembers(updated);
-    setIsModalOpen(false);
-
-    // Reset form
-    setNewFullName("");
-    setNewEmail("");
-    setNewPhone("");
-    setNewReferralCode("");
-    setNewRole("btc_sale");
-    setFormError(null);
-  };
-
-  const handleOpenEdit = (m: MemberItem) => {
-    setEditingMember(m);
-    setEditFullName(m.fullName);
-    setEditEmail(m.email);
-    setEditPhone(m.phone === "Chưa cập nhật" ? "" : m.phone);
-    setEditRole(m.role);
-    setEditStatus(m.status || "active");
-    setEditError(null);
-    setEditSuccess(null);
   };
 
   const handleToggleStatus = (m: MemberItem) => {
@@ -188,51 +809,9 @@ export default function AdminMembersPage() {
     saveStoredMembers(updated);
   };
 
-  const handleSaveMemberInfo = (e: React.FormEvent) => {
-    e.preventDefault();
-    setEditError(null);
-
-    if (!editingMember) return;
-
-    const trimmedName = editFullName.trim();
-    const trimmedEmail = editEmail.trim().toLowerCase();
-    const trimmedPhone = editPhone.trim();
-
-    if (!trimmedName) {
-      setEditError("Vui lòng nhập họ và tên thành viên.");
-      return;
-    }
-
-    if (!trimmedEmail) {
-      setEditError("Vui lòng nhập email/Gmail.");
-      return;
-    }
-
-    if (trimmedEmail === "admin@mammo.vn") {
-      setEditError("Tài khoản admin cũ đã bị thu hồi, không thể dùng email này.");
-      return;
-    }
-
-    // Check duplicate email
-    const duplicate = members.find(
-      (m) => m.memberId !== editingMember.memberId && m.email.toLowerCase() === trimmedEmail
-    );
-    if (duplicate) {
-      setEditError(`Email "${trimmedEmail}" đã được sử dụng bởi ${duplicate.fullName}.`);
-      return;
-    }
-
+  const handleSaveMemberInfo = (updatedMember: MemberItem) => {
     const updated = members.map((m) =>
-      m.memberId === editingMember.memberId
-        ? {
-            ...m,
-            fullName: trimmedName,
-            email: trimmedEmail,
-            phone: trimmedPhone || "Chưa cập nhật",
-            role: editRole,
-            status: editStatus,
-          }
-        : m
+      m.memberId === updatedMember.memberId ? updatedMember : m
     );
 
     setMembers(updated);
@@ -244,10 +823,13 @@ export default function AdminMembersPage() {
         const rawSession = localStorage.getItem("gieomo_admin_session");
         if (rawSession) {
           const session = JSON.parse(rawSession);
-          if (session.email?.toLowerCase() === editingMember.email.toLowerCase() || (editingMember.memberId === "baotri-system" && session.email === "baotri@gieomo.store")) {
-            session.name = trimmedName;
-            session.email = trimmedEmail;
-            session.role = editRole;
+          if (
+            session.email?.toLowerCase() === updatedMember.email.toLowerCase() ||
+            (updatedMember.memberId === "baotri-system" && session.email === "baotri@gieomo.store")
+          ) {
+            session.name = updatedMember.fullName;
+            session.email = updatedMember.email;
+            session.role = updatedMember.role;
             localStorage.setItem("gieomo_admin_session", JSON.stringify(session));
             window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
           }
@@ -256,12 +838,6 @@ export default function AdminMembersPage() {
         console.error(err);
       }
     }
-
-    setEditSuccess("Đã cập nhật thông tin thành viên thành công!");
-    setTimeout(() => {
-      setEditSuccess(null);
-      setEditingMember(null);
-    }, 1200);
   };
 
   const handleConfirmRevoke = () => {
@@ -271,41 +847,25 @@ export default function AdminMembersPage() {
       setDeletingMember(null);
       return;
     }
-    const updated = members.filter((m) => m.memberId !== deletingMember.memberId);
-    setMembers(updated);
-    saveStoredMembers(updated);
+    deleteStoredMember(deletingMember.memberId);
+    setMembers(getStoredMembers());
     setDeletingMember(null);
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError(null);
-
-    if (changePasswordInput.length < 6) {
-      setPasswordError("Mật khẩu mới phải có tối thiểu 6 ký tự.");
-      return;
-    }
-
-    if (changePasswordInput !== confirmPasswordInput) {
-      setPasswordError("Mật khẩu xác nhận không khớp.");
-      return;
-    }
-
+  const handleSavePassword = (newPass: string) => {
     if (!passwordMember) return;
-
     const updated = members.map((m) =>
-      m.memberId === passwordMember.memberId ? { ...m, password: changePasswordInput } : m
+      m.memberId === passwordMember.memberId ? { ...m, password: newPass } : m
     );
-
     setMembers(updated);
     saveStoredMembers(updated);
-    setPasswordSuccess(`Đã cập nhật mật khẩu mới cho ${passwordMember.fullName}!`);
-    setTimeout(() => {
-      setPasswordSuccess(null);
-      setPasswordMember(null);
-      setChangePasswordInput("");
-      setConfirmPasswordInput("");
-    }, 1500);
+  };
+
+  const handleCreateMember = (newMember: MemberItem) => {
+    const updated = [newMember, ...members];
+    setMembers(updated);
+    saveStoredMembers(updated);
+    setIsModalOpen(false);
   };
 
   return (
@@ -332,32 +892,33 @@ export default function AdminMembersPage() {
 
       {/* Members Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full min-w-[980px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
-                <th className="py-2.5 px-3">Thành viên</th>
-                <th className="py-2.5 px-2.5">Hiện diện web</th>
-                <th className="py-2.5 px-2.5">Quyền tài khoản</th>
-                <th className="py-2.5 px-2.5">Vai trò</th>
-                <th className="py-2.5 px-2.5">Ngày tham gia</th>
-                <th className="py-2.5 px-2.5">Mã Referral</th>
-                <th className="py-2.5 px-2.5">Đơn đã chốt</th>
-                <th className="py-2.5 px-2.5">Doanh số gây quỹ</th>
-                <th className="py-2.5 px-3 text-right">Thao tác</th>
+                <th className="py-2.5 px-2 text-center w-10 whitespace-nowrap">STT</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Thành viên</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Hiện diện web</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Quyền tài khoản</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Vai trò</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Ngày tham gia</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Mã Referral</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Đơn đã chốt</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Doanh số gây quỹ</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {members.map((m, idx) => {
-                const mOrders = orders.filter(
-                  (o) =>
-                    o.created_by_member_id === m.memberId ||
-                    o.referral_code === m.referralCode ||
-                    (o.introducer_info && o.introducer_info.includes(m.referralCode))
-                );
-                const displayOrdersCount = mOrders.length > 0 ? mOrders.length : m.totalOrders;
-                const displayRevenue = mOrders.length > 0 ? mOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) : m.totalRevenue;
+                const statById = statsByMemberId.get(m.memberId);
+                const statByRef = m.referralCode ? statsByReferralCode.get(m.referralCode.toUpperCase()) : undefined;
+                const stat = statById || statByRef;
+
+                const displayOrdersCount = stat ? stat.count : m.totalOrders;
+                const displayRevenue = stat ? stat.revenue : m.totalRevenue;
 
                 const isProtected = Boolean(
                   m.isSystemProtected ||
@@ -384,7 +945,7 @@ export default function AdminMembersPage() {
                       <span className="text-[10px] text-[#7E7068] block">{m.email} • {m.phone}</span>
                     </td>
 
-                    {/* Hiện diện web (Trạng thái thực tế người dùng có đang mở web hay không) */}
+                    {/* Hiện diện web */}
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       {presence.isOnline ? (
                         <span
@@ -405,7 +966,7 @@ export default function AdminMembersPage() {
                       )}
                     </td>
 
-                    {/* Quyền tài khoản (Admin chủ động khóa hoặc cấp quyền) */}
+                    {/* Quyền tài khoản */}
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <button
                         type="button"
@@ -445,99 +1006,86 @@ export default function AdminMembersPage() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[10px] font-bold border border-[#b2d9ff]">
-                          <User className="w-2.5 h-2.5" />
+                          <User className="w-2.5 h-2.5 text-[#0068FF]" />
                           <span>Thành viên (BTC Sale)</span>
                         </span>
                       )}
                     </td>
 
-                    <td className="py-2.5 px-2.5 text-[#7E7068] font-medium whitespace-nowrap text-[10.5px]">
-                      <span className="inline-flex items-center gap-1">
+                    <td className="py-2.5 px-2.5 text-[#7E7068] whitespace-nowrap text-[10.5px]">
+                      <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-[#A89B92]" />
-                        <span>{m.joinedDate}</span>
+                        {m.joinedDate}
                       </span>
                     </td>
 
-                    <td className="py-2.5 px-2.5 font-mono font-extrabold text-[#2D6338] text-xs">
-                      {m.referralCode}
+                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-[#1B3622] bg-[#EAF7ED] px-2 py-0.5 rounded-lg border border-[#BFE9C3] text-[10px]">
+                          {m.referralCode}
+                        </span>
+                        <button
+                          onClick={() => handleCopy(m.referralCode)}
+                          className="p-1 rounded-lg text-[#7E7068] hover:text-[#1B3622] hover:bg-[#EAF7ED] transition-colors cursor-pointer"
+                          title="Sao chép link giới thiệu"
+                        >
+                          {copiedCode === m.referralCode ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </td>
 
-                    <td className="py-2.5 px-2.5 font-bold text-[#342A24] whitespace-nowrap">
+                    <td className="py-2.5 px-2.5 font-extrabold text-[#231B16] whitespace-nowrap">
                       <button
                         onClick={() => setViewingOrdersMember(m)}
-                        className="px-2.5 py-1 rounded-full bg-[#BFE9C3]/50 hover:bg-[#BFE9C3] text-[#16381D] font-extrabold text-[10.5px] inline-flex items-center gap-1 transition-all border border-[#9ed4a3] cursor-pointer shadow-2xs group"
-                        title="Nhấn để xem danh sách đơn hàng chi tiết"
+                        className="hover:text-[#2D6338] hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Bấm để xem danh sách đơn hàng đã chốt"
                       >
                         <span>{displayOrdersCount} đơn</span>
-                        <Eye className="w-3 h-3 text-[#2D6338] group-hover:scale-110 transition-transform" />
+                        <Eye className="w-3 h-3 text-gray-400" />
                       </button>
                     </td>
 
-                    <td className="py-2.5 px-2.5 whitespace-nowrap">
-                      <MoneyDisplay amount={displayRevenue} className="font-extrabold text-[#1B3622] text-xs" />
+                    <td className="py-2.5 px-2.5 font-extrabold text-[#1B3622] whitespace-nowrap">
+                      <MoneyDisplay amount={displayRevenue} />
                     </td>
 
                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => setViewingOrdersMember(m)}
-                          className="px-2 py-1 rounded-lg border border-[#BFE9C3] bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Xem các đơn hàng đã giới thiệu"
+                          onClick={() => setEditingMember(m)}
+                          className="p-1.5 rounded-xl hover:bg-[#FFF8EE] text-[#5C4D44] hover:text-[#231B16] transition-colors cursor-pointer border border-transparent hover:border-[#F0E5D8]"
+                          title="Chỉnh sửa thông tin"
                         >
-                          <Eye className="w-3 h-3 text-[#2D6338]" />
-                          <span className="hidden sm:inline">Xem đơn</span>
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
                         <button
-                          onClick={() => handleCopy(m.referralCode)}
-                          className="px-2.5 py-1 rounded-lg border border-[#F0E5D8] bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#4A3B32] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                          title={`Sao chép link bán hàng gắn mã giới thiệu của ${m.fullName}: ?ref=${m.referralCode}`}
-                        >
-                          {copiedCode === m.referralCode ? (
-                            <>
-                              <Check className="w-3 h-3 text-[#2D6338]" />
-                              <span className="text-[#2D6338]">Đã chép link</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3 text-[#7E7068]" />
-                              <span>Link ref</span>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenEdit(m)}
-                          className="px-2 py-1 rounded-lg border border-[#CFE8FF] bg-[#F0F7FF] hover:bg-[#DCEEFF] text-[#0C4A6E] text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Chỉnh sửa thông tin thành viên (Tên, SĐT, Gmail)"
-                        >
-                          <Edit3 className="w-3 h-3 text-[#0284C7]" />
-                          <span className="hidden sm:inline">Sửa</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPasswordMember(m);
-                            setChangePasswordInput("");
-                            setConfirmPasswordInput("");
-                            setPasswordError(null);
-                            setPasswordSuccess(null);
-                          }}
-                          className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10.5px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setPasswordMember(m)}
+                          className="p-1.5 rounded-xl hover:bg-amber-50 text-amber-700 transition-colors cursor-pointer border border-transparent hover:border-amber-200"
                           title="Đổi mật khẩu tài khoản"
                         >
-                          <KeyRound className="w-3 h-3 text-amber-700" />
-                          <span className="hidden sm:inline">Đổi pass</span>
+                          <KeyRound className="w-3.5 h-3.5" />
                         </button>
 
-                        {m.memberId !== "baotri-system" && (
+                        {!isProtected ? (
                           <button
                             onClick={() => setDeletingMember(m)}
-                            className="p-1 rounded-lg border border-[#FED7D7] bg-[#FFF5F5] hover:bg-[#FED7D7] text-[#E53E3E] transition-colors cursor-pointer"
+                            className="p-1.5 rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
                             title="Thu hồi quyền thành viên"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                        ) : (
+                          <span
+                            className="p-1.5 text-gray-300 cursor-not-allowed inline-block"
+                            title="Tài khoản bảo trì hệ thống gốc không thể thu hồi"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 opacity-30" />
+                          </span>
                         )}
                       </div>
                     </td>
@@ -549,254 +1097,49 @@ export default function AdminMembersPage() {
         </div>
       </div>
 
-      {/* MODAL: CHỈNH SỬA THÔNG TIN THÀNH VIÊN */}
+      {/* MODAL: CẤP TÀI KHOẢN MỚI */}
+      <CreateMemberModal
+        isOpen={isModalOpen}
+        members={members}
+        onClose={() => setIsModalOpen(false)}
+        onCreate={handleCreateMember}
+      />
+
+      {/* MODAL: CHỈNH SỬA THÀNH VIÊN */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center">
-                  <Edit3 className="w-4 h-4 text-sky-600" />
-                </div>
-                <div>
-                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                    Chỉnh sửa thông tin thành viên
-                  </h3>
-                  <p className="text-[11px] text-[#7E7068]">
-                    Mã Referral: <code className="font-mono font-bold text-[#2D6338]">{editingMember.referralCode}</code>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingMember(null)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveMemberInfo} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Họ và tên *</label>
-                <input
-                  type="text"
-                  required
-                  value={editFullName}
-                  onChange={(e) => setEditFullName(e.target.value)}
-                  placeholder="Ví dụ: Nguyễn Thị Trúc Hân"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Số điện thoại *</label>
-                <input
-                  type="tel"
-                  required
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  placeholder="0888670637"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Email / Gmail đăng nhập *</label>
-                <input
-                  type="email"
-                  required
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  placeholder="truchan16092005@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Vai trò (Phân quyền)</label>
-                <select
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as "admin" | "btc_sale")}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
-                >
-                  <option value="btc_sale">Thành viên gây quỹ (BTC Sale)</option>
-                  <option value="admin">Quản trị viên (Admin)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Trạng thái tài khoản</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as "active" | "inactive")}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white cursor-pointer font-semibold text-[#342A24]"
-                >
-                  <option value="active">🟢 Đang hoạt động (Cho phép đăng nhập)</option>
-                  <option value="inactive">🔴 Tạm dừng (Khóa đăng nhập)</option>
-                </select>
-              </div>
-
-              {editError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
-                  {editError}
-                </div>
-              )}
-
-              {editSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span>{editSuccess}</span>
-                </div>
-              )}
-
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F0E5D8]">
-                <button
-                  type="button"
-                  onClick={() => setEditingMember(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#2D6338] hover:bg-[#23502D] text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  Lưu thay đổi
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EditMemberModal
+          member={editingMember}
+          members={members}
+          onClose={() => setEditingMember(null)}
+          onSave={handleSaveMemberInfo}
+        />
       )}
 
-      {/* MODAL: CẤP TÀI KHOẢN MỚI */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                  Cấp tài khoản mới
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* MODAL: ĐỔI MẬT KHẨU */}
+      {passwordMember && (
+        <ChangePasswordModal
+          member={passwordMember}
+          onClose={() => setPasswordMember(null)}
+          onSave={handleSavePassword}
+        />
+      )}
 
-            <form onSubmit={handleCreateMember} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Họ và tên *</label>
-                <input
-                  type="text"
-                  required
-                  value={newFullName}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Ví dụ: Lê Thị Thanh"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Email đăng nhập *</label>
-                <input
-                  type="email"
-                  required
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="thanhle@mammo.vn"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Số điện thoại</label>
-                  <input
-                    type="tel"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    placeholder="0912345678"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Vai trò (Role) *</label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as "admin" | "btc_sale")}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                  >
-                    <option value="btc_sale">Thành viên (BTC Sale)</option>
-                    <option value="admin">Quản trị viên (Admin)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Mã giới thiệu (Referral)</label>
-                  <input
-                    type="text"
-                    value={newReferralCode}
-                    onChange={(e) => setNewReferralCode(e.target.value.toUpperCase())}
-                    placeholder="Tự sinh nếu để trống"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-mono uppercase"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Mật khẩu khởi tạo</label>
-                  <input
-                    type="text"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-mono bg-[#FFFDF9]"
-                  />
-                </div>
-              </div>
-
-              {formError && (
-                <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium text-center">
-                  {formError}
-                </div>
-              )}
-
-              <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] leading-relaxed">
-                💡 <strong>Lưu ý:</strong> Quản trị viên (Admin) có toàn quyền cấu hình và tài chính. Thành viên (BTC Sale) chỉ có thể xem số liệu của bản thân và dùng tính năng Nhập đơn hộ.
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3]"
-                >
-                  Xác nhận cấp tài khoản ➔
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* MODAL: CHI TIẾT ĐƠN HÀNG GIỚI THIỆU */}
+      {viewingOrdersMember && (
+        <MemberOrdersModal
+          member={viewingOrdersMember}
+          orders={orders}
+          onClose={() => setViewingOrdersMember(null)}
+        />
       )}
 
       {/* MODAL: XÁC NHẬN THU HỒI TÀI KHOẢN */}
       {deletingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#FED7D7] shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#FED7D7] shadow-2xl space-y-4 animate-in zoom-in-95 text-center"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
@@ -822,282 +1165,6 @@ export default function AdminMembersPage() {
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
               >
                 Xác nhận thu hồi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ĐỔI MẬT KHẨU THÀNH VIÊN */}
-      {passwordMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 p-6 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[#F0E5D8]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                    Đổi mật khẩu thành viên
-                  </h3>
-                  <p className="text-xs text-[#7E7068]">
-                    {passwordMember.fullName} ({passwordMember.email})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setPasswordMember(null)}
-                className="p-1 rounded-xl text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePassword} className="space-y-4">
-              <div className="space-y-1">
-                <label className="font-bold text-xs text-[#342A24] block">Mật khẩu mới *</label>
-                <input
-                  type="password"
-                  required
-                  value={changePasswordInput}
-                  onChange={(e) => setChangePasswordInput(e.target.value)}
-                  placeholder="Tối thiểu 6 ký tự"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-xs text-[#342A24] block">Xác nhận mật khẩu mới *</label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPasswordInput}
-                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                  placeholder="Nhập lại mật khẩu mới"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-amber-400"
-                />
-              </div>
-
-              {passwordError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
-                  {passwordError}
-                </div>
-              )}
-
-              {passwordSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span>{passwordSuccess}</span>
-                </div>
-              )}
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setPasswordMember(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-xs transition-colors"
-                >
-                  Lưu mật khẩu mới
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CHI TIẾT CÁC ĐƠN HÀNG DO THÀNH VIÊN GIỚI THIỆU */}
-      {viewingOrdersMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-4xl bg-white rounded-3xl border border-[#F0E5D8] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="p-5 bg-[#FFF8EE] border-b border-[#F0E5D8] flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D] font-extrabold text-base shadow-xs">
-                  🌱
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                      Đơn hàng do {viewingOrdersMember.fullName} giới thiệu
-                    </h3>
-                    <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-full bg-white text-[#2D6338] border border-[#9ed4a3]">
-                      {viewingOrdersMember.referralCode}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#7E7068] mt-0.5">
-                    {viewingOrdersMember.email} • {viewingOrdersMember.phone} • Tham gia từ {viewingOrdersMember.joinedDate}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setViewingOrdersMember(null)}
-                className="p-2 rounded-full hover:bg-white text-gray-400 hover:text-gray-700 cursor-pointer transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            {(() => {
-              const allSourceOrders = orders;
-              const memberOrders = allSourceOrders.filter(
-                (o) =>
-                  o.created_by_member_id === viewingOrdersMember.memberId ||
-                  o.referral_code === viewingOrdersMember.referralCode ||
-                  (o.introducer_info && o.introducer_info.includes(viewingOrdersMember.referralCode))
-              );
-              const modalOrdersCount = memberOrders.length > 0 ? memberOrders.length : viewingOrdersMember.totalOrders;
-              const validOrders = memberOrders.filter((o) => o.order_status !== "cancelled");
-              const modalRevenue = memberOrders.length > 0 
-                ? validOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0) 
-                : viewingOrdersMember.totalRevenue;
-
-              const pendingPaymentOrders = validOrders.filter((o) => o.payment_status === "pending");
-              const cancelledOrders = memberOrders.filter((o) => o.order_status === "cancelled");
-
-              return (
-                <>
-                  {/* Top Summary Stats */}
-                  <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#FFFDF9] border-b border-[#F0E5D8]">
-                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                      <span className="text-[11px] font-bold text-[#7E7068] block">Tổng đơn đã chốt</span>
-                      <span className="text-xl font-extrabold text-[#231B16] mt-0.5 block">
-                        {modalOrdersCount} đơn
-                      </span>
-                    </div>
-                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                      <span className="text-[11px] font-bold text-[#7E7068] block">Doanh số gây quỹ mang lại</span>
-                      <MoneyDisplay amount={modalRevenue} className="text-xl font-extrabold text-[#2D6338] mt-0.5 block" />
-                    </div>
-                    <div className="p-3.5 rounded-2xl bg-white border border-[#F0E5D8] shadow-2xs">
-                      <span className="text-[11px] font-bold text-[#7E7068] block">Tình trạng ghi nhận</span>
-                      {modalOrdersCount === 0 ? (
-                        <span className="text-xs font-semibold text-gray-400 mt-1.5 inline-flex items-center gap-1">
-                          <span>Chưa phát sinh đơn hàng</span>
-                        </span>
-                      ) : pendingPaymentOrders.length > 0 ? (
-                        <span className="text-xs font-bold text-amber-700 mt-1.5 inline-flex items-center gap-1" title="Có đơn hàng đang chờ khách chuyển khoản hoặc xác nhận thanh toán">
-                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                          <span>Có {pendingPaymentOrders.length} đơn chờ thanh toán</span>
-                        </span>
-                      ) : cancelledOrders.length === modalOrdersCount ? (
-                        <span className="text-xs font-bold text-red-600 mt-1.5 inline-flex items-center gap-1">
-                          <span>Tất cả đơn đã bị hủy</span>
-                        </span>
-                      ) : (
-                        <span className="text-xs font-bold text-[#2D6338] mt-1.5 inline-flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Đã ghi nhận đủ vào quỹ Mầm Mơ</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Orders Table */}
-                  <div className="flex-1 overflow-y-auto p-5">
-                    {memberOrders.length === 0 ? (
-                      <div className="py-12 text-center space-y-2">
-                        <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto" />
-                        <p className="font-bold text-sm text-[#231B16]">Chưa có đơn hàng mẫu nào</p>
-                        <p className="text-xs text-[#7E7068]">
-                          Các đơn hàng tiếp theo được đặt với mã {viewingOrdersMember.referralCode} sẽ tự động hiển thị tại đây.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="border border-[#F0E5D8] rounded-2xl overflow-hidden shadow-2xs">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase">
-                              <th className="py-3 px-3 text-center w-12">STT</th>
-                              <th className="py-3 px-3.5">Mã đơn</th>
-                              <th className="py-3 px-3.5">Thời gian đặt</th>
-                              <th className="py-3 px-3.5">Khách hàng</th>
-                              <th className="py-3 px-3.5">Địa chỉ nhận</th>
-                              <th className="py-3 px-3.5">Tổng tiền</th>
-                              <th className="py-3 px-3.5">Thanh toán</th>
-                              <th className="py-3 px-3.5">Trạng thái</th>
-                              <th className="py-3 px-3.5 text-right">Chi tiết</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#F0E5D8]">
-                            {memberOrders.map((ord, idx) => (
-                              <tr key={ord.order_id} className="hover:bg-[#FFFDF9] transition-colors">
-                                <td className="py-3 px-3 text-center font-bold text-[#7E7068] text-[11px]">
-                                  {idx + 1}
-                                </td>
-                                <td className="py-3 px-3.5 font-mono font-bold text-[#1B3622]">
-                                  {ord.order_code}
-                                </td>
-                                <td className="py-3 px-3.5 text-[#7E7068] whitespace-nowrap">
-                                  {new Date(ord.created_at).toLocaleDateString("vi-VN", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                  })}
-                                </td>
-                                <td className="py-3 px-3.5">
-                                  <span className="font-bold text-[#231B16] block">{ord.buyer_name}</span>
-                                  <span className="text-[10px] text-gray-500">{ord.buyer_phone}</span>
-                                </td>
-                                <td className="py-3 px-3.5 text-[#7E7068] max-w-[160px] truncate" title={`${ord.address_detail}, ${ord.district}, ${ord.province}`}>
-                                  {ord.address_detail}, {ord.district}
-                                </td>
-                                <td className="py-3 px-3.5">
-                                  <MoneyDisplay amount={ord.final_amount} className="font-extrabold text-[#1B3622]" />
-                                </td>
-                                <td className="py-3 px-3.5">
-                                  <Badge variant={ord.payment_status === "paid" ? "success" : "warning"}>
-                                    {PAYMENT_STATUS_LABELS[ord.payment_status]}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 px-3.5">
-                                  <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
-                                    {ORDER_STATUS_LABELS[ord.order_status]}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 px-3.5 text-right">
-                                  <Link
-                                    href={`/admin/orders/${ord.order_id}`}
-                                    className="px-2.5 py-1 rounded-lg bg-[#FFF8EE] hover:bg-[#BFE9C3]/50 text-[#16381D] text-[11px] font-bold border border-[#F0E5D8] inline-flex items-center gap-1 transition-colors"
-                                  >
-                                    <span>Xem</span>
-                                    <ExternalLink className="w-3 h-3" />
-                                  </Link>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* Footer */}
-            <div className="p-4 bg-[#FFF8EE] border-t border-[#F0E5D8] flex items-center justify-between">
-              <Link
-                href="/admin/orders"
-                className="text-xs font-bold text-[#2D6338] hover:underline inline-flex items-center gap-1"
-              >
-                <span>Chuyển đến trang Tất cả đơn hàng</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
-              <button
-                onClick={() => setViewingOrdersMember(null)}
-                className="px-5 py-2 rounded-full bg-white border border-[#F0E5D8] text-xs font-bold text-[#5C4D44] hover:bg-gray-100 cursor-pointer shadow-2xs transition-colors"
-              >
-                Đóng
               </button>
             </div>
           </div>

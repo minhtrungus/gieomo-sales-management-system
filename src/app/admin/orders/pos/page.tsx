@@ -369,15 +369,15 @@ export default function AdminPosPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[550px] text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 text-gray-500 font-bold">
-                    <th className="py-2 px-2 w-10 text-center">STT</th>
-                    <th className="py-2 px-2">Sản phẩm</th>
-                    <th className="py-2 px-2 text-right w-24">Đơn giá</th>
-                    <th className="py-2 px-2 text-center w-28">Số lượng</th>
-                    <th className="py-2 px-2 text-right w-28">Thành tiền</th>
-                    <th className="py-2 px-2 w-10 text-center">Xóa</th>
+                  <tr className="border-b border-gray-100 text-gray-500 font-bold text-[10px]">
+                    <th className="py-2 px-2 w-10 text-center whitespace-nowrap">STT</th>
+                    <th className="py-2 px-2 whitespace-nowrap">Sản phẩm</th>
+                    <th className="py-2 px-2 text-right w-24 whitespace-nowrap">Đơn giá</th>
+                    <th className="py-2 px-2 text-center w-28 whitespace-nowrap">Số lượng</th>
+                    <th className="py-2 px-2 text-right w-28 whitespace-nowrap">Thành tiền</th>
+                    <th className="py-2 px-2 w-10 text-center whitespace-nowrap">Xóa</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -617,8 +617,11 @@ export default function AdminPosPage() {
 
       {/* MODAL: HIỆN MÃ VIETQR TẠI QUẦY */}
       {activeQrModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-center animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3 text-left">
               <div>
                 <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">

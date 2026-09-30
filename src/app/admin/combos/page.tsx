@@ -384,16 +384,19 @@ export default function AdminCombosPage() {
 
       {/* Combos Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[750px] text-left text-xs">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-5">Tên Set Combo</th>
-                <th className="py-3.5 px-4">Sản phẩm thành phần ghép</th>
-                <th className="py-3.5 px-4">Giá trọn gói</th>
-                <th className="py-3.5 px-4 text-center">Tồn kho khả dụng</th>
-                <th className="py-3.5 px-4 text-center">Trạng thái</th>
-                <th className="py-3.5 px-5 text-right">Thao tác</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-4 whitespace-nowrap">Tên Set Combo</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Sản phẩm thành phần</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Giá trọn gói</th>
+                <th className="py-2.5 px-3.5 text-center whitespace-nowrap">Tồn kho khả dụng</th>
+                <th className="py-2.5 px-3.5 text-center whitespace-nowrap">Trạng thái</th>
+                <th className="py-2.5 px-4 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -573,8 +576,11 @@ export default function AdminCombosPage() {
 
       {/* MODAL: THÊM COMBO MỚI (ĐA SẢN PHẨM & TÍNH TOÁN GIÁ TRỊ) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -819,8 +825,11 @@ export default function AdminCombosPage() {
 
       {/* MODAL: SỬA COMBO (ĐA SẢN PHẨM & CẬP NHẬT ĐẦY ĐỦ) */}
       {editingCombo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
                 Chỉnh sửa Set Combo: {editingCombo.name}
@@ -1076,8 +1085,11 @@ export default function AdminCombosPage() {
 
       {/* MODAL: XÓA COMBO */}
       {deletingCombo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>

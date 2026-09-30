@@ -63,6 +63,7 @@ export function Drawer({
           sideStyles[side],
           className
         )}
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
       >
         {/* Header */}
         {title && (

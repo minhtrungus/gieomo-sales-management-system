@@ -121,17 +121,20 @@ export default function AdminCustomersPage() {
 
       {/* Customers Table */}
       <div className="bg-white rounded-3xl border border-gray-200/80 shadow-2xs overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-gray-400 italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[780px] text-left text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase">
-                <th className="py-3 px-3 w-12 text-center">STT</th>
-                <th className="py-3 px-4">Họ tên</th>
-                <th className="py-3 px-4">Số điện thoại / Email</th>
-                <th className="py-3 px-4">Người quen / Giới thiệu</th>
-                <th className="py-3 px-4">Địa chỉ giao hàng</th>
-                <th className="py-3 px-4 text-center">Số đơn đã đặt</th>
-                <th className="py-3 px-4 text-right">Tổng tiền ủng hộ</th>
+              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase text-[10px]">
+                <th className="py-2.5 px-3 w-12 text-center whitespace-nowrap">STT</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">Họ tên</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">Số điện thoại / Email</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">Người quen / Giới thiệu</th>
+                <th className="py-2.5 px-4 whitespace-nowrap">Địa chỉ giao hàng</th>
+                <th className="py-2.5 px-4 text-center whitespace-nowrap">Số đơn đã đặt</th>
+                <th className="py-2.5 px-4 text-right whitespace-nowrap">Tổng tiền ủng hộ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">

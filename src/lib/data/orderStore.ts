@@ -24,6 +24,8 @@ let cachedProducts: ExtendedProduct[] | null = null;
 let cachedWarehouses: Warehouse[] | null = null;
 let hasSyncedProductsWithServer = false;
 let hasSyncedCategoriesWithServer = false;
+let hasSyncedMembersWithServer = false;
+let cachedMembers: StoredMember[] | null = null;
 let hasSyncedVouchersWithServer = false;
 let hasSyncedPickupPointsWithServer = false;
 let hasSyncedContactMessagesWithServer = false;
@@ -678,43 +680,62 @@ export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
   isSystemProtected: true,
 };
 
-const SEED_MEMBERS: StoredMember[] = [
-  SYSTEM_MAINTENANCE_ACCOUNT,
-  {
-    memberId: "mem-1",
-    fullName: "Nguyễn Thị Mai Lan",
-    email: "mailan@mammo.vn",
-    role: "btc_sale",
-    referralCode: "MAM-LAN",
-    phone: "0901112233",
-    totalOrders: 0,
-    totalRevenue: 0,
-    status: "active",
-    joinedDate: "20/08/2026",
-    password: "••••••••",
-  },
-  {
-    memberId: "mem-2",
-    fullName: "Trần Minh Quang",
-    email: "minhquang@mammo.vn",
-    role: "btc_sale",
-    referralCode: "MAM-QUANG",
-    phone: "0904445566",
-    totalOrders: 0,
-    totalRevenue: 0,
-    status: "active",
-    joinedDate: "01/09/2026",
-    password: "••••••••",
-  },
-];
+export function syncMembersFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedMembersWithServer) return;
+  hasSyncedMembersWithServer = true;
+  safeFetchJson<{ success: boolean; members: any[] }>("/api/members")
+    .then((data) => {
+      if (data?.success && Array.isArray(data.members)) {
+        if (data.members.length > 0) {
+          const mapped: StoredMember[] = data.members.map((m: any) => ({
+            memberId: m.member_id,
+            fullName: m.full_name,
+            email: m.email || "",
+            role: m.role || "btc_sale",
+            referralCode: m.referral_code || "",
+            phone: m.phone || "Chưa cập nhật",
+            totalOrders: 0,
+            totalRevenue: 0,
+            status: m.status || "active",
+            joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : "01/09/2026",
+            password: m.password || m.password_hash || "MamMo@123",
+          }));
+
+          const hasMaintenance = mapped.some(
+            (m) => m.email.toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
+          );
+          const finalMembers = hasMaintenance ? mapped : [SYSTEM_MAINTENANCE_ACCOUNT, ...mapped];
+
+          cachedMembers = finalMembers;
+          localStorage.setItem("gieomo_members", JSON.stringify(finalMembers));
+          window.dispatchEvent(new Event("gieomo_members_updated"));
+        } else {
+          // If server members is empty, ensure maintenance account only
+          const fallback = [SYSTEM_MAINTENANCE_ACCOUNT];
+          cachedMembers = fallback;
+          localStorage.setItem("gieomo_members", JSON.stringify(fallback));
+          window.dispatchEvent(new Event("gieomo_members_updated"));
+        }
+      }
+    })
+    .catch(() => {
+      // Graceful fallback to cached
+    });
+}
 
 export function getStoredMembers(): StoredMember[] {
-  if (typeof window === "undefined") return SEED_MEMBERS;
+  if (typeof window === "undefined") return [SYSTEM_MAINTENANCE_ACCOUNT];
+  if (!hasSyncedMembersWithServer) {
+    syncMembersFromServer();
+  }
+  if (cachedMembers !== null) return cachedMembers;
   try {
     const raw = localStorage.getItem("gieomo_members");
     if (!raw) {
-      localStorage.setItem("gieomo_members", JSON.stringify(SEED_MEMBERS));
-      return SEED_MEMBERS;
+      const init = [SYSTEM_MAINTENANCE_ACCOUNT];
+      cachedMembers = init;
+      localStorage.setItem("gieomo_members", JSON.stringify(init));
+      return init;
     }
     const parsed: StoredMember[] = JSON.parse(raw);
 
@@ -729,12 +750,11 @@ export function getStoredMembers(): StoredMember[] {
       return !isRevoked;
     });
 
-    // Ensure maintenance account exists initially
     const baotriExists = sanitized.some(
       (m) => m.email.toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
     );
 
-    if (!baotriExists && sanitized.length === 0) {
+    if (!baotriExists) {
       sanitized = [SYSTEM_MAINTENANCE_ACCOUNT, ...sanitized];
       needsUpdate = true;
     }
@@ -743,9 +763,10 @@ export function getStoredMembers(): StoredMember[] {
       localStorage.setItem("gieomo_members", JSON.stringify(sanitized));
     }
 
+    cachedMembers = sanitized;
     return sanitized;
   } catch {
-    return SEED_MEMBERS;
+    return [SYSTEM_MAINTENANCE_ACCOUNT];
   }
 }
 
@@ -766,10 +787,56 @@ export function saveStoredMembers(members: StoredMember[]): void {
       sanitized = [SYSTEM_MAINTENANCE_ACCOUNT, ...sanitized];
     }
 
+    cachedMembers = sanitized;
     localStorage.setItem("gieomo_members", JSON.stringify(sanitized));
     window.dispatchEvent(new Event("gieomo_members_updated"));
+
+    // 3. Sync to Supabase in background
+    sanitized.forEach((m) => {
+      if (m.memberId !== "baotri-system") {
+        fetch("/api/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberId: m.memberId,
+            fullName: m.fullName,
+            email: m.email,
+            phone: m.phone,
+            role: m.role,
+            status: m.status,
+            referralCode: m.referralCode,
+            password: m.password && m.password !== "••••••••" ? m.password : undefined,
+          }),
+        }).catch((err) => console.warn("Could not sync member to server:", err));
+      }
+    });
   } catch (e) {
     console.error("Error saving members to storage", e);
+  }
+}
+
+export function deleteStoredMember(memberId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getStoredMembers();
+    const target = current.find((m) => m.memberId === memberId);
+    const updated = current.filter((m) => m.memberId !== memberId);
+
+    cachedMembers = updated;
+    localStorage.setItem("gieomo_members", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_members_updated"));
+
+    // Sync DELETE to Supabase
+    const params = new URLSearchParams();
+    if (memberId) params.append("id", memberId);
+    if (target?.email) params.append("email", target.email);
+    if (target?.referralCode) params.append("referralCode", target.referralCode);
+
+    fetch(`/api/members?${params.toString()}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete member on server:", err));
+  } catch (e) {
+    console.error("Error deleting member from storage", e);
   }
 }
 
@@ -1589,72 +1656,35 @@ export function syncCategoriesFromServer(): void {
   hasSyncedCategoriesWithServer = true;
   safeFetchJson<{ success: boolean; categories: ProductCategory[] }>("/api/categories")
     .then((data) => {
-      if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
-        const current = getStoredCategories();
-        const map = new Map<string, ProductCategory>();
-
-        // Add current categories first keyed by slug
-        for (const cat of current) {
-          map.set(cat.slug, cat);
-        }
-
-        // Merge or insert server categories
-        for (const cat of data.categories) {
-          const existing = map.get(cat.slug);
-          map.set(cat.slug, existing ? { ...existing, ...cat } : cat);
-        }
-
-        const merged = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-        cachedCategories = merged;
-        localStorage.setItem("gieomo_categories", JSON.stringify(merged));
+      if (data?.success && Array.isArray(data.categories)) {
+        // Server database is the Single Source of Truth
+        cachedCategories = data.categories;
+        localStorage.setItem("gieomo_categories", JSON.stringify(data.categories));
         window.dispatchEvent(new Event("gieomo_categories_updated"));
       }
     })
     .catch(() => {
-      // Graceful fallback to cached/mock categories
+      // Graceful fallback to cached categories
     });
 }
 
 export function getStoredCategories(): ProductCategory[] {
-  if (typeof window === "undefined") return MOCK_CATEGORIES;
+  if (typeof window === "undefined") return [];
   if (!hasSyncedCategoriesWithServer) {
     syncCategoriesFromServer();
   }
   if (cachedCategories !== null) return cachedCategories;
   try {
     const raw = localStorage.getItem("gieomo_categories");
-
-    // If no data in localStorage yet, seed with MOCK_CATEGORIES (first time only)
     if (!raw) {
-      const seeded = [...MOCK_CATEGORIES].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-      cachedCategories = seeded;
-      localStorage.setItem("gieomo_categories", JSON.stringify(seeded));
-      return seeded;
+      return [];
     }
-
     const categories: ProductCategory[] = JSON.parse(raw);
-
-    // Deduplicate corrupted/duplicated entries by slug (keep first occurrence)
-    const map = new Map<string, ProductCategory>();
-    for (const c of categories) {
-      if (!map.has(c.slug)) {
-        map.set(c.slug, c);
-      }
-    }
-
-    // NOTE: Do NOT auto-restore MOCK_CATEGORIES here — that would undo user deletions.
-    // MOCK_CATEGORIES are only used as the initial seed (see above).
-
-    const uniqueCategories = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-    if (uniqueCategories.length !== categories.length) {
-      localStorage.setItem("gieomo_categories", JSON.stringify(uniqueCategories));
-    }
-    cachedCategories = uniqueCategories;
-    return uniqueCategories;
+    cachedCategories = categories;
+    return categories;
   } catch (e) {
     console.error("Error reading gieomo_categories", e);
-    return MOCK_CATEGORIES;
+    return [];
   }
 }
 
@@ -1672,7 +1702,18 @@ export function saveNewCategory(cat: ProductCategory): void {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cat),
-    }).catch((err) => console.warn("Could not persist category to server:", err));
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.category) {
+          const current = getStoredCategories();
+          const reconciled = current.map((c) => (c.slug === cat.slug ? data.category : c));
+          cachedCategories = reconciled;
+          localStorage.setItem("gieomo_categories", JSON.stringify(reconciled));
+          window.dispatchEvent(new Event("gieomo_categories_updated"));
+        }
+      })
+      .catch((err) => console.warn("Could not persist category to server:", err));
   } catch (e) {
     console.error("Error saving new category", e);
   }
@@ -1726,6 +1767,7 @@ export function deleteStoredCategory(categoryId: string): void {
   if (typeof window === "undefined") return;
   try {
     const categories = getStoredCategories();
+    const target = categories.find((c) => c.category_id === categoryId);
     const updated = categories.filter((c) => c.category_id !== categoryId);
     cachedCategories = updated;
     localStorage.setItem("gieomo_categories", JSON.stringify(updated));
@@ -1753,8 +1795,9 @@ export function deleteStoredCategory(categoryId: string): void {
       window.dispatchEvent(new Event("gieomo_products_updated"));
     }
 
-    // Sync deletion to Supabase in background
-    fetch(`/api/categories?id=${encodeURIComponent(categoryId)}`, {
+    // Sync deletion to Supabase in background using category_id and slug
+    const deleteParam = target?.slug ? `${encodeURIComponent(categoryId)}&slug=${encodeURIComponent(target.slug)}` : encodeURIComponent(categoryId);
+    fetch(`/api/categories?id=${deleteParam}`, {
       method: "DELETE",
     }).catch((err) => console.warn("Could not delete category on server:", err));
   } catch (e) {
@@ -1841,17 +1884,30 @@ export interface LoginResult {
   error?: string;
 }
 
-export function verifyAdminLogin(password: string, email?: string): LoginResult {
+export function verifyAdminLogin(password: string, emailOrAccount?: string): LoginResult {
   const currentPass = getStoredAdminPassword();
   const members = getStoredMembers();
-  const cleanEmail = email?.trim().toLowerCase();
+  const cleanInput = (emailOrAccount || "").trim();
+  const cleanLower = cleanInput.toLowerCase();
+  const cleanDigits = cleanInput.replace(/\D/g, "");
 
   // Explicitly deny revoked former BTC leader account
-  if (cleanEmail === "admin@mammo.vn") {
+  if (cleanLower === "admin@mammo.vn") {
     return { success: false, error: "Tài khoản này đã bị thu hồi quyền truy cập hệ thống!" };
   }
 
-  const matchedMember = cleanEmail ? members.find((m) => m.email.toLowerCase() === cleanEmail) : null;
+  // Match member strictly by Email or Phone number (referral code login is disallowed)
+  const matchedMember = cleanInput
+    ? members.find((m) => {
+        const mEmail = (m.email || "").toLowerCase().trim();
+        const mPhone = (m.phone || "").replace(/\D/g, "");
+
+        return (
+          (mEmail && mEmail === cleanLower) ||
+          (cleanDigits.length >= 8 && mPhone === cleanDigits)
+        );
+      })
+    : null;
 
   // 1. Kiểm tra trạng thái tài khoản: Nếu Tạm dừng (inactive) thì KHÓA đăng nhập ngay!
   if (matchedMember && matchedMember.status === "inactive") {
@@ -1862,7 +1918,7 @@ export function verifyAdminLogin(password: string, email?: string): LoginResult 
   }
 
   // System maintenance account authentication (supports custom updated password & default GieoMo@2026)
-  if (cleanEmail === "baotri@gieomo.store" || matchedMember?.memberId === "baotri-system") {
+  if (cleanLower === "baotri@gieomo.store" || cleanLower === "baotri" || matchedMember?.memberId === "baotri-system") {
     const isCustomPass = Boolean(matchedMember?.password && matchedMember.password !== "••••••••" && password === matchedMember.password);
     if (password === "GieoMo@2026" || isCustomPass || password === currentPass) {
       if (typeof window !== "undefined") {
@@ -1872,7 +1928,7 @@ export function verifyAdminLogin(password: string, email?: string): LoginResult 
         }
         localStorage.setItem("gieomo_admin_session", JSON.stringify({
           authenticated: true,
-          email: matchedMember?.email || cleanEmail || "baotri@gieomo.store",
+          email: matchedMember?.email || "baotri@gieomo.store",
           name: matchedMember?.fullName || "Bảo trì Hệ thống",
           role: matchedMember?.role || "admin",
           referralCode: matchedMember?.referralCode || "BAOTRI",
@@ -1889,9 +1945,13 @@ export function verifyAdminLogin(password: string, email?: string): LoginResult 
   }
 
   const isMasterMatch = password === currentPass;
-  const isMemberMatch = matchedMember ? (matchedMember.password === password || password === "MamMo@123") : false;
+  const isMemberMatch = matchedMember
+    ? (Boolean(matchedMember.password && matchedMember.password !== "••••••••" && matchedMember.password === password) ||
+       password === "MamMo@123" ||
+       password === "GieoMo@2026")
+    : false;
 
-  // Fallback passwords (MamMo@123, admin123, GieoMo@2026) only work when the email
+  // Fallback passwords (MamMo@123, admin123, GieoMo@2026) only work when the identifier
   // belongs to a known member — prevents unknown actors from using default passwords.
   const isFallbackMatch =
     Boolean(matchedMember) &&
@@ -1899,12 +1959,13 @@ export function verifyAdminLogin(password: string, email?: string): LoginResult 
 
   // Master password without a matched email: only allow generic (no-email) admin logins.
   // If an unknown email is provided with master password, deny access.
-  const masterAllowed = isMasterMatch && (!cleanEmail || Boolean(matchedMember));
+  const masterAllowed = isMasterMatch && (!cleanInput || Boolean(matchedMember));
 
   if (masterAllowed || isMemberMatch || isFallbackMatch) {
     if (typeof window !== "undefined") {
       const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
-      const name = matchedMember?.fullName || (cleanEmail === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
+      const name = matchedMember?.fullName || (cleanLower === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
+      const finalEmail = matchedMember?.email || (cleanLower.includes("@") ? cleanLower : DEFAULT_ADMIN_EMAIL);
 
       // Cập nhật lần đăng nhập cuối vào thông tin thành viên (ghi đè, không tốn thêm bộ nhớ)
       if (matchedMember) {
@@ -1915,7 +1976,7 @@ export function verifyAdminLogin(password: string, email?: string): LoginResult 
       // Lưu phiên đăng nhập hiện tại (ghi đè hoàn toàn phiên cũ trong localStorage)
       localStorage.setItem("gieomo_admin_session", JSON.stringify({
         authenticated: true,
-        email: cleanEmail || DEFAULT_ADMIN_EMAIL,
+        email: finalEmail,
         name,
         role,
         referralCode: matchedMember?.referralCode || "",

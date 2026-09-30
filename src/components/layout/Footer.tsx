@@ -3,23 +3,28 @@
 import { useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sparkles, Mail, Phone, MapPin } from "lucide-react";
 import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 import { OFFICIAL_STORE_CONFIG } from "@/lib/constants";
 
 export function Footer() {
   const pathname = usePathname();
+  const router = useRouter();
   const settings = useSiteSettings();
 
   const handleFooterLinkClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      e.preventDefault();
       if (pathname === href) {
-        e.preventDefault();
         window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        router.push(href);
+        // Đảm bảo cuộn lên đầu trang tức thì trên di động
+        window.scrollTo({ top: 0, behavior: "instant" });
       }
     },
-    [pathname]
+    [pathname, router]
   );
 
   return (
@@ -69,22 +74,22 @@ export function Footer() {
             </h3>
             <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/" onClick={(e) => handleFooterLinkClick(e, "/")} className="hover:text-[#BFE9C3] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Trang chủ</span>
                 </Link>
               </li>
               <li>
-                <Link href="/products" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/products")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/products" onClick={(e) => handleFooterLinkClick(e, "/products")} className="hover:text-[#BFE9C3] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Tất cả sản phẩm</span>
                 </Link>
               </li>
               <li>
-                <Link href="/combos" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/combos")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/combos" onClick={(e) => handleFooterLinkClick(e, "/combos")} className="hover:text-[#BFE9C3] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Combo Gieo Mơ</span>
                 </Link>
               </li>
               <li>
-                <Link href="/track" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/track")} className="hover:text-[#BFE9C3] transition-colors flex items-center gap-1.5">
+                <Link href="/track" onClick={(e) => handleFooterLinkClick(e, "/track")} className="hover:text-[#BFE9C3] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Tra cứu đơn hàng</span>
                 </Link>
               </li>
@@ -99,22 +104,22 @@ export function Footer() {
             </h3>
             <ul className="space-y-2.5 text-xs text-white/90 font-medium">
               <li>
-                <Link href="/faq" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/faq")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/faq" onClick={(e) => handleFooterLinkClick(e, "/faq")} className="hover:text-[#FFE7A8] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Hỏi đáp thường gặp (FAQ)</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/delivery" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/policy/delivery")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/policy/delivery" onClick={(e) => handleFooterLinkClick(e, "/policy/delivery")} className="hover:text-[#FFE7A8] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Chính sách giao hàng</span>
                 </Link>
               </li>
               <li>
-                <Link href="/policy/payment" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/policy/payment")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/policy/payment" onClick={(e) => handleFooterLinkClick(e, "/policy/payment")} className="hover:text-[#FFE7A8] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Hướng dẫn thanh toán</span>
                 </Link>
               </li>
               <li>
-                <Link href="/contact" prefetch={false} onClick={(e) => handleFooterLinkClick(e, "/contact")} className="hover:text-[#FFE7A8] transition-colors flex items-center gap-1.5">
+                <Link href="/contact" onClick={(e) => handleFooterLinkClick(e, "/contact")} className="hover:text-[#FFE7A8] transition-colors py-1 flex items-center gap-1.5 touch-manipulation cursor-pointer">
                   <span>Liên hệ Ban Tổ Chức Gieo Mơ</span>
                 </Link>
               </li>
@@ -235,7 +240,7 @@ export function Footer() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/policy/privacy" className="text-white/90 hover:text-white transition-colors underline-offset-2 hover:underline">
+            <Link href="/policy/privacy" onClick={(e) => handleFooterLinkClick(e, "/policy/privacy")} className="text-white/90 hover:text-white transition-colors underline-offset-2 hover:underline cursor-pointer">
               Chính sách bảo mật
             </Link>
             <span>•</span>

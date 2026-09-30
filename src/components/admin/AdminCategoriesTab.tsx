@@ -220,10 +220,13 @@ export function AdminCategoriesTab() {
 
       {/* Categories Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[700px] text-left text-xs">
             <thead>
-              <tr className="bg-[#FFFDF9] border-b border-[#F0E5D8] text-[#7E7068] font-bold">
+              <tr className="bg-[#FFFDF9] border-b border-[#F0E5D8] text-[#7E7068] font-bold text-[10px]">
                 <th className="py-3 px-3 w-12 text-center whitespace-nowrap">STT</th>
                 <th className="py-3 px-4 whitespace-nowrap">Tên danh mục &amp; Mô tả</th>
                 <th className="py-3 px-4 whitespace-nowrap">Đường dẫn (Slug)</th>

@@ -354,18 +354,21 @@ export default function AdminProductsPage() {
 
       {/* Products Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full min-w-[850px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
-                <th className="py-2.5 px-3">Sản phẩm</th>
-                <th className="py-2.5 px-2.5">Danh mục</th>
-                <th className="py-2.5 px-2.5">Giá bán / Giá vốn</th>
-                <th className="py-2.5 px-2.5">Tổng tồn kho</th>
-                <th className="py-2.5 px-2.5">Bán hàng</th>
-                <th className="py-2.5 px-2.5">Trang chủ</th>
-                <th className="py-2.5 px-3 text-right">Thao tác</th>
+                <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Sản phẩm</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Danh mục</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Giá bán / Giá vốn</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Tổng tồn kho</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Bán hàng</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Trang chủ</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -485,8 +488,11 @@ export default function AdminProductsPage() {
           MODAL 1: CHỈNH SỬA SẢN PHẨM (EDIT MODAL - 4 KHUNG & 2 KHO)
           ======================================================== */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -837,8 +843,11 @@ export default function AdminProductsPage() {
           MODAL 2: XÓA SẢN PHẨM (DELETE CONFIRMATION)
           ======================================================== */}
       {deletingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>

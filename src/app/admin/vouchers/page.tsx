@@ -255,17 +255,20 @@ export default function AdminVouchersPage() {
 
       {/* Vouchers Table */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[780px] text-left text-xs">
             <thead>
-              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-5">Mã Voucher</th>
-                <th className="py-3.5 px-4">Loại giảm giá</th>
-                <th className="py-3.5 px-4">Đơn tối thiểu</th>
-                <th className="py-3.5 px-4">Lượt sử dụng &amp; Đơn áp dụng</th>
-                <th className="py-3.5 px-4">Phân loại</th>
-                <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-5 text-right">Thao tác</th>
+              <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-4 whitespace-nowrap">Mã Voucher</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Loại giảm giá</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Đơn tối thiểu</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Lượt dùng &amp; Đơn áp dụng</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Phân loại</th>
+                <th className="py-2.5 px-3.5 whitespace-nowrap">Trạng thái</th>
+                <th className="py-2.5 px-4 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -404,8 +407,11 @@ export default function AdminVouchersPage() {
 
       {/* MODAL: THÊM VOUCHER MỚI */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
@@ -567,8 +573,11 @@ export default function AdminVouchersPage() {
 
       {/* MODAL: SỬA VOUCHER */}
       {editingVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
                 Chỉnh sửa Voucher
@@ -724,8 +733,11 @@ export default function AdminVouchersPage() {
 
       {/* MODAL: XÓA VOUCHER */}
       {deletingVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
@@ -758,8 +770,11 @@ export default function AdminVouchersPage() {
 
       {/* MODAL: XEM ĐƠN HÀNG DÙNG MÃ NÀY */}
       {viewingOrdersVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-2xl bg-[#EAF7ED] flex items-center justify-center text-[#2D6338]">

@@ -210,8 +210,31 @@ footer h1, footer h2, footer h3, footer h4, footer h5, footer h6 {
    PERFORMANCE & INP OPTIMIZATIONS
    =========================== */
 
+/* Eliminate 300ms mobile touch delay for pointer interactions */
+button,
+input,
+textarea,
+select,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
 /* Defer off-screen table rows layout & painting to keep INP under 50ms */
 table tbody tr {
   content-visibility: auto;
   contain-intrinsic-size: 0 48px;
 }
+
+/* Hardware-accelerate modal & popup dialogs for zero frame drops */
+[role="dialog"],
+[role="alertdialog"],
+.modal-overlay,
+.dialog-content,
+.fixed.inset-0.z-50,
+.fixed.inset-0.z-50 > div {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+

@@ -77,16 +77,16 @@ export async function DELETE(request: Request) {
 
     const supabase = createAdminClient();
 
-    // Only attempt delete if it's a valid UUID (client-side IDs like "cat-123" don't exist on server)
+    // Delete by category_id if UUID, or delete by slug or category_id
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryId);
-    if (!isUuid) {
-      return NextResponse.json({ success: true, message: "Local-only ID, no server record to delete" });
+    let deleteQuery;
+    if (isUuid) {
+      deleteQuery = supabase.from("product_categories").delete().eq("category_id", categoryId);
+    } else {
+      deleteQuery = supabase.from("product_categories").delete().or(`slug.eq.${categoryId},name.eq.${categoryId}`);
     }
 
-    const { error } = await supabase
-      .from("product_categories")
-      .delete()
-      .eq("category_id", categoryId);
+    const { error } = await deleteQuery;
 
     if (error) {
       console.error("[DELETE /api/categories] Error:", error);

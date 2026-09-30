@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
@@ -115,14 +115,28 @@ function CheckoutContent() {
         setFormData((prev) => ({ ...prev, introducer_info: clean }));
       }
     }
+
+    const handleMembersUpdated = () => {
+      setActiveMembers(getStoredMembers().filter((m) => m.status === "active"));
+    };
+    window.addEventListener("gieomo_members_updated", handleMembersUpdated);
+    return () => window.removeEventListener("gieomo_members_updated", handleMembersUpdated);
   }, [searchParams]);
+
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+
+  useEffect(() => {
+    setVouchers(getStoredVouchers());
+    const handleVouchersUpdate = () => setVouchers(getStoredVouchers());
+    window.addEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
+    return () => window.removeEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
+  }, []);
 
   const rawShippingFee = deliveryType !== "home_delivery" ? 0 : siteSettings.flatShippingFee;
 
-  const calculateDiscount = () => {
+  const discountAmount = useMemo(() => {
     const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
-    if (!code) return 0;
-    const vouchers = getStoredVouchers();
+    if (!code || vouchers.length === 0) return 0;
     const found = vouchers.find((v) => v.code === code && v.status === "active");
     if (!found) return 0;
     if (found.min_order_value && subtotal < found.min_order_value) return 0;
@@ -136,20 +150,18 @@ function CheckoutContent() {
       return found.max_discount_amount ? Math.min(calc, found.max_discount_amount) : calc;
     }
     return Math.min(subtotal, found.discount_value);
-  };
+  }, [voucherApplied, formData.voucher_code, vouchers, subtotal, totalItemCount, rawShippingFee]);
 
-  const discountAmount = calculateDiscount();
   const shippingFee = rawShippingFee;
   const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
 
-  const handleApplyVoucher = (codeOverride?: string) => {
+  const handleApplyVoucher = useCallback((codeOverride?: string) => {
     setVoucherError(null);
     const code = (codeOverride || formData.voucher_code).trim().toUpperCase();
     if (!code) {
       setVoucherError("Vui lòng nhập mã giảm giá");
       return;
     }
-    const vouchers = getStoredVouchers();
     const found = vouchers.find((v) => v.code === code && v.status === "active");
     if (!found) {
       setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn");
@@ -168,17 +180,15 @@ function CheckoutContent() {
       return;
     }
     setVoucherApplied(found.code);
-    handleInputChange("voucher_code", found.code);
-  };
+    setFormData((prev) => ({ ...prev, voucher_code: found.code }));
+  }, [formData.voucher_code, vouchers, subtotal, totalItemCount]);
 
-  const handleInputChange = (field: string, val: string) => {
+  const handleInputChange = useCallback((field: string, val: string) => {
     setFormData((prev) => ({ ...prev, [field]: val }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
-    }
-  };
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: "" } : prev));
+  }, []);
 
-  const handleSelectMember = (mem: StoredMember) => {
+  const handleSelectMember = useCallback((mem: StoredMember) => {
     setSelectedMember(mem);
     setNoIntroducer(false);
     setShowMemberSuggestions(false);
@@ -187,27 +197,26 @@ function CheckoutContent() {
       ...prev,
       introducer_info: `${mem.fullName} (${mem.referralCode})`,
     }));
-    if (errors.introducer_info) {
-      setErrors((prev) => ({ ...prev, introducer_info: "" }));
-    }
-  };
+    setErrors((prev) => (prev.introducer_info ? { ...prev, introducer_info: "" } : prev));
+  }, []);
 
-  const handleClearMember = () => {
+  const handleClearMember = useCallback(() => {
     setSelectedMember(null);
     setMemberSearchQuery("");
     setNoIntroducer(true);
     setFormData((prev) => ({ ...prev, introducer_info: "Trực tiếp (Website)" }));
-  };
+  }, []);
 
-  const filteredMembers = activeMembers.filter((m) => {
-    if (!memberSearchQuery.trim()) return true;
+  const filteredMembers = useMemo(() => {
+    if (!memberSearchQuery.trim()) return activeMembers;
     const q = memberSearchQuery.toLowerCase().trim();
-    return (
-      m.fullName.toLowerCase().includes(q) ||
-      m.referralCode.toLowerCase().includes(q) ||
-      m.phone.includes(q)
+    return activeMembers.filter(
+      (m) =>
+        m.fullName.toLowerCase().includes(q) ||
+        m.referralCode.toLowerCase().includes(q) ||
+        m.phone.includes(q)
     );
-  });
+  }, [activeMembers, memberSearchQuery]);
 
   const handleValidateForm = (e: React.FormEvent) => {
     e.preventDefault();

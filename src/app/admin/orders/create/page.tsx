@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -78,10 +78,13 @@ export default function AdminCreateOrderPage() {
     },
   ]);
 
-  const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = useMemo(
+    () => orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [orderItems]
+  );
   const flatShippingFee = 15000;
   const shippingFee = deliveryType === "member_delivery" ? 0 : flatShippingFee;
-  const finalAmount = subtotal + shippingFee;
+  const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleAddItem = () => {
     const firstProd = availableProducts[0] || defaultProd;
@@ -530,8 +533,11 @@ export default function AdminCreateOrderPage() {
 
       {/* MODAL: HIỆN MÃ VIETQR ĐƠN ĐẶT HỘ */}
       {activeQrModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-center animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3 text-left">
               <div>
                 <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">

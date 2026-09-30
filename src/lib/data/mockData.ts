@@ -21,35 +21,7 @@ export interface ExtendedCombo extends Omit<Combo, "items"> {
   thumbnail?: string;
 }
 
-export const MOCK_CATEGORIES: ProductCategory[] = [
-  {
-    category_id: "cat-1",
-    name: "Túi & Pouch",
-    slug: "tui-pouch",
-    description: "Túi vải, pouch, ví nhỏ handmade được may tay tỉ mỉ",
-    status: "active",
-    sort_order: 1,
-    created_at: new Date().toISOString(),
-  },
-  {
-    category_id: "cat-2",
-    name: "Phụ kiện may vá",
-    slug: "phu-kien-may-va",
-    description: "Các sản phẩm handmade độc đáo từ vải, chỉ, nút áo",
-    status: "active",
-    sort_order: 2,
-    created_at: new Date().toISOString(),
-  },
-  {
-    category_id: "cat-3",
-    name: "Quà tặng & Souvenir",
-    slug: "qua-tang",
-    description: "Set quà tặng ý nghĩa từ Gieo Mơ và Mầm Mơ",
-    status: "active",
-    sort_order: 3,
-    created_at: new Date().toISOString(),
-  },
-];
+export const MOCK_CATEGORIES: ProductCategory[] = [];
 
 export const MOCK_PRODUCTS: ExtendedProduct[] = [];
 

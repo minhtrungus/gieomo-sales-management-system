@@ -798,24 +798,27 @@ export default function AdminInventoryPage() {
               </div>
             </div>
 
+            <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+              <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[850px] text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white">
-                    <th className="py-3 px-4">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-3 px-3">Mã SKU</th>
+                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                    <th className="py-2.5 px-4 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Mã SKU</th>
                     {displayedWarehouses.map((wh) => (
-                      <th key={wh.warehouse_id} className="py-3 px-3 text-center whitespace-nowrap">
-                        {wh.name} {wh.is_default && <span className="text-emerald-700 font-bold text-[10px] block">(Mặc định)</span>}
+                      <th key={wh.warehouse_id} className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {wh.name} {wh.is_default && <span className="text-emerald-700 font-bold text-[9px] block">(Mặc định)</span>}
                       </th>
                     ))}
                     {selectedWarehouseFilter === "all" ? (
                       <>
-                        <th className="py-3 px-3 text-center">Tổng tồn tất cả kho</th>
-                        <th className="py-3 px-3 text-right">Trạng thái kho tổng</th>
+                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Tổng tồn tất cả kho</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái kho tổng</th>
                       </>
                     ) : (
-                      <th className="py-3 px-3 text-right">Trạng thái tại kho này</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái tại kho này</th>
                     )}
                   </tr>
                 </thead>
@@ -955,18 +958,21 @@ export default function AdminInventoryPage() {
 
           {/* Warehouses Table */}
           <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+            <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+              <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[800px] text-left text-xs">
                 <thead>
-                  <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider">
-                    <th className="py-3.5 px-4 w-12 text-center">STT</th>
-                    <th className="py-3.5 px-4">Mã kho</th>
-                    <th className="py-3.5 px-4">Tên kho hàng</th>
-                    <th className="py-3.5 px-4">Địa chỉ</th>
-                    <th className="py-3.5 px-4">Người phụ trách</th>
-                    <th className="py-3.5 px-4">Hotline</th>
-                    <th className="py-3.5 px-4">Phân loại</th>
-                    <th className="py-3.5 px-5 text-right">Thao tác</th>
+                  <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-4 w-12 text-center whitespace-nowrap">STT</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Mã kho</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Tên kho hàng</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Địa chỉ</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Người phụ trách</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Hotline</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">Phân loại</th>
+                    <th className="py-2.5 px-5 text-right whitespace-nowrap">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
@@ -1137,17 +1143,17 @@ export default function AdminInventoryPage() {
 
           {activeLogTab === "inflow" ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[11px]">
+              <table className="w-full min-w-[850px] text-left text-[11px]">
                 <thead>
                   <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
-                    <th className="py-2.5 px-3">Mã phiếu</th>
-                    <th className="py-2.5 px-2.5">Thời gian</th>
-                    <th className="py-2.5 px-2.5">Kho nhập</th>
-                    <th className="py-2.5 px-2.5">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-2.5 px-2.5 text-center">SL nhập</th>
-                    <th className="py-2.5 px-2.5 text-center">Tồn sau nhập</th>
-                    <th className="py-2.5 px-2.5">Người duyệt</th>
-                    <th className="py-2.5 px-3 text-right">Trạng thái</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Mã phiếu</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhập</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                    <th className="py-2.5 px-2.5 text-center whitespace-nowrap">SL nhập</th>
+                    <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Tồn sau nhập</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
@@ -1189,17 +1195,17 @@ export default function AdminInventoryPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[11px]">
+              <table className="w-full min-w-[850px] text-left text-[11px]">
                 <thead>
                   <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
-                    <th className="py-2.5 px-3">Mã điều chuyển</th>
-                    <th className="py-2.5 px-2.5">Thời gian</th>
-                    <th className="py-2.5 px-2.5">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-2.5 px-2.5">Kho xuất (Nguồn)</th>
-                    <th className="py-2.5 px-2.5">Kho nhận (Đích)</th>
-                    <th className="py-2.5 px-2.5">Số lượng</th>
-                    <th className="py-2.5 px-2.5">Người duyệt</th>
-                    <th className="py-2.5 px-3 text-right">Trạng thái</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Mã điều chuyển</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho xuất (Nguồn)</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhận (Đích)</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Số lượng</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0E5D8]">
@@ -1906,14 +1912,14 @@ export default function AdminInventoryPage() {
                 </span>
               </div>
 
-              <div className="border border-[#F0E5D8] rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 border-b border-[#F0E5D8] text-gray-500 font-bold">
+              <div className="border border-[#F0E5D8] rounded-2xl overflow-x-auto max-h-56 overflow-y-auto">
+                <table className="w-full min-w-[500px] text-left text-xs">
+                  <thead className="bg-gray-50 border-b border-[#F0E5D8] text-gray-500 font-bold text-[10px]">
                     <tr>
-                      <th className="py-2.5 px-3">Mặt hàng &amp; Phân loại</th>
-                      <th className="py-2.5 px-3">Mã SKU</th>
-                      <th className="py-2.5 px-3 text-center">Tồn tại kho này</th>
-                      <th className="py-2.5 px-3 text-right">Chỉnh sửa</th>
+                      <th className="py-2 px-3 whitespace-nowrap">Mặt hàng &amp; Phân loại</th>
+                      <th className="py-2 px-3 whitespace-nowrap">Mã SKU</th>
+                      <th className="py-2 px-3 text-center whitespace-nowrap">Tồn tại kho này</th>
+                      <th className="py-2 px-3 text-right whitespace-nowrap">Chỉnh sửa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0E5D8]">

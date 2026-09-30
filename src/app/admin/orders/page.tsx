@@ -183,26 +183,29 @@ export default function AdminOrdersPage() {
 
       {/* Orders Table - Scaled for high information density */}
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full min-w-[980px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
-                <th className="py-2.5 px-2.5">Mã đơn</th>
-                <th className="py-2.5 px-2.5">Thời gian đặt</th>
-                <th className="py-2.5 px-2.5">Khách hàng</th>
-                <th className="py-2.5 px-2.5">Quen qua ai</th>
-                <th className="py-2.5 px-2.5">
+                <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Mã đơn</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian đặt</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Khách hàng</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Quen qua ai</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">
                   <span className="flex items-center gap-1">
                     <span>Địa điểm nhận</span>
-                    <span className="text-[9px] font-normal normal-case text-emerald-700 bg-emerald-100 px-1 rounded">(Bấm để chép)</span>
+                    <span className="text-[9px] font-normal normal-case text-emerald-700 bg-emerald-100 px-1 rounded">(Bấm chép)</span>
                   </span>
                 </th>
-                <th className="py-2.5 px-2.5">Tổng tiền</th>
-                <th className="py-2.5 px-2.5">Thanh toán</th>
-                <th className="py-2.5 px-2.5">Trạng thái</th>
-                <th className="py-2.5 px-2.5">Thời gian giao</th>
-                <th className="py-2.5 px-2.5 text-right">Đổi trạng thái</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Tổng tiền</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Thanh toán</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Trạng thái</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian giao</th>
+                <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Đổi trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -358,8 +361,11 @@ export default function AdminOrdersPage() {
 
       {/* MODAL: XÁC NHẬN CHUYỂN TRẠNG THÁI ĐƠN HÀNG */}
       {pendingStatusChange && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-center"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-2xl bg-[#FFE7A8] text-[#542B07] flex items-center justify-center mx-auto">
               <ArrowUpDown className="w-6 h-6 text-[#E2884E]" />
             </div>

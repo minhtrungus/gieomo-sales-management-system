@@ -69,6 +69,7 @@ export function Modal({
           sizes[size],
           className
         )}
+        style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
       >
         {/* Header */}
         {title && (

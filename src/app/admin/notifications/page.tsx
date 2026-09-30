@@ -615,27 +615,27 @@ export default function NotificationsPage() {
         </div>
 
         {/* Gmail Footer Pagination Bar */}
-        <div className="p-3 bg-[#FFFDF9] border-t border-[#F0E5D8] flex items-center justify-between text-xs text-[#7E7068]">
-          <span className="font-medium">
+        <div className="p-3 bg-[#FFFDF9] border-t border-[#F0E5D8] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-[#7E7068]">
+          <span className="font-medium text-[11px] sm:text-xs">
             Hiển thị <strong>50 thông báo</strong> trên mỗi trang
           </span>
 
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-[#231B16]">
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <span className="font-bold text-[#231B16] text-[11px] sm:text-xs">
               Trang {effectivePage} / {totalPages}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="px-2.5 py-1 rounded-xl border border-[#F0E5D8] text-xs font-bold hover:bg-[#FFF8EE] disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] text-xs font-bold hover:bg-[#FFF8EE] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
               >
                 Trước
               </button>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="px-2.5 py-1 rounded-xl border border-[#F0E5D8] text-xs font-bold hover:bg-[#FFF8EE] disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-xl border border-[#F0E5D8] text-xs font-bold hover:bg-[#FFF8EE] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
               >
                 Tiếp
               </button>

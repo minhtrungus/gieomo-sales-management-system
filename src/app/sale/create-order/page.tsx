@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -150,9 +150,12 @@ export default function SaleCreateOrderPage() {
   };
 
   // Calculations
-  const subtotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const subtotal = useMemo(
+    () => orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
+    [orderItems]
+  );
   const shippingFee = deliveryType === "pickup_point" ? 0 : 25000;
-  const finalAmount = subtotal + shippingFee;
+  const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -582,8 +585,11 @@ export default function SaleCreateOrderPage() {
 
       {/* VietQR Modal */}
       {activeQrModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in" style={{ willChange: "opacity" }}>
+          <div
+            className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-200"
+            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
+          >
             <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-800 flex items-center justify-center mx-auto text-xl">
               ✓
             </div>

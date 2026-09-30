@@ -41,17 +41,20 @@ export default function AdminPaymentsPage() {
       </div>
 
       <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
+          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full min-w-[750px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-2.5 px-2.5 text-center w-10">STT</th>
-                <th className="py-2.5 px-3">Mã đơn</th>
-                <th className="py-2.5 px-3">Mã GD VietQR</th>
-                <th className="py-2.5 px-3">Số tiền</th>
-                <th className="py-2.5 px-3">Thời gian GD</th>
-                <th className="py-2.5 px-3">Trạng thái</th>
-                <th className="py-2.5 px-3 text-right">Duyệt thanh toán</th>
+                <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Mã đơn</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Mã GD VietQR</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Số tiền</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Thời gian GD</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Trạng thái</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Duyệt thanh toán</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">

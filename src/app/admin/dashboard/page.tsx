@@ -193,15 +193,18 @@ export default function AdminDashboardPage() {
 
         {orders.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <div className="sm:hidden px-3 pt-1 pb-1 text-[10px] text-gray-400 italic flex items-center gap-1">
+              <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+            </div>
+            <table className="w-full min-w-[650px] text-left text-xs">
               <thead>
-                <tr className="border-b border-gray-100 text-gray-500 font-semibold uppercase">
-                  <th className="py-3 px-3">Mã đơn</th>
-                  <th className="py-3 px-3">Khách hàng</th>
-                  <th className="py-3 px-3">Hình thức nhận</th>
-                  <th className="py-3 px-3">Tổng tiền</th>
-                  <th className="py-3 px-3">Trạng thái</th>
-                  <th className="py-3 px-3 text-right">Thao tác</th>
+                <tr className="border-b border-gray-100 text-gray-500 font-semibold uppercase text-[10px]">
+                  <th className="py-2.5 px-3 whitespace-nowrap">Mã đơn</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Khách hàng</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Hình thức nhận</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Tổng tiền</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Trạng thái</th>
+                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
