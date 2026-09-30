@@ -5,7 +5,6 @@ import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
-import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
 import {
   getStoredOrders,
   updateStoredOrderStatus,
@@ -16,37 +15,31 @@ import {
   updateOrderShipper,
   type StoredMember,
 } from "@/lib/data/orderStore";
-import type { OrderStatus, PaymentStatus } from "@/types/database";
+import type { OrderStatus, PaymentStatus, Order } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
-  const [order, setOrder] = useState(() => {
+  const [order, setOrder] = useState<Order | null>(() => {
     const stored = getStoredOrders();
-    return (
-      stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
-      MOCK_ORDERS.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
-      MOCK_ORDERS[0]
-    );
+    return stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) || null;
   });
 
-  const [orderStatus, setOrderStatus] = useState<OrderStatus>(order.order_status);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order.payment_status);
-  const [internalNote, setInternalNote] = useState(order.internal_note || "");
+  const [orderStatus, setOrderStatus] = useState<OrderStatus>(order ? order.order_status : "pending");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order ? order.payment_status : "pending");
+  const [internalNote, setInternalNote] = useState(order?.internal_note || "");
   const [warehouseId, setWarehouseId] = useState<string>(
-    order.warehouse_id || (order.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
+    order?.warehouse_id || (order?.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
   );
   const [members, setMembers] = useState<StoredMember[]>([]);
-  const [assignedShipperId, setAssignedShipperId] = useState<string>(order.assigned_shipper_id || "");
+  const [assignedShipperId, setAssignedShipperId] = useState<string>(order?.assigned_shipper_id || "");
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
   useEffect(() => {
     setMembers(getStoredMembers());
     const stored = getStoredOrders();
-    const found =
-      stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) ||
-      MOCK_ORDERS.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id);
+    const found = stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) || null;
     if (found) {
       setOrder(found);
       setOrderStatus(found.order_status);
@@ -61,6 +54,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }, [resolvedParams.id]);
 
   const handleSaveChanges = () => {
+    if (!order) return;
     updateStoredOrderStatus(order.order_id, orderStatus);
     updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
@@ -76,6 +70,22 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     setIsSavedNotice(true);
     setTimeout(() => setIsSavedNotice(false), 2500);
   };
+
+  if (!order) {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-gray-800">Không tìm thấy đơn hàng</h2>
+        <p className="text-sm text-gray-500">Đơn hàng này không tồn tại hoặc đã bị xóa khỏi hệ thống.</p>
+        <Link
+          href="/admin/orders"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-soft-green text-emerald-950 font-bold text-xs"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Quay lại danh sách đơn hàng
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -300,7 +310,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           {/* Items Recap */}
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             {(() => {
-              const displayItems = order.items && order.items.length > 0 ? order.items : MOCK_ORDER_ITEMS;
+              const displayItems = order.items && order.items.length > 0 ? order.items : [];
               return (
                 <>
                   <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">

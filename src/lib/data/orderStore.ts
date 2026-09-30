@@ -47,12 +47,11 @@ export function saveNewOrder(newOrder: Order): void {
   try {
     // Auto-assign fulfillment warehouse if not specified
     if (!newOrder.warehouse_id) {
-      if (newOrder.delivery_type === "pickup_point" && newOrder.pickup_point_id === "pp-3") {
-        newOrder.warehouse_id = "wh-2";
-        newOrder.warehouse_name = "Kho Cơ Sở 2 (Thủ Đức)";
-      } else {
-        newOrder.warehouse_id = "wh-1";
-        newOrder.warehouse_name = "Kho Trung Tâm (Quận 3)";
+      const whList = getStoredWarehouses();
+      const defaultWh = whList.find((w) => w.is_default) || whList[0];
+      if (defaultWh) {
+        newOrder.warehouse_id = defaultWh.warehouse_id;
+        newOrder.warehouse_name = defaultWh.name;
       }
     }
 
@@ -425,9 +424,12 @@ export const SEED_PICKUP_POINTS: PickupPoint[] = [
  * Safely fetches and parses JSON without throwing SyntaxError on empty, aborted, or non-JSON responses.
  * Especially crucial when search engine crawlers (like Googlebot) abort background fetches or block /api routes.
  */
-async function safeFetchJson<T = any>(url: string): Promise<T | null> {
+async function safeFetchJson<T = any>(url: string, timeoutMs = 4000): Promise<T | null> {
   try {
-    const res = await fetch(url);
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    const res = await fetch(url, { signal: controller ? controller.signal : undefined });
+    if (timeoutId) clearTimeout(timeoutId);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) return null;
@@ -1394,6 +1396,78 @@ export function updateProductWarehouseStock(
   }
 }
 
+// ==========================================
+// INVENTORY LOGS STORE (PHIẾU NHẬP & ĐIỀU CHUYỂN KHO)
+// ==========================================
+
+export interface InflowLog {
+  logId: string;
+  receiptCode: string;
+  warehouseId: string;
+  warehouseName: string;
+  productName: string;
+  variantName: string;
+  quantityAdded: number;
+  stockBefore: number;
+  stockAfter: number;
+  unitCost: number;
+  approvedBy: string;
+  sourceNote: string;
+  createdAt: string;
+}
+
+export interface TransferLog {
+  logId: string;
+  transferCode: string;
+  productName: string;
+  variantName: string;
+  fromWarehouse: string;
+  toWarehouse: string;
+  quantity: number;
+  approvedBy: string;
+  reason: string;
+  createdAt: string;
+}
+
+export function getStoredInflowLogs(): InflowLog[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("gieomo_inventory_inflow_logs");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredInflowLogs(logs: InflowLog[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("gieomo_inventory_inflow_logs", JSON.stringify(logs));
+  window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+}
+
+export function getStoredTransferLogs(): TransferLog[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("gieomo_inventory_transfer_logs");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredTransferLogs(logs: TransferLog[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("gieomo_inventory_transfer_logs", JSON.stringify(logs));
+  window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+}
+
+export function clearInventoryLogs(): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("gieomo_inventory_inflow_logs", JSON.stringify([]));
+  localStorage.setItem("gieomo_inventory_transfer_logs", JSON.stringify([]));
+  window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+}
+
 // === SITE SETTINGS STORE ===
 
 export interface SiteSettings {
@@ -1992,7 +2066,7 @@ export function clearAllMockData(includeCatalog = true): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem("gieomo_cleaned_seed", "true");
-    localStorage.setItem("gieomo_data_wiped_v4", "true");
+    localStorage.setItem("gieomo_data_wiped_v5", "true");
     
     // Clear transactions & test records
     localStorage.setItem("gieomo_orders", JSON.stringify([]));
@@ -2004,6 +2078,9 @@ export function clearAllMockData(includeCatalog = true): void {
     localStorage.setItem("gieomo_contact_messages", JSON.stringify([]));
     localStorage.removeItem("gieomo_my_order_codes");
     localStorage.removeItem("gieomo_customer_profile");
+
+    // Clear inventory logs (receipts & transfers)
+    clearInventoryLogs();
 
     // Clear members revenue
     const members = getStoredMembers().map((m) => ({
@@ -2034,15 +2111,16 @@ export function clearAllMockData(includeCatalog = true): void {
     window.dispatchEvent(new Event("gieomo_categories_updated"));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
     window.dispatchEvent(new Event("gieomo_notifications_updated"));
+    window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
   } catch (e) {
     console.error("Error clearing mock data", e);
   }
 }
 
-// Automatic one-time client side purge to ensure old mock products & orders are wiped
+// Automatic one-time client side purge to ensure old mock products, orders & inventory logs are wiped
 if (typeof window !== "undefined") {
   try {
-    if (localStorage.getItem("gieomo_data_wiped_v4") !== "true") {
+    if (localStorage.getItem("gieomo_data_wiped_v5") !== "true") {
       clearAllMockData(true);
     }
   } catch {

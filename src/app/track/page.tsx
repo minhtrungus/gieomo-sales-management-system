@@ -9,7 +9,6 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CUSTOMER_TIMELINE_STEPS, ORDER_STATUS_LABELS } from "@/lib/constants";
-import { MOCK_ORDERS, MOCK_ORDER_ITEMS } from "@/lib/data/mockData";
 import { getStoredOrders } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
 

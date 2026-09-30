@@ -5,14 +5,13 @@ import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
-import { MOCK_ORDERS } from "@/lib/data/mockData";
 import { getStoredOrders, updateStoredOrderStatus, getStoredMembers, type StoredMember } from "@/lib/data/orderStore";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import { Plus, Filter, ArrowUpDown, Copy, Check } from "lucide-react";
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [members, setMembers] = useState<StoredMember[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");

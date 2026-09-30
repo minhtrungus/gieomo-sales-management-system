@@ -23,7 +23,6 @@ import {
   Lock,
   Unlock,
 } from "lucide-react";
-import { MOCK_ORDERS } from "@/lib/data/mockData";
 import {
   getStoredOrders,
   getStoredMembers,
@@ -351,7 +350,7 @@ export default function AdminMembersPage() {
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {members.map((m, idx) => {
-                const mOrders = (orders.length > 0 ? orders : MOCK_ORDERS).filter(
+                const mOrders = orders.filter(
                   (o) =>
                     o.created_by_member_id === m.memberId ||
                     o.referral_code === m.referralCode ||
@@ -948,7 +947,7 @@ export default function AdminMembersPage() {
 
             {/* Modal Body */}
             {(() => {
-              const allSourceOrders = orders.length > 0 ? orders : MOCK_ORDERS;
+              const allSourceOrders = orders;
               const memberOrders = allSourceOrders.filter(
                 (o) =>
                   o.created_by_member_id === viewingOrdersMember.memberId ||

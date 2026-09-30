@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { MOCK_PRODUCTS } from "@/lib/data/mockData";
 import {
   getStoredProducts,
   getStoredCombos,

@@ -9,6 +9,14 @@ import {
   saveNewWarehouse,
   updateStoredWarehouse,
   deleteStoredWarehouse,
+  getStoredInflowLogs,
+  saveStoredInflowLogs,
+  getStoredTransferLogs,
+  saveStoredTransferLogs,
+  clearInventoryLogs,
+  getAdminSession,
+  type InflowLog,
+  type TransferLog,
 } from "@/lib/data/orderStore";
 import type { Warehouse } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
@@ -33,35 +41,6 @@ import {
   History,
   Eye,
 } from "lucide-react";
-
-interface InflowLog {
-  logId: string;
-  receiptCode: string;
-  warehouseId: string;
-  warehouseName: string;
-  productName: string;
-  variantName: string;
-  quantityAdded: number;
-  stockBefore: number;
-  stockAfter: number;
-  unitCost: number;
-  approvedBy: string;
-  sourceNote: string;
-  createdAt: string;
-}
-
-interface TransferLog {
-  logId: string;
-  transferCode: string;
-  productName: string;
-  variantName: string;
-  fromWarehouse: string;
-  toWarehouse: string;
-  quantity: number;
-  approvedBy: string;
-  reason: string;
-  createdAt: string;
-}
 
 export default function AdminInventoryPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -101,19 +80,27 @@ export default function AdminInventoryPage() {
         setFromWarehouse((prev) => prev || whs[0].warehouse_id);
         setToWarehouse((prev) => (prev && prev !== whs[0].warehouse_id ? prev : whs[1].warehouse_id));
       }
+      setInflowLogs(getStoredInflowLogs());
+      setTransferLogs(getStoredTransferLogs());
     };
 
     loadData();
 
     const handleProdUpdate = () => loadData();
     const handleWhUpdate = () => setWarehouses(getStoredWarehouses());
+    const handleLogsUpdate = () => {
+      setInflowLogs(getStoredInflowLogs());
+      setTransferLogs(getStoredTransferLogs());
+    };
 
     window.addEventListener("gieomo_products_updated", handleProdUpdate);
     window.addEventListener("gieomo_warehouses_updated", handleWhUpdate);
+    window.addEventListener("gieomo_inventory_logs_updated", handleLogsUpdate);
 
     return () => {
       window.removeEventListener("gieomo_products_updated", handleProdUpdate);
       window.removeEventListener("gieomo_warehouses_updated", handleWhUpdate);
+      window.removeEventListener("gieomo_inventory_logs_updated", handleLogsUpdate);
     };
   }, []);
 
@@ -194,22 +181,22 @@ export default function AdminInventoryPage() {
   // MODALS FOR INFLOW & TRANSFER
   // ==========================================
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [importWarehouseId, setImportWarehouseId] = useState<string>("wh-1");
+  const [importWarehouseId, setImportWarehouseId] = useState<string>("");
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.product_id || "");
   const [selectedVariantId, setSelectedVariantId] = useState(products[0]?.variants?.[0]?.variant_id || "");
   const [importQty, setImportQty] = useState<number>(50);
   const [unitCost, setUnitCost] = useState<number>(35000);
-  const [approvedBy, setApprovedBy] = useState("Mai Lan (Trưởng Kho)");
+  const [approvedBy, setApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
   const [sourceNote, setSourceNote] = useState("Xưởng may tình nguyện viên Mầm Mơ đợt 2");
 
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferProductId, setTransferProductId] = useState(products[0]?.product_id || "");
   const [transferVariantId, setTransferVariantId] = useState(products[0]?.variants?.[0]?.variant_id || "");
-  const [fromWarehouse, setFromWarehouse] = useState<string>("wh-1");
-  const [toWarehouse, setToWarehouse] = useState<string>("wh-2");
+  const [fromWarehouse, setFromWarehouse] = useState<string>("");
+  const [toWarehouse, setToWarehouse] = useState<string>("");
   const [transferQty, setTransferQty] = useState<number>(10);
-  const [transferApprovedBy, setTransferApprovedBy] = useState("Thế Vinh (Điều Phối Kho)");
-  const [transferReason, setTransferReason] = useState("Chi viện cho bàn trực KTX Thủ Đức cuối tuần");
+  const [transferApprovedBy, setTransferApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
+  const [transferReason, setTransferReason] = useState("Chi viện hàng cho bàn trực gian hàng");
   const [transferError, setTransferError] = useState<string | null>(null);
 
   // Stock Adjustment Modal state (Replaces direct table +/- buttons)
@@ -224,57 +211,13 @@ export default function AdminInventoryPage() {
   } | null>(null);
   const [adjustDelta, setAdjustDelta] = useState<number>(0);
   const [adjustReason, setAdjustReason] = useState("Kiểm kê định kỳ");
-  const [adjustApprovedBy, setAdjustApprovedBy] = useState("Mai Lan (Trưởng Kho)");
+  const [adjustApprovedBy, setAdjustApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
 
-  // Inflow Logs State
-  const [inflowLogs, setInflowLogs] = useState<InflowLog[]>([
-    {
-      logId: "log-1",
-      receiptCode: "PNK-260901",
-      warehouseId: "wh-1",
-      warehouseName: "Kho Trung Tâm (Quận 3)",
-      productName: "Pouch Mầm Mơ",
-      variantName: "Màu hồng pastel",
-      quantityAdded: 50,
-      stockBefore: 10,
-      stockAfter: 60,
-      unitCost: 35000,
-      approvedBy: "Mai Lan (Trưởng Kho)",
-      sourceNote: "Xưởng may thủ công Mầm Mơ đợt 1",
-      createdAt: "10:30 20/09/2026",
-    },
-    {
-      logId: "log-2",
-      receiptCode: "PNK-260902",
-      warehouseId: "wh-2",
-      warehouseName: "Kho Cơ Sở 2 (Thủ Đức)",
-      productName: "Kẹp tóc Nút Áo Mầm",
-      variantName: "Nút vàng Butter",
-      quantityAdded: 100,
-      stockBefore: 20,
-      stockAfter: 120,
-      unitCost: 15000,
-      approvedBy: "Thế Vinh (Điều Phối)",
-      sourceNote: "Tình nguyện viên may tay bổ sung",
-      createdAt: "14:15 21/09/2026",
-    },
-  ]);
+  // Inflow Logs State - persistent and clean
+  const [inflowLogs, setInflowLogs] = useState<InflowLog[]>(() => (typeof window !== "undefined" ? getStoredInflowLogs() : []));
 
-  // Transfer Logs State
-  const [transferLogs, setTransferLogs] = useState<TransferLog[]>([
-    {
-      logId: "tf-1",
-      transferCode: "DCK-260901",
-      productName: "Pouch Mầm Mơ",
-      variantName: "Màu hồng pastel",
-      fromWarehouse: "Kho Trung Tâm (Quận 3)",
-      toWarehouse: "Kho Cơ Sở 2 (Thủ Đức)",
-      quantity: 15,
-      approvedBy: "Ban Hậu Cần",
-      reason: "Bổ sung hàng mẫu phục vụ gian hàng KTX Khu B",
-      createdAt: "09:00 22/09/2026",
-    },
-  ]);
+  // Transfer Logs State - persistent and clean
+  const [transferLogs, setTransferLogs] = useState<TransferLog[]>(() => (typeof window !== "undefined" ? getStoredTransferLogs() : []));
 
   const [stockSyncWarning, setStockSyncWarning] = useState<string | null>(null);
 
@@ -369,7 +312,9 @@ export default function AdminInventoryPage() {
       createdAt: timeStr,
     };
 
-    setInflowLogs((prev) => [newLog, ...prev]);
+    const updatedLogs = [newLog, ...inflowLogs];
+    setInflowLogs(updatedLogs);
+    saveStoredInflowLogs(updatedLogs);
     setAdjustingItem(null);
     setAdjustDelta(0);
   };
@@ -385,7 +330,7 @@ export default function AdminInventoryPage() {
     if (!prod || !variant) return;
 
     const targetWhObj = warehouses.find((w) => w.warehouse_id === importWarehouseId);
-    const whName = targetWhObj ? targetWhObj.name : "Kho Trung Tâm (Quận 3)";
+    const whName = targetWhObj ? targetWhObj.name : "Kho hàng";
     const currentWhStock =
       importWarehouseId === "wh-2" ? variant.stock_warehouse_2 ?? 0 : variant.stock_warehouse_1 ?? 0;
     const stockBefore = currentWhStock;
@@ -419,7 +364,9 @@ export default function AdminInventoryPage() {
       createdAt: timeStr,
     };
 
-    setInflowLogs([newLog, ...inflowLogs]);
+    const updatedInflows = [newLog, ...inflowLogs];
+    setInflowLogs(updatedInflows);
+    saveStoredInflowLogs(updatedInflows);
     setIsBulkImportOpen(false);
     setMainTab("logs");
     setActiveLogTab("inflow");
@@ -486,7 +433,9 @@ export default function AdminInventoryPage() {
       createdAt: timeStr,
     };
 
-    setTransferLogs([newTransferLog, ...transferLogs]);
+    const updatedTransfers = [newTransferLog, ...transferLogs];
+    setTransferLogs(updatedTransfers);
+    saveStoredTransferLogs(updatedTransfers);
     setIsTransferOpen(false);
     setMainTab("logs");
     setActiveLogTab("transfer");
@@ -1125,29 +1074,49 @@ export default function AdminInventoryPage() {
               </h2>
             </div>
 
-            <div className="flex items-center gap-2 p-1 rounded-xl bg-white border border-[#F0E5D8]">
-              <button
-                type="button"
-                onClick={() => setActiveLogTab("inflow")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeLogTab === "inflow"
-                    ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                📥 Phiếu nhập kho ({filteredInflowLogs.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLogTab("transfer")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeLogTab === "transfer"
-                    ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                🔄 Phiếu điều chuyển ({filteredTransferLogs.length})
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 p-1 rounded-xl bg-white border border-[#F0E5D8]">
+                <button
+                  type="button"
+                  onClick={() => setActiveLogTab("inflow")}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeLogTab === "inflow"
+                      ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  📥 Phiếu nhập kho ({filteredInflowLogs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLogTab("transfer")}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeLogTab === "transfer"
+                      ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  🔄 Phiếu điều chuyển ({filteredTransferLogs.length})
+                </button>
+              </div>
+
+              {(inflowLogs.length > 0 || transferLogs.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử nhập và điều chuyển kho không?")) {
+                      clearInventoryLogs();
+                      setInflowLogs([]);
+                      setTransferLogs([]);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Xóa trắng toàn bộ nhật ký phiếu kho"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa lịch sử</span>
+                </button>
+              )}
             </div>
           </div>
 

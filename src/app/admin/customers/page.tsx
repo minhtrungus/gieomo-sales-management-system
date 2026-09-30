@@ -42,23 +42,27 @@ export default function AdminCustomersPage() {
         }
       }
 
-      // Aggregate dynamically from all stored orders (#24)
+      // Aggregate dynamically from all stored orders in single linear O(N) pass
       for (const ord of orders) {
         const rawPhone = ord.buyer_phone || ord.recipient_phone;
         if (!rawPhone) continue;
         const cleanPhone = rawPhone.replace(/\s+/g, "");
+        const amount = ord.final_amount || 0;
+        const intro = ord.introducer_info || (ord.referral_code ? `Mã: ${ord.referral_code}` : null);
 
         const existing = map.get(cleanPhone);
-        const intro = ord.introducer_info || (ord.referral_code ? `Mã: ${ord.referral_code}` : null);
         if (existing) {
-          existing.totalOrders = Math.max(existing.totalOrders, orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).length);
-          existing.totalSpent = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone).reduce((sum, o) => sum + (o.final_amount || 0), 0);
+          existing.totalOrders += 1;
+          existing.totalSpent += amount;
           if (ord.buyer_name && !existing.fullName) existing.fullName = ord.buyer_name;
           if (ord.buyer_email && !existing.email) existing.email = ord.buyer_email;
-          if (ord.address_detail && !existing.address) existing.address = `${ord.address_detail}, ${ord.district || ""}, ${ord.province || ""}`;
-          if (intro && (!existing.introducerInfo || existing.introducerInfo === "Trực tiếp")) existing.introducerInfo = intro;
+          if (ord.address_detail && !existing.address) {
+            existing.address = `${ord.address_detail}, ${ord.district || ""}, ${ord.province || ""}`;
+          }
+          if (intro && (!existing.introducerInfo || existing.introducerInfo === "Trực tiếp")) {
+            existing.introducerInfo = intro;
+          }
         } else {
-          const matchingOrders = orders.filter((o) => (o.buyer_phone || o.recipient_phone)?.replace(/\s+/g, "") === cleanPhone);
           map.set(cleanPhone, {
             customerId: `cust-${cleanPhone}`,
             fullName: ord.buyer_name || ord.recipient_name || "Khách hàng",
@@ -66,8 +70,8 @@ export default function AdminCustomersPage() {
             email: ord.buyer_email || "",
             address: `${ord.address_detail || ""}, ${ord.district || ""}, ${ord.province || ""}`,
             introducerInfo: intro || "Trực tiếp",
-            totalOrders: matchingOrders.length,
-            totalSpent: matchingOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0),
+            totalOrders: 1,
+            totalSpent: amount,
             createdAt: ord.created_at,
           });
         }
