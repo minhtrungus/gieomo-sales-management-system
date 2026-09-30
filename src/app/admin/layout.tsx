@@ -54,7 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setIsAuthChecked(true);
 
     const heartbeatInterval = !isLoginPage && isAdminAuthenticated() 
-      ? setInterval(() => touchMemberActive(), 45000) 
+      ? setInterval(() => touchMemberActive(), 20000) 
       : null;
 
     const onFocus = () => {

@@ -64,10 +64,24 @@ export async function GET() {
 
     let membersList = data || [];
 
-    // 2. Fetch credential map
+    // 2. Fetch credential map and presence map
     const credMap = await getStoredCredentialsMap(supabase);
 
-    // 3. Attach password/password_hash to each member
+    let presenceMap: Record<string, string> = {};
+    try {
+      const { data: presenceConfig } = await supabase
+        .from("system_configs")
+        .select("config_value")
+        .eq("config_key", "members_online_presence")
+        .maybeSingle();
+      if (presenceConfig?.config_value) {
+        presenceMap = JSON.parse(presenceConfig.config_value);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 3. Attach password/password_hash and last_active_at to each member
     membersList = membersList.map((m: any) => {
       const emailKey = m.email ? m.email.toLowerCase().trim() : "";
       const phoneKey = m.phone ? m.phone.replace(/\D/g, "") : "";
@@ -83,10 +97,17 @@ export async function GET() {
         (idKey && credMap[idKey]) ||
         "MamMo@123";
 
+      const resolvedLastActive =
+        presenceMap[idKey] ||
+        presenceMap[idKey.toLowerCase()] ||
+        (emailKey ? presenceMap[emailKey] : null) ||
+        null;
+
       return {
         ...m,
         password: resolvedPassword,
         password_hash: resolvedPassword,
+        last_active_at: resolvedLastActive,
       };
     });
 

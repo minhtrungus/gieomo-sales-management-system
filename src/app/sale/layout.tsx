@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SaleSidebar } from "@/components/sale/SaleSidebar";
 import { SaleHeader } from "@/components/sale/SaleHeader";
-import { isAdminAuthenticated, getAdminSession } from "@/lib/data/orderStore";
+import { isAdminAuthenticated, getAdminSession, touchMemberActive } from "@/lib/data/orderStore";
 
 export default function SaleLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -19,16 +19,27 @@ export default function SaleLayout({ children }: { children: React.ReactNode }) 
       return;
     }
 
+    touchMemberActive();
     setIsAuthChecked(true);
+
+    const heartbeatInterval = setInterval(() => touchMemberActive(), 20000);
+    const onFocus = () => touchMemberActive();
+    window.addEventListener("focus", onFocus);
 
     const handleAuthChange = () => {
       if (!isAdminAuthenticated()) {
         router.replace("/admin/login");
+      } else {
+        touchMemberActive();
       }
     };
 
     window.addEventListener("gieomo_admin_auth_changed", handleAuthChange);
-    return () => window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
+    return () => {
+      clearInterval(heartbeatInterval);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
+    };
   }, [router]);
 
   if (!isAuthChecked) {

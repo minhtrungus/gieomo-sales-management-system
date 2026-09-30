@@ -703,7 +703,7 @@ export function syncMembersFromServer(): void {
           const mapped: StoredMember[] = data.members.map((m: any) => {
             const loc = localMap.get(m.member_id?.toLowerCase()) || (m.email ? localMap.get(m.email.toLowerCase()) : undefined);
             const savedPresence = presenceMap[m.member_id] || (m.email ? presenceMap[m.email.toLowerCase()] : undefined);
-            const finalLastActive = loc?.lastActiveAt || savedPresence || undefined;
+            const finalLastActive = m.last_active_at || loc?.lastActiveAt || savedPresence || undefined;
 
             return {
               memberId: m.member_id,
@@ -861,9 +861,39 @@ export function deleteStoredMember(memberId: string): void {
   }
 }
 
+let lastHeartbeatSentAt = 0;
+
+/**
+ * Đồng bộ trạng thái trực tuyến của toàn bộ thành viên từ server Supabase
+ */
+export function syncPresenceFromServer(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  return safeFetchJson<{ success: boolean; presence: Record<string, string> }>("/api/members/presence")
+    .then((data) => {
+      if (data?.success && data.presence) {
+        localStorage.setItem("gieomo_presence", JSON.stringify(data.presence));
+        const members = getStoredMembers();
+        let changed = false;
+        members.forEach((m) => {
+          const serverTs = data.presence[m.memberId] || (m.email ? data.presence[m.email.toLowerCase()] : null);
+          if (serverTs && (!m.lastActiveAt || new Date(serverTs).getTime() > new Date(m.lastActiveAt).getTime())) {
+            m.lastActiveAt = serverTs;
+            changed = true;
+          }
+        });
+        if (changed) {
+          cachedMembers = members;
+          localStorage.setItem("gieomo_members", JSON.stringify(members));
+          window.dispatchEvent(new Event("gieomo_members_updated"));
+        }
+      }
+    })
+    .catch(() => {});
+}
+
 /**
  * Cập nhật tín hiệu hoạt động (heartbeat) khi thành viên đang mở tab website.
- * Tự động ghi nhận mốc thời gian gần nhất (lastActiveAt).
+ * Tự động đồng bộ lên Supabase để mọi thiết bị/admin khác thấy tức thời.
  */
 export function touchMemberActive(emailOrMemberId?: string): void {
   if (typeof window === "undefined") return;
@@ -885,21 +915,35 @@ export function touchMemberActive(emailOrMemberId?: string): void {
     if (matched) {
       const now = Date.now();
       const prev = matched.lastActiveAt ? new Date(matched.lastActiveAt).getTime() : 0;
-      // Chỉ lưu nếu khoảng cách > 15 giây để tránh ghi liên tục
+      const nowIso = new Date(now).toISOString();
+
+      // Cập nhật bộ nhớ cục bộ
       if (!matched.lastActiveAt || now - prev > 15000) {
-        matched.lastActiveAt = new Date(now).toISOString();
+        matched.lastActiveAt = nowIso;
         cachedMembers = members;
         localStorage.setItem("gieomo_members", JSON.stringify(members));
 
-        // Lưu vào presence store tách biệt để không bao giờ bị xóa khi sync server
         try {
           const presenceMap = JSON.parse(localStorage.getItem("gieomo_presence") || "{}");
-          presenceMap[matched.memberId] = matched.lastActiveAt;
-          if (matched.email) presenceMap[matched.email.toLowerCase()] = matched.lastActiveAt;
+          presenceMap[matched.memberId] = nowIso;
+          if (matched.email) presenceMap[matched.email.toLowerCase()] = nowIso;
           localStorage.setItem("gieomo_presence", JSON.stringify(presenceMap));
         } catch {}
 
         window.dispatchEvent(new Event("gieomo_members_updated"));
+      }
+
+      // Gửi heartbeat lên server để toàn bộ thiết bị khác đều thấy thành viên này Online
+      if (now - lastHeartbeatSentAt > 15000) {
+        lastHeartbeatSentAt = now;
+        fetch("/api/members/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberId: matched.memberId,
+            email: matched.email,
+          }),
+        }).catch(() => {});
       }
     }
   } catch (err) {

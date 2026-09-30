@@ -29,6 +29,7 @@ import {
   saveStoredMembers,
   deleteStoredMember,
   getMemberPresence,
+  syncPresenceFromServer,
   type StoredMember,
 } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
@@ -751,6 +752,12 @@ export default function AdminMembersPage() {
     setOrders(getStoredOrders());
     setMembers(getStoredMembers());
 
+    // Fetch latest online presence from server immediately & poll every 10s
+    syncPresenceFromServer();
+    const presenceTimer = setInterval(() => {
+      syncPresenceFromServer();
+    }, 10000);
+
     const handleOrdersUpdate = () => setOrders(getStoredOrders());
     const handleMembersUpdate = () => setMembers(getStoredMembers());
 
@@ -758,6 +765,7 @@ export default function AdminMembersPage() {
     window.addEventListener("gieomo_members_updated", handleMembersUpdate);
 
     return () => {
+      clearInterval(presenceTimer);
       window.removeEventListener("gieomo_orders_updated", handleOrdersUpdate);
       window.removeEventListener("gieomo_members_updated", handleMembersUpdate);
     };
