@@ -7,18 +7,12 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { getStoredCategories, saveNewCategory, saveNewProduct } from "@/lib/data/orderStore";
+import { saveNewProduct } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
-import type { ProductCategory } from "@/types/database";
-import { ArrowLeft, Plus, Trash2, FolderPlus, X, Upload, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, X, Upload, Loader2 } from "lucide-react";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
-
-  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
-  const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
-  const [newCatDesc, setNewCatDesc] = useState("");
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -28,7 +22,6 @@ export default function AdminNewProductPage() {
   const [descSize, setDescSize] = useState("");
   const [descMaterials, setDescMaterials] = useState("");
   const [descImpact, setDescImpact] = useState("");
-  const [categoryId, setCategoryId] = useState(() => categories[0]?.category_id || "cat-1");
   const [price, setPrice] = useState<number>(0);
   const [compareAtPrice, setCompareAtPrice] = useState<number | "">("");
   const [costPrice, setCostPrice] = useState<number | "">("");
@@ -36,15 +29,6 @@ export default function AdminNewProductPage() {
   const [featured, setFeatured] = useState(false);
   const [imageUrl, setImageUrl] = useState("/images/products/pounch_1.png");
   const [isUploading, setIsUploading] = useState(false);
-
-  // Load stored categories
-  useEffect(() => {
-    const list = getStoredCategories();
-    setCategories(list);
-    if (!categoryId && list.length > 0) {
-      setCategoryId(list[0].category_id);
-    }
-  }, []);
 
   // Variants list
   const [variants, setVariants] = useState([
@@ -81,37 +65,6 @@ export default function AdminNewProductPage() {
     setVariants((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleQuickAddCategory = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCatName.trim()) return;
-    const catSlug = newCatName
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[đĐ]/g, "d")
-      .replace(/[^a-z0-9\s-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-");
-
-    const newCat: ProductCategory = {
-      category_id: `cat-${Date.now()}`,
-      name: newCatName.trim(),
-      slug: catSlug || `cat-${Date.now()}`,
-      description: newCatDesc.trim() || null,
-      status: "active",
-      sort_order: categories.length + 1,
-      created_at: new Date().toISOString(),
-    };
-
-    saveNewCategory(newCat);
-    const updated = getStoredCategories();
-    setCategories(updated);
-    setCategoryId(newCat.category_id);
-    setNewCatName("");
-    setNewCatDesc("");
-    setIsAddCatModalOpen(false);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -122,15 +75,13 @@ export default function AdminNewProductPage() {
       descImpact.trim() ? `\n\n## Ý nghĩa\n${descImpact.trim()}` : "",
     ].filter(Boolean).join("");
 
-    const categoryObj =
-      categories.find((c) => c.category_id === categoryId) || categories[0];
     const prodId = `prod-${Date.now()}`;
     const cleanSlug = slug.trim() || `prod-${Date.now()}`;
 
     const newProd = {
       product_id: prodId,
-      category_id: categoryId,
-      category: categoryObj,
+      category_id: null,
+      category: null,
       name,
       slug: cleanSlug,
       short_description: shortDescription,
@@ -434,24 +385,6 @@ export default function AdminNewProductPage() {
               Cấu hình xuất bản
             </h3>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-gray-800">Danh mục sản phẩm *</label>
-                <button
-                  type="button"
-                  onClick={() => setIsAddCatModalOpen(true)}
-                  className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200"
-                >
-                  <Plus className="w-3 h-3" /> Thêm danh mục
-                </button>
-              </div>
-              <Select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                options={categories.map((c) => ({ value: c.category_id, label: c.name }))}
-              />
-            </div>
-
             <Select
               label="Trạng thái xuất bản"
               value={status}
@@ -552,69 +485,6 @@ export default function AdminNewProductPage() {
         </div>
       </form>
 
-      {/* Modal Quick Add Category */}
-      {isAddCatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-gray-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <FolderPlus className="w-5 h-5 text-emerald-800" />
-                <h3 className="font-heading font-extrabold text-base text-gray-900">
-                  Thêm danh mục mới
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddCatModalOpen(false)}
-                className="p-1 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleQuickAddCategory} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Tên danh mục *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Phụ kiện handmade, Set quà tặng..."
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 font-bold"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Mô tả ngắn</label>
-                <textarea
-                  rows={2}
-                  placeholder="Mô tả nhóm sản phẩm..."
-                  value={newCatDesc}
-                  onChange={(e) => setNewCatDesc(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 resize-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCatModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-xs cursor-pointer"
-                >
-                  Tạo danh mục ➔
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

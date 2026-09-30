@@ -41,6 +41,10 @@ export default function SaleCreateOrderPage() {
     setAvailableProducts(getStoredProducts());
     setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
     setSettings(getStoredSettings());
+
+    const handleSettingsUpdate = () => setSettings(getStoredSettings());
+    window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
+    return () => window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
   }, []);
 
   const [customerName, setCustomerName] = useState("");
@@ -154,7 +158,9 @@ export default function SaleCreateOrderPage() {
     () => orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
     [orderItems]
   );
-  const shippingFee = deliveryType === "pickup_point" ? 0 : 25000;
+  const isFreeship = (settings.freeShippingThreshold ?? 0) > 0 && subtotal >= (settings.freeShippingThreshold ?? 0);
+  const baseShippingFee = settings.flatShippingFee !== undefined ? settings.flatShippingFee : 15000;
+  const shippingFee = deliveryType === "pickup_point" ? 0 : (isFreeship ? 0 : baseShippingFee);
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -488,7 +494,9 @@ export default function SaleCreateOrderPage() {
                 value={deliveryType}
                 onChange={(e) => setDeliveryType(e.target.value)}
               >
-                <option value="home_delivery">Giao tận nơi (+25.000đ)</option>
+                <option value="home_delivery">
+                  Giao tận nơi ({isFreeship ? "Miễn phí" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
+                </option>
                 <option value="pickup_point">Nhận tại điểm hẹn Mầm Mơ (0đ)</option>
               </select>
             </div>
@@ -566,7 +574,9 @@ export default function SaleCreateOrderPage() {
           </div>
           <div className="flex items-center justify-between text-xs text-emerald-100/90 pb-3 border-b border-[#264E2E]">
             <span>Phí vận chuyển:</span>
-            <span className="font-bold">{shippingFee.toLocaleString("vi-VN")}đ</span>
+            <span className="font-bold">
+              {shippingFee === 0 ? "Miễn phí" : `${shippingFee.toLocaleString("vi-VN")}đ`}
+            </span>
           </div>
           <div className="flex items-center justify-between text-base sm:text-lg font-extrabold text-[#BFE9C3]">
             <span>TỔNG CỘNG THANH TOÁN:</span>

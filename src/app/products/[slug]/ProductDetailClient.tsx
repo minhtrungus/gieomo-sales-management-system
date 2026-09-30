@@ -186,17 +186,12 @@ export function ProductDetailClient({
           {/* Details - Right 6 Cols */}
           <div className="lg:col-span-6 space-y-6 flex flex-col justify-between">
             <div className="space-y-4">
-              {/* Category & Badge */}
-              <div className="flex items-center gap-2">
-                {product.category && (
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold uppercase tracking-wider">
-                    {product.category.name}
-                  </span>
-                )}
-                {product.badge_label && (
+              {/* Badge */}
+              {product.badge_label && (
+                <div className="flex items-center gap-2">
                   <Badge variant="warning">{product.badge_label}</Badge>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Title */}
               <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-emerald-950 leading-tight text-balance">

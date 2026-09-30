@@ -4,100 +4,36 @@ import { useState, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_CATEGORIES, ExtendedProduct } from "@/lib/data/mockData";
-import { getStoredProducts, getStoredCategories } from "@/lib/data/orderStore";
-import type { ProductCategory } from "@/types/database";
+import type { ExtendedProduct } from "@/lib/data/mockData";
+import { getStoredProducts } from "@/lib/data/orderStore";
 import { EmptyState } from "@/components/ui/States";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { Search, Sparkles } from "lucide-react";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>(MOCK_CATEGORIES);
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("featured");
 
   useEffect(() => {
     setProducts(getStoredProducts());
-    setCategories(getStoredCategories());
-
     const handleUpdate = () => setProducts(getStoredProducts());
-    const handleCatUpdate = () => setCategories(getStoredCategories());
-
     window.addEventListener("gieomo_products_updated", handleUpdate);
-    window.addEventListener("gieomo_categories_updated", handleCatUpdate);
-
     return () => {
       window.removeEventListener("gieomo_products_updated", handleUpdate);
-      window.removeEventListener("gieomo_categories_updated", handleCatUpdate);
     };
   }, []);
 
   const debouncedSearch = useDebounce(searchQuery, 250);
-
-  // Deduplicate categories by slug to ensure 100% duplicate-free UI
-  const uniqueCategories = useMemo(() => {
-    const map = new Map<string, ProductCategory>();
-    for (const cat of categories) {
-      if (cat.slug && !map.has(cat.slug)) {
-        map.set(cat.slug, cat);
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  }, [categories]);
-
-  // Helper to determine product category slug cleanly without hardcoded fallbacks
-  const getProductCategorySlug = (product: ExtendedProduct): string | null => {
-    if (product.category?.slug) return product.category.slug;
-    if (product.category_id) {
-      const matched = categories.find((c) => c.category_id === product.category_id);
-      if (matched?.slug) return matched.slug;
-    }
-    return null;
-  };
 
   // Only active products are visible on the public storefront
   const activeProducts = useMemo(() => {
     return products.filter((p) => p.status === "active");
   }, [products]);
 
-  // Products with no category
-  const uncategorizedCount = useMemo(() => {
-    return activeProducts.filter((p) => !getProductCategorySlug(p)).length;
-  }, [activeProducts, categories]);
-
-  // If selected category does not exist, or system has no categories -> fallback to "all" (mặc định hiển thị tất cả)
-  useEffect(() => {
-    if (selectedCategory !== "all") {
-      if (selectedCategory === "uncategorized") {
-        if (uncategorizedCount === 0) setSelectedCategory("all");
-      } else {
-        const exists = uniqueCategories.some((c) => c.slug === selectedCategory);
-        if (!exists) {
-          setSelectedCategory("all");
-        }
-      }
-    }
-  }, [uniqueCategories, selectedCategory, uncategorizedCount]);
-
   const filteredProducts = useMemo(() => {
     return activeProducts
       .filter((product) => {
-        // Category Filter:
-        // Nếu không có danh mục trong hệ thống, hoặc chọn "Tất cả",
-        // hoặc sản phẩm không thuộc danh mục nào -> mặc định hiển thị tất cả
-        if (selectedCategory !== "all" && uniqueCategories.length > 0) {
-          const cSlug = getProductCategorySlug(product);
-          if (selectedCategory === "uncategorized") {
-            if (cSlug) return false;
-          } else {
-            if (!cSlug || cSlug !== selectedCategory) {
-              return false;
-            }
-          }
-        }
-        // Search Query
         if (
           debouncedSearch.trim() !== "" &&
           !product.name.toLowerCase().includes(debouncedSearch.toLowerCase()) &&
@@ -113,7 +49,7 @@ export default function ProductsPage() {
         if (sortBy === "newest") return b.sort_order - a.sort_order;
         return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
       });
-  }, [activeProducts, selectedCategory, uniqueCategories, debouncedSearch, sortBy, categories]);
+  }, [activeProducts, debouncedSearch, sortBy]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
@@ -135,7 +71,7 @@ export default function ProductsPage() {
         </div>
 
         {/* Filters & Search Controls */}
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#F0E5D8] shadow-soft mb-8 space-y-4">
+        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#F0E5D8] shadow-soft mb-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             {/* Search Input */}
             <div className="relative w-full md:w-80">
@@ -157,7 +93,7 @@ export default function ProductsPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-3.5 py-2 rounded-2xl border border-[#F0E5D8] text-xs sm:text-sm bg-[#FFFDF9] outline-none focus:border-[#FFB98A] text-[#231B16] font-medium"
+                className="px-3.5 py-2 rounded-2xl border border-[#F0E5D8] text-xs sm:text-sm bg-[#FFFDF9] outline-none focus:border-[#FFB98A] text-[#231B16] font-medium cursor-pointer"
               >
                 <option value="featured">Nổi bật nhất</option>
                 <option value="price_asc">Giá: Thấp đến cao</option>
@@ -165,48 +101,6 @@ export default function ProductsPage() {
                 <option value="newest">Mới nhất</option>
               </select>
             </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            <button
-              onClick={() => setSelectedCategory("all")}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategory === "all"
-                  ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
-                  : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
-              }`}
-            >
-              Tất cả <span suppressHydrationWarning>({activeProducts.length})</span>
-            </button>
-            {uniqueCategories.map((cat) => {
-              const count = activeProducts.filter((p) => getProductCategorySlug(p) === cat.slug).length;
-              return (
-                <button
-                  key={cat.slug}
-                  onClick={() => setSelectedCategory(cat.slug)}
-                  className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                    selectedCategory === cat.slug
-                      ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
-                      : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
-                  }`}
-                >
-                  {cat.name} <span suppressHydrationWarning>({count})</span>
-                </button>
-              );
-            })}
-            {uncategorizedCount > 0 && uniqueCategories.length > 0 && (
-              <button
-                onClick={() => setSelectedCategory("uncategorized")}
-                className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === "uncategorized"
-                    ? "bg-[#BFE9C3] text-[#16381D] shadow-xs border border-[#9ed4a3]"
-                    : "bg-[#FFFDF9] text-[#6B5A50] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
-                }`}
-              >
-                Khác / Chưa phân loại <span suppressHydrationWarning>({uncategorizedCount})</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -220,17 +114,14 @@ export default function ProductsPage() {
         ) : (
           <EmptyState
             title="Không tìm thấy sản phẩm"
-            description="Hãy thử thay đổi bộ lọc hoặc tìm kiếm với từ khóa khác xem nhé!"
+            description="Hãy thử tìm kiếm với từ khóa khác xem nhé!"
             action={
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedCategory("all");
-                  setSearchQuery("");
-                }}
+                onClick={() => setSearchQuery("")}
                 className="mt-3 px-4 py-2 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-colors cursor-pointer"
               >
-                Xóa bộ lọc
+                Xóa từ khóa tìm kiếm
               </button>
             }
           />

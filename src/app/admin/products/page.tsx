@@ -13,45 +13,24 @@ import {
   deleteStoredProduct,
   toggleStoredProductStatus,
   toggleStoredProductFeatured,
-  getStoredCategories,
 } from "@/lib/data/orderStore";
-import type { ProductCategory } from "@/types/database";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star, FolderTree, Boxes } from "lucide-react";
-import { AdminCategoriesTab } from "@/components/admin/AdminCategoriesTab";
+import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>(() => getStoredCategories());
-  const [activeMainTab, setActiveMainTab] = useState<"products" | "categories">("products");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "categories") {
-        setActiveMainTab("categories");
-      }
-    }
-  }, []);
 
   useEffect(() => {
     setProducts(getStoredProducts());
-    setCategories(getStoredCategories());
-
     const handleUpdate = () => setProducts(getStoredProducts());
-    const handleCatUpdate = () => setCategories(getStoredCategories());
-
     window.addEventListener("gieomo_products_updated", handleUpdate);
-    window.addEventListener("gieomo_categories_updated", handleCatUpdate);
-
     return () => {
       window.removeEventListener("gieomo_products_updated", handleUpdate);
-      window.removeEventListener("gieomo_categories_updated", handleCatUpdate);
     };
   }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
 
   // Modal States
   const [editingProduct, setEditingProduct] = useState<ExtendedProduct | null>(null);
@@ -69,36 +48,8 @@ export default function AdminProductsPage() {
   const [editImagesText, setEditImagesText] = useState("");
   const [editVariants, setEditVariants] = useState<any[]>([]);
 
-  // Count uncategorized products in admin
-  const uncategorizedCount = useMemo(() => {
-    return products.filter((p) => {
-      const prodCatId = p.category?.category_id || p.category_id;
-      return !prodCatId || !categories.some((c) => c.category_id === prodCatId);
-    }).length;
-  }, [products, categories]);
-
-  // If selected category does not exist, fallback to "all" (mặc định hiển thị tất cả)
-  useEffect(() => {
-    if (selectedCategory !== "all" && selectedCategory !== "uncategorized") {
-      const exists = categories.some((c) => c.category_id === selectedCategory);
-      if (!exists) {
-        setSelectedCategory("all");
-      }
-    }
-  }, [categories, selectedCategory]);
-
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      if (selectedCategory !== "all") {
-        const prodCatId = p.category?.category_id || p.category_id;
-        if (selectedCategory === "uncategorized") {
-          if (prodCatId && categories.some((c) => c.category_id === prodCatId)) {
-            return false;
-          }
-        } else if (prodCatId !== selectedCategory) {
-          return false;
-        }
-      }
       if (
         searchQuery.trim() !== "" &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -108,7 +59,7 @@ export default function AdminProductsPage() {
       }
       return true;
     });
-  }, [products, selectedCategory, searchQuery, categories]);
+  }, [products, searchQuery]);
 
   // Toggle active/draft status
   const handleToggleStatus = (productId: string) => {
@@ -226,129 +177,34 @@ export default function AdminProductsPage() {
             Quản lý sản phẩm &amp; Hàng hóa
           </h1>
           <p className="text-xs text-[#7E7068] mt-0.5">
-            Xem danh sách, kiểm soát tồn kho và phân loại danh mục sản phẩm.
+            Xem danh sách, kiểm soát tồn kho và giá bán sản phẩm.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setActiveMainTab("categories")}
-            className={`px-4 py-2.5 rounded-full border text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer ${
-              activeMainTab === "categories"
-                ? "bg-[#1B3622] text-white border-[#1B3622]"
-                : "bg-[#FFFDF9] hover:bg-[#FFF4E5] text-[#342A24] border-[#F0E5D8]"
-            }`}
-          >
-            <FolderTree className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Danh mục ({categories.length})</span>
-          </button>
-
-          <Link
-            href="/admin/products/new"
-            className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm sản phẩm</span>
-          </Link>
-        </div>
+        <Link
+          href="/admin/products/new"
+          className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Thêm sản phẩm</span>
+        </Link>
       </div>
 
-      {/* Main Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-[#F0E5D8] pb-3">
-        <button
-          type="button"
-          onClick={() => setActiveMainTab("products")}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeMainTab === "products"
-              ? "bg-[#1B3622] text-white shadow-xs"
-              : "bg-white text-[#7E7068] hover:text-[#1B3622] hover:bg-cream border border-[#F0E5D8]"
-          }`}
-        >
-          <Boxes className="w-4 h-4" />
-          <span>Danh sách sản phẩm ({products.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveMainTab("categories")}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeMainTab === "categories"
-              ? "bg-[#1B3622] text-white shadow-xs"
-              : "bg-white text-[#7E7068] hover:text-[#1B3622] hover:bg-cream border border-[#F0E5D8]"
-          }`}
-        >
-          <FolderTree className="w-4 h-4" />
-          <span>Danh mục sản phẩm ({categories.length})</span>
-        </button>
+      {/* Tip Box */}
+      <div className="text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl px-3.5 py-2 flex items-center gap-2">
+        <span>💡</span>
+        <span>
+          Sản phẩm <strong>&quot;Đang bán&quot;</strong> hiển thị trên website. Bật <strong>&quot;⭐ Nổi bật&quot;</strong> để đưa lên đầu Trang chủ.
+        </span>
       </div>
 
-      {activeMainTab === "categories" ? (
-        <AdminCategoriesTab />
-      ) : (
-        <>
-          {/* Tip Box */}
-          <div className="text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl px-3.5 py-2 flex items-center gap-2">
-            <span>💡</span>
-            <span>
-              Sản phẩm <strong>&quot;Đang bán&quot;</strong> hiển thị trên website. Bật <strong>&quot;⭐ Nổi bật&quot;</strong> để đưa lên đầu Trang chủ.
-            </span>
-          </div>
-
-      {/* Search & Category Filter */}
-      <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* Search Input */}
+      <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft">
         <div className="w-full sm:w-80">
           <AdminSearchInput
             placeholder="Tìm tên sản phẩm, mã slug..."
             onSearch={setSearchQuery}
           />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
-          <button
-            onClick={() => setSelectedCategory("all")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-              selectedCategory === "all"
-                ? "bg-[#BFE9C3] text-[#16381D] border border-[#9ed4a3]"
-                : "bg-[#FFFDF9] text-[#7E7068] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
-            }`}
-          >
-            Tất cả ({products.length})
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.category_id}
-              onClick={() => setSelectedCategory(cat.category_id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                selectedCategory === cat.category_id
-                  ? "bg-[#BFE9C3] text-[#16381D] border border-[#9ed4a3]"
-                  : "bg-[#FFFDF9] text-[#7E7068] hover:bg-[#FFF4E5] border border-[#F0E5D8]"
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
-          {uncategorizedCount > 0 && (
-            <button
-              onClick={() => setSelectedCategory("uncategorized")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                selectedCategory === "uncategorized"
-                  ? "bg-amber-100 text-amber-950 border border-amber-300 font-extrabold"
-                  : "bg-amber-50/80 text-amber-800 hover:bg-amber-100 border border-amber-200"
-              }`}
-            >
-              Chưa phân loại ({uncategorizedCount})
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setActiveMainTab("categories")}
-            className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
-            title="Quản lý danh mục sản phẩm"
-          >
-            <FolderTree className="w-3.5 h-3.5" />
-            <span>+ Quản lý danh mục</span>
-          </button>
         </div>
       </div>
 
@@ -363,7 +219,6 @@ export default function AdminProductsPage() {
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
                 <th className="py-2.5 px-3 whitespace-nowrap">Sản phẩm</th>
-                <th className="py-2.5 px-2.5 whitespace-nowrap">Danh mục</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Giá bán / Giá vốn</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Tổng tồn kho</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Bán hàng</th>
@@ -392,10 +247,6 @@ export default function AdminProductsPage() {
                         <span className="font-bold text-[#342A24] block text-xs">{p.name}</span>
                         <span className="text-[10px] text-[#A89B92] font-mono">/{p.slug}</span>
                       </div>
-                    </td>
-
-                    <td className="py-2.5 px-2.5 font-bold text-[#5C4D44] whitespace-nowrap">
-                      {p.category?.name ?? "Chưa phân loại"}
                     </td>
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
@@ -562,57 +413,33 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Danh mục *</label>
-                  <select
-                    value={editingProduct.category_id ?? "cat-1"}
-                    onChange={(e) => {
-                      const cat = categories.find((c) => c.category_id === e.target.value);
-                      setEditingProduct({
-                        ...editingProduct,
-                        category_id: e.target.value,
-                        category: cat,
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.category_id} value={c.category_id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-2">
+                <label className="font-bold text-[#342A24] block text-xs">Trạng thái xuất bản *</label>
+                <select
+                  value={editingProduct.status}
+                  onChange={(e) =>
+                    setEditingProduct({
+                      ...editingProduct,
+                      status: e.target.value as "active" | "draft",
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
+                >
+                  <option value="active">Đang bán (Active)</option>
+                  <option value="draft">Bản nháp (Draft)</option>
+                </select>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Trạng thái xuất bản *</label>
-                  <select
-                    value={editingProduct.status}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        status: e.target.value as "active" | "draft",
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                  >
-                    <option value="active">Đang bán (Active)</option>
-                    <option value="draft">Bản nháp (Draft)</option>
-                  </select>
-
-                  <label className="flex items-center gap-2 cursor-pointer pt-2">
-                    <input
-                      type="checkbox"
-                      checked={editFeatured}
-                      onChange={(e) => setEditFeatured(e.target.checked)}
-                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span className="text-[11px] font-bold text-[#342A24]">
-                      ⭐ Hiển thị nổi bật trên Trang chủ (Hero)
-                    </span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={editFeatured}
+                    onChange={(e) => setEditFeatured(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-[11px] font-bold text-[#342A24]">
+                    ⭐ Hiển thị nổi bật trên Trang chủ (Hero)
+                  </span>
+                </label>
               </div>
 
               {/* Phân bổ tồn kho giữa 2 kho hàng */}
@@ -876,8 +703,6 @@ export default function AdminProductsPage() {
             </div>
           </div>
         </div>
-      )}
-        </>
       )}
     </div>
   );

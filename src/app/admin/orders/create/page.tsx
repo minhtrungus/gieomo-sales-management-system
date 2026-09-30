@@ -82,7 +82,8 @@ export default function AdminCreateOrderPage() {
     () => orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [orderItems]
   );
-  const flatShippingFee = 15000;
+  const isFreeship = (settings?.freeShippingThreshold ?? 0) > 0 && subtotal >= (settings?.freeShippingThreshold ?? 0);
+  const flatShippingFee = isFreeship ? 0 : (settings?.flatShippingFee ?? 15000);
   const shippingFee = deliveryType === "member_delivery" ? 0 : flatShippingFee;
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 

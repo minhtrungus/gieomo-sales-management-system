@@ -80,7 +80,7 @@ export default function CombosPage() {
                 href="/products"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-all shadow-xs border border-[#9ed4a3]"
               >
-                <span>Xem danh mục sản phẩm lẻ ➔</span>
+                <span>Xem các sản phẩm lẻ ➔</span>
               </Link>
             </div>
           </div>

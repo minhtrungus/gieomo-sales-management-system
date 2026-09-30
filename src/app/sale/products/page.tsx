@@ -4,23 +4,19 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Search, Boxes, PackagePlus, CheckCircle, XCircle } from "lucide-react";
-import { getStoredProducts, getStoredCategories } from "@/lib/data/orderStore";
+import { getStoredProducts } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import type { Product, ProductCategory } from "@/types/database";
+import type { Product } from "@/types/database";
 
 export default function SaleProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCat, setSelectedCat] = useState("all");
 
   useEffect(() => {
     setProducts(getStoredProducts());
-    setCategories(getStoredCategories());
   }, []);
 
   const filteredProducts = products.filter((p) => {
-    if (selectedCat !== "all" && p.category_id !== selectedCat) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = p.name.toLowerCase().includes(q);
@@ -36,10 +32,10 @@ export default function SaleProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-heading font-extrabold text-2xl text-[#231B16]">
-            Tra Cứu Bảng Giá & Danh Mục
+            Tra Cứu Bảng Giá Sản Phẩm
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Danh mục sản phẩm mở bán giúp thành viên tư vấn giá và tình trạng hàng cho khách.
+            Bảng giá và tình trạng hàng giúp thành viên tư vấn và tạo đơn hộ cho khách.
           </p>
         </div>
 
@@ -52,8 +48,8 @@ export default function SaleProductsPage() {
         </Link>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-xs space-y-3">
+      {/* Search Bar */}
+      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-xs">
         <div className="relative">
           <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -63,36 +59,6 @@ export default function SaleProductsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-10 pr-4 rounded-2xl border border-gray-200 bg-gray-50 text-xs text-gray-800 focus:outline-none focus:border-emerald-600 focus:bg-white"
           />
-        </div>
-
-        {/* Category Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            onClick={() => setSelectedCat("all")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-              selectedCat === "all"
-                ? "bg-[#16381D] text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            Tất cả danh mục ({products.length})
-          </button>
-          {categories.map((c) => {
-            const count = products.filter((p) => p.category_id === c.category_id).length;
-            return (
-              <button
-                key={c.category_id}
-                onClick={() => setSelectedCat(c.category_id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-                  selectedCat === c.category_id
-                    ? "bg-[#16381D] text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {c.name} ({count})
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -189,7 +155,7 @@ export default function SaleProductsPage() {
         <div className="bg-white rounded-3xl p-12 text-center border border-gray-100 shadow-xs space-y-2">
           <Boxes className="w-10 h-10 text-gray-300 mx-auto" />
           <h3 className="font-bold text-sm text-gray-700">Không tìm thấy sản phẩm nào</h3>
-          <p className="text-xs text-gray-400">Vui lòng thử chọn danh mục khác hoặc xóa từ khóa tìm kiếm.</p>
+          <p className="text-xs text-gray-400">Vui lòng kiểm tra lại từ khóa tìm kiếm.</p>
         </div>
       )}
     </div>

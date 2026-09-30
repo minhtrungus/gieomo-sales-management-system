@@ -58,7 +58,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
     if (path.includes("/admin/products/new"))
       return { title: "Thêm sản phẩm mới", breadcrumb: "Sản phẩm / Tạo mới" };
     if (path.includes("/admin/products"))
-      return { title: "Kho sản phẩm", breadcrumb: "Sản phẩm & Danh mục" };
+      return { title: "Kho sản phẩm", breadcrumb: "Quản lý sản phẩm" };
     if (path.includes("/admin/combos"))
       return { title: "Quản lý Set Combo", breadcrumb: "Sản phẩm / Set Combo" };
     if (path.includes("/admin/inventory"))

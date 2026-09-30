@@ -90,11 +90,6 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
       {/* Info */}
       <div className="p-3 sm:p-5 flex-1 flex flex-col justify-between space-y-2 sm:space-y-3">
         <div className="space-y-1.5">
-          {product.category && (
-            <span className="text-[10px] font-bold text-[#2D6338] uppercase tracking-wider block">
-              {product.category.name}
-            </span>
-          )}
           <h3 className="font-heading font-bold text-[#342A24] text-sm sm:text-base line-clamp-2 leading-snug text-balance group-hover:text-[#2D6338] transition-colors">
             {product.name}
           </h3>
