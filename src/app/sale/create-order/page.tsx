@@ -32,14 +32,12 @@ export default function SaleCreateOrderPage() {
   const router = useRouter();
   const [session, setSession] = useState<AdminSession | null>(null);
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
-  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
     const s = getAdminSession();
     setSession(s);
     setAvailableProducts(getStoredProducts());
-    setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
     setSettings(getStoredSettings());
 
     const handleSettingsUpdate = () => setSettings(getStoredSettings());
@@ -50,11 +48,8 @@ export default function SaleCreateOrderPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [deliveryType, setDeliveryType] = useState("home_delivery");
-  const [pickupPointId, setPickupPointId] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
   const [province, setProvince] = useState("TP. Hồ Chí Minh");
-  const [paymentMethod, setPaymentMethod] = useState("banking");
   const [customerNote, setCustomerNote] = useState("");
 
   // QR Modal
@@ -160,7 +155,7 @@ export default function SaleCreateOrderPage() {
   );
   const isFreeship = (settings.freeShippingThreshold ?? 0) > 0 && subtotal >= (settings.freeShippingThreshold ?? 0);
   const baseShippingFee = settings.flatShippingFee !== undefined ? settings.flatShippingFee : 15000;
-  const shippingFee = deliveryType === "pickup_point" ? 0 : (isFreeship ? 0 : baseShippingFee);
+  const shippingFee = isFreeship ? 0 : baseShippingFee;
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -192,7 +187,6 @@ export default function SaleCreateOrderPage() {
       };
     });
 
-    const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
     const memberName = session?.name || "Thành viên";
     const refCode = session?.referralCode || "";
 
@@ -204,16 +198,11 @@ export default function SaleCreateOrderPage() {
       buyer_email: customerEmail || "",
       recipient_name: customerName,
       recipient_phone: customerPhone,
-      delivery_type: deliveryType as any,
-      address_detail:
-        deliveryType === "home_delivery"
-          ? addressDetail || "Địa chỉ giao hàng"
-          : selectedPickup
-          ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}`
-          : "Điểm hẹn nhận hàng",
+      delivery_type: "home_delivery",
+      address_detail: addressDetail || "Địa chỉ giao hàng",
       district: "",
       province: province,
-      payment_method: paymentMethod as any,
+      payment_method: "banking",
       payment_status: "pending",
       order_status: "pending",
       delivery_status: "not_ready",
@@ -236,21 +225,19 @@ export default function SaleCreateOrderPage() {
     saveNewOrder(newOrder);
     setOrderCreatedSuccess(newOrder);
 
-    if (paymentMethod === "banking") {
-      const qrUrl =
-        settings.qrMode === "upload" && settings.qrImageUrl
-          ? settings.qrImageUrl
-          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
-              `${randomCode} ${customerPhone}`
-            )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
+    const qrUrl =
+      settings.qrMode === "upload" && settings.qrImageUrl
+        ? settings.qrImageUrl
+        : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
+            `${randomCode} ${customerPhone}`
+          )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
 
-      setActiveQrModal({
-        orderCode: randomCode,
-        orderId: newOrderId,
-        amount: finalAmount,
-        qrUrl,
-      });
-    }
+    setActiveQrModal({
+      orderCode: randomCode,
+      orderId: newOrderId,
+      amount: finalAmount,
+      qrUrl,
+    });
   };
 
   const handleResetForm = () => {
@@ -490,14 +477,13 @@ export default function SaleCreateOrderPage() {
                 Hình thức nhận hàng
               </label>
               <select
-                className="w-full h-11 px-3 rounded-2xl border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                value={deliveryType}
-                onChange={(e) => setDeliveryType(e.target.value)}
+                className="w-full h-11 px-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 text-xs font-bold text-emerald-950 focus:outline-none cursor-default"
+                value="home_delivery"
+                disabled
               >
                 <option value="home_delivery">
-                  Giao tận nơi ({isFreeship ? "Miễn phí" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
+                  Giao tận nơi ({isFreeship ? "Miễn phí 0đ" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
                 </option>
-                <option value="pickup_point">Nhận tại điểm hẹn Mầm Mơ (0đ)</option>
               </select>
             </div>
 
@@ -506,51 +492,47 @@ export default function SaleCreateOrderPage() {
                 Phương thức thanh toán
               </label>
               <select
-                className="w-full h-11 px-3 rounded-2xl border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full h-11 px-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 text-xs font-bold text-emerald-950 focus:outline-none cursor-default"
+                value="banking"
+                disabled
               >
                 <option value="banking">Chuyển khoản Ngân hàng (VietQR)</option>
-                <option value="cod">Tiền mặt khi nhận hàng (COD)</option>
               </select>
             </div>
           </div>
 
-          {deliveryType === "pickup_point" ? (
-            <div>
-              <label className="text-xs font-bold text-gray-700 mb-1.5 block">
-                Chọn điểm hẹn nhận hàng *
-              </label>
-              <select
-                className="w-full h-11 px-3 rounded-2xl border border-gray-200 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                value={pickupPointId}
-                onChange={(e) => setPickupPointId(e.target.value)}
-                required
-              >
-                <option value="">-- Chọn điểm hẹn --</option>
-                {pickupPoints.map((p) => (
-                  <option key={p.pickup_point_id} value={p.pickup_point_id}>
-                    {p.name} ({p.address || p.address_detail})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Địa chỉ chi tiết (Số nhà, đường, phường/xã) *"
-                placeholder="Ví dụ: 227 Nguyễn Văn Cừ, P.4, Q.5"
-                value={addressDetail}
-                onChange={(e) => setAddressDetail(e.target.value)}
-                required={deliveryType === "home_delivery"}
-              />
-              <Input
-                label="Tỉnh / Thành phố"
-                value={province}
-                onChange={(e) => setProvince(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Địa chỉ chi tiết (Số nhà, đường, phường/xã) *"
+              placeholder="Ví dụ: 227 Nguyễn Văn Cừ, P.4, Q.5"
+              value={addressDetail}
+              onChange={(e) => setAddressDetail(e.target.value)}
+              required
+            />
+            <Select
+              label="Tỉnh / Thành phố *"
+              value={province}
+              onChange={(e) => setProvince(e.target.value)}
+              options={[
+                { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
+                { value: "Hà Nội", label: "Hà Nội" },
+                { value: "Tây Ninh", label: "Tây Ninh" },
+                { value: "Đồng Tháp", label: "Đồng Tháp" },
+                { value: "Bình Dương", label: "Bình Dương" },
+                { value: "Đồng Nai", label: "Đồng Nai" },
+                { value: "Long An", label: "Long An" },
+                { value: "Tiền Giang", label: "Tiền Giang" },
+                { value: "Bến Tre", label: "Bến Tre" },
+                { value: "Cần Thơ", label: "Cần Thơ" },
+                { value: "Đà Nẵng", label: "Đà Nẵng" },
+                { value: "Hải Phòng", label: "Hải Phòng" },
+                { value: "Bà Rịa - Vũng Tàu", label: "Bà Rịa - Vũng Tàu" },
+                { value: "Lâm Đồng", label: "Lâm Đồng" },
+                { value: "Khánh Hòa", label: "Khánh Hòa" },
+                { value: "Tỉnh thành khác", label: "Các tỉnh thành khác" },
+              ]}
+            />
+          </div>
 
           <div>
             <label className="text-xs font-bold text-gray-700 mb-1.5 block">

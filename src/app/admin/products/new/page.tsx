@@ -29,6 +29,8 @@ export default function AdminNewProductPage() {
   const [featured, setFeatured] = useState(false);
   const [imageUrl, setImageUrl] = useState("/images/products/pounch_1.png");
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
   // Variants list
   const [variants, setVariants] = useState([
@@ -347,10 +349,76 @@ export default function AdminNewProductPage() {
                     />
                   </div>
 
-                  <div className="flex-1 min-w-[140px]">
+                  <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                    {/* Variant photo preview */}
+                    <div className="relative w-8 h-8 rounded-lg bg-white border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                      {v.imageUrl ? (
+                        <Image src={v.imageUrl} alt="" fill className="object-cover" />
+                      ) : (
+                        <span className="text-[10px] text-gray-300">Ảnh</span>
+                      )}
+                    </div>
+
+                    {/* Variant file upload button */}
+                    <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold cursor-pointer border border-emerald-200 shrink-0 transition-colors">
+                      {uploadingVariantIdx === idx ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Tải...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3 h-3" />
+                          <span>Tải ảnh</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingVariantIdx === idx}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingVariantIdx(idx);
+                          try {
+                            const res = await uploadAsset(file, "product-media");
+                            if (res.success && res.url) {
+                              setVariants((prev) =>
+                                prev.map((item, i) => (i === idx ? { ...item, imageUrl: res.url || "" } : item))
+                              );
+                            } else {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) {
+                                  setVariants((prev) =>
+                                    prev.map((item, i) => (i === idx ? { ...item, imageUrl: ev.target!.result as string } : item))
+                                  );
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          } catch (err) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                setVariants((prev) =>
+                                  prev.map((item, i) => (i === idx ? { ...item, imageUrl: ev.target!.result as string } : item))
+                                );
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          } finally {
+                            setUploadingVariantIdx(null);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
+
                     <input
                       type="text"
-                      placeholder="URL ảnh riêng phân loại..."
+                      placeholder="Hoặc dán URL ảnh riêng..."
                       value={v.imageUrl || ""}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -358,9 +426,24 @@ export default function AdminNewProductPage() {
                           prev.map((item, i) => (i === idx ? { ...item, imageUrl: val } : item))
                         );
                       }}
-                      className="w-full p-2 rounded-xl border border-gray-200 text-[11px] font-mono outline-none bg-white"
+                      className="flex-1 p-1.5 rounded-xl border border-gray-200 text-[11px] font-mono outline-none bg-white"
                       title="Khi khách chọn phân loại này, ảnh chính sẽ tự động chuyển sang ảnh này"
                     />
+
+                    {v.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVariants((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, imageUrl: "" } : item))
+                          );
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
+                        title="Gỡ ảnh phân loại này"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {variants.length > 1 && (
@@ -439,7 +522,19 @@ export default function AdminNewProductPage() {
                           const res = await uploadAsset(file, "product-media");
                           if (res.success && res.url) {
                             setImageUrl(res.url);
+                          } else {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) setImageUrl(ev.target.result as string);
+                            };
+                            reader.readAsDataURL(file);
                           }
+                        } catch (err) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) setImageUrl(ev.target.result as string);
+                          };
+                          reader.readAsDataURL(file);
                         } finally {
                           setIsUploading(false);
                         }
@@ -461,12 +556,65 @@ export default function AdminNewProductPage() {
               </div>
 
               {/* Album ảnh phụ (Gallery) */}
-              <div className="pt-2 border-t border-gray-100 space-y-1">
-                <label className="text-xs font-bold text-gray-800 block">
-                  🖼️ Album nhiều ảnh chi tiết (Gallery)
-                </label>
+              <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-800 block">
+                    🖼️ Album ảnh chi tiết (Gallery)
+                  </label>
+                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[11px] font-bold cursor-pointer transition-colors">
+                    {isUploadingGallery ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Tải...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3 h-3" />
+                        <span>+ Tải ảnh vào Album</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      disabled={isUploadingGallery}
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        setIsUploadingGallery(true);
+                        try {
+                          const newUrls: string[] = [];
+                          for (let i = 0; i < files.length; i++) {
+                            const f = files[i];
+                            let url = "";
+                            try {
+                              const res = await uploadAsset(f, "product-media");
+                              if (res.success && res.url) url = res.url;
+                            } catch (e) {}
+                            if (!url) {
+                              url = await new Promise<string>((resolve) => {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => resolve((ev.target?.result as string) || "");
+                                reader.onerror = () => resolve("");
+                                reader.readAsDataURL(f);
+                              });
+                            }
+                            if (url) newUrls.push(url);
+                          }
+                          if (newUrls.length > 0) {
+                            setExtraImagesText((prev) => (prev.trim() ? `${prev}\n${newUrls.join("\n")}` : newUrls.join("\n")));
+                          }
+                        } finally {
+                          setIsUploadingGallery(false);
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
                 <p className="text-[10px] text-gray-500">
-                  Thêm nhiều ảnh góc chụp cận cảnh, chất vải, đường may... để khách hàng an tâm tin cậy. Nhập mỗi link ảnh trên 1 dòng:
+                  Thêm nhiều ảnh góc chụp cận cảnh, chất vải, đường may... Nhập mỗi link ảnh trên 1 dòng:
                 </p>
                 <textarea
                   value={extraImagesText}

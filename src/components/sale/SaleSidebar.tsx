@@ -13,6 +13,8 @@ import {
   X,
   ExternalLink,
   Sparkles,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
@@ -25,6 +27,7 @@ interface SaleSidebarProps {
 export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
   const pathname = usePathname();
   const [session, setSession] = useState<AdminSession | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     const updateSession = () => setSession(getAdminSession());
@@ -32,6 +35,15 @@ export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
     window.addEventListener("gieomo_admin_auth_changed", updateSession);
     return () => window.removeEventListener("gieomo_admin_auth_changed", updateSession);
   }, []);
+
+  const handleCopyReferralLink = () => {
+    if (!session?.referralCode) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
+    const refLink = `${origin}/?ref=${session.referralCode}`;
+    navigator.clipboard.writeText(refLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   const menuItems = [
     { href: "/sale", label: "Tổng quan cá nhân", icon: LayoutDashboard },
@@ -88,13 +100,36 @@ export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
           </button>
         </div>
 
-        {/* Member Referral Pill */}
+        {/* Member Referral Box with Copy Link */}
         {session?.referralCode && (
-          <div className="mx-3 mt-3 px-3 py-2 rounded-xl bg-[#203728] border border-[#2E4E38] flex items-center justify-between">
-            <span className="text-[11px] text-[#A39688]">Mã giới thiệu:</span>
-            <span className="font-mono text-xs font-bold text-[#BFE9C3] bg-[#16281D] px-2 py-0.5 rounded border border-[#BFE9C3]/30">
-              {session.referralCode}
-            </span>
+          <div className="mx-3 mt-3 p-3 rounded-2xl bg-[#203728] border border-[#2E4E38] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-[#A39688]">Mã giới thiệu:</span>
+              <span className="font-mono text-xs font-bold text-[#BFE9C3] bg-[#16281D] px-2 py-0.5 rounded border border-[#BFE9C3]/30">
+                {session.referralCode}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyReferralLink}
+              className={`w-full py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                copiedLink
+                  ? "bg-[#BFE9C3] text-[#16281D] shadow-xs"
+                  : "bg-[#16281D] hover:bg-[#284533] text-[#BFE9C3] border border-[#BFE9C3]/40"
+              }`}
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-[#16281D]" />
+                  <span>Đã sao chép link!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Sao chép link bán hàng</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 

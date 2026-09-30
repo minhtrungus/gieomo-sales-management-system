@@ -8,15 +8,14 @@ import { Badge } from "@/components/ui/Badge";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
-  saveNewProduct,
   updateStoredProduct,
   deleteStoredProduct,
   toggleStoredProductStatus,
   toggleStoredProductFeatured,
 } from "@/lib/data/orderStore";
-import { parseProductDescription } from "@/lib/utils/productParser";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, X, Check, AlertTriangle, Upload, Eye, Star } from "lucide-react";
+import { Plus, Edit3, Trash2, AlertTriangle, Eye, Star } from "lucide-react";
+import { ProductEditModal } from "./ProductEditModal";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -35,18 +34,6 @@ export default function AdminProductsPage() {
   // Modal States
   const [editingProduct, setEditingProduct] = useState<ExtendedProduct | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<ExtendedProduct | null>(null);
-
-  // Các khung chi tiết khi sửa sản phẩm (tách ở quản trị)
-  const [editOverview, setEditOverview] = useState("");
-  const [editSize, setEditSize] = useState("");
-  const [editMaterials, setEditMaterials] = useState("");
-  const [editCare, setEditCare] = useState("");
-  const [editExtraSpecs, setEditExtraSpecs] = useState("");
-  const [editImpact, setEditImpact] = useState("");
-  const [editFeatured, setEditFeatured] = useState(false);
-  const [editThumbnail, setEditThumbnail] = useState("");
-  const [editImagesText, setEditImagesText] = useState("");
-  const [editVariants, setEditVariants] = useState<any[]>([]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -79,80 +66,13 @@ export default function AdminProductsPage() {
     setProducts(getStoredProducts());
   };
 
-  // Start editing product with separate spec fields populated
+  // Start editing product - instant single state update
   const handleStartEdit = (p: ExtendedProduct) => {
-    const parsed = parseProductDescription(p.description, p.specs, p.impact_story ?? undefined);
-    setEditOverview(parsed.overview || p.description || "");
-    setEditSize(parsed.sizeGuide || "");
-    setEditMaterials(parsed.materials || "");
-    setEditCare(parsed.careGuide || "");
-    setEditExtraSpecs(
-      Object.entries(parsed.extraSpecs)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join("\n")
-    );
-    setEditImpact(parsed.impactStory || p.impact_story || "");
-    setEditFeatured(p.featured ?? false);
-    setEditThumbnail(p.thumbnail || "");
-    setEditImagesText((p.images || [p.thumbnail]).filter(Boolean).join("\n"));
-    setEditVariants(p.variants || []);
     setEditingProduct(p);
   };
 
   // Save edited product
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct) return;
-
-    // Parse extra specs: mỗi dòng 1 thông số dạng "Tên: Giá trị"
-    const parsedExtraSpecs: Record<string, string> = {};
-    if (editExtraSpecs.trim()) {
-      const lines = editExtraSpecs.split("\n");
-      for (const line of lines) {
-        const parts = line.split(/[:：]/);
-        if (parts.length >= 2) {
-          const k = parts[0].trim();
-          const v = parts.slice(1).join(":").trim();
-          if (k && v) {
-            parsedExtraSpecs[k] = v;
-          }
-        }
-      }
-    }
-
-    const newSpecs: Record<string, string> = {
-      ...parsedExtraSpecs,
-    };
-    if (editSize.trim()) newSpecs["Kích thước"] = editSize.trim();
-    if (editMaterials.trim()) newSpecs["Chất liệu"] = editMaterials.trim();
-    if (editCare.trim()) newSpecs["Bảo quản"] = editCare.trim();
-
-    const fullDescription = [
-      editOverview.trim(),
-      editSize.trim() ? `\n\n## Kích thước\n${editSize.trim()}` : "",
-      editMaterials.trim() ? `\n\n## Chất liệu\n${editMaterials.trim()}` : "",
-      editCare.trim() ? `\n\n## Bảo quản\n${editCare.trim()}` : "",
-      editImpact.trim() ? `\n\n## Ý nghĩa\n${editImpact.trim()}` : "",
-    ].filter(Boolean).join("");
-
-    const imgList = editImagesText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    const finalThumb: string = editThumbnail.trim() || imgList[0] || editingProduct.thumbnail || "/images/products/pounch_1.png";
-    const finalImages: string[] = Array.from(new Set([finalThumb, ...imgList])).filter((s): s is string => Boolean(s));
-
-    const updated: ExtendedProduct = {
-      ...editingProduct,
-      thumbnail: finalThumb,
-      images: finalImages,
-      variants: editVariants,
-      description: fullDescription,
-      impact_story: editImpact.trim() || undefined,
-      specs: newSpecs,
-      featured: editFeatured,
-    };
-
+  const handleSaveEdit = (updated: ExtendedProduct) => {
     updateStoredProduct(updated);
     setProducts(getStoredProducts());
     setEditingProduct(null);
@@ -336,334 +256,14 @@ export default function AdminProductsPage() {
       </div>
 
       {/* ========================================================
-          MODAL 1: CHỈNH SỬA SẢN PHẨM (EDIT MODAL - 4 KHUNG & 2 KHO)
+          MODAL 1: CHỈNH SỬA SẢN PHẨM (TỐI ƯU TỐC ĐỘ & TẢI ẢNH)
           ======================================================== */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
-          <div
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left animate-in zoom-in-95 duration-200"
-            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-[#BFE9C3] flex items-center justify-center text-[#16381D]">
-                  <Edit3 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                    Chỉnh sửa sản phẩm
-                  </h3>
-                  <span className="text-[11px] text-gray-500">
-                    Cập nhật 4 khung thông tin &amp; phân bổ tồn kho giữa 2 kho hàng
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingProduct(null)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-[#342A24] block">Tên sản phẩm *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingProduct.name}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, name: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Giá bán (VNĐ) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={editingProduct.price}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        price: Number(e.target.value),
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Giá vốn (Cost price)</label>
-                  <input
-                    type="number"
-                    value={editingProduct.cost_price ?? ""}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        cost_price: Number(e.target.value),
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="font-bold text-[#342A24] block text-xs">Trạng thái xuất bản *</label>
-                <select
-                  value={editingProduct.status}
-                  onChange={(e) =>
-                    setEditingProduct({
-                      ...editingProduct,
-                      status: e.target.value as "active" | "draft",
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                >
-                  <option value="active">Đang bán (Active)</option>
-                  <option value="draft">Bản nháp (Draft)</option>
-                </select>
-
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={editFeatured}
-                    onChange={(e) => setEditFeatured(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-[11px] font-bold text-[#342A24]">
-                    ⭐ Hiển thị nổi bật trên Trang chủ (Hero)
-                  </span>
-                </label>
-              </div>
-
-              {/* Phân bổ tồn kho giữa 2 kho hàng */}
-              <div className="p-3.5 rounded-2xl bg-cream/70 border border-[#F0E5D8] space-y-2">
-                <label className="font-extrabold text-emerald-950 uppercase tracking-wider block">
-                  Phân bổ tồn kho giữa 2 kho hàng
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-emerald-900 block flex items-center gap-1">
-                      <span>📍 Kho 1: Trung Tâm (Quận 3)</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editingProduct.variants?.[0]?.stock_warehouse_1 ?? 7}
-                      onChange={(e) => {
-                        const wh1 = Number(e.target.value);
-                        const wh2 = editingProduct.variants?.[0]?.stock_warehouse_2 ?? 3;
-                        const updatedVariants = editingProduct.variants?.map((v, i) =>
-                          i === 0 ? { ...v, stock_warehouse_1: wh1, stock_warehouse_2: wh2, stock: wh1 + wh2 } : v
-                        ) ?? [];
-                        setEditingProduct({ ...editingProduct, variants: updatedVariants });
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-emerald-300 text-xs font-bold text-emerald-950 bg-white"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#542B07] block flex items-center gap-1">
-                      <span>📍 Kho 2: Cơ Sở 2 (Thủ Đức)</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editingProduct.variants?.[0]?.stock_warehouse_2 ?? 3}
-                      onChange={(e) => {
-                        const wh2 = Number(e.target.value);
-                        const wh1 = editingProduct.variants?.[0]?.stock_warehouse_1 ?? 7;
-                        const updatedVariants = editingProduct.variants?.map((v, i) =>
-                          i === 0 ? { ...v, stock_warehouse_1: wh1, stock_warehouse_2: wh2, stock: wh1 + wh2 } : v
-                        ) ?? [];
-                        setEditingProduct({ ...editingProduct, variants: updatedVariants });
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-[#542B07] bg-white"
-                    />
-                  </div>
-                </div>
-                <div className="text-[11px] text-gray-500 flex justify-between pt-1">
-                  <span>Tổng tồn toàn hệ thống:</span>
-                  <strong className="text-emerald-900">
-                    {(editingProduct.variants?.[0]?.stock_warehouse_1 ?? 7) +
-                      (editingProduct.variants?.[0]?.stock_warehouse_2 ?? 3)}{" "}
-                    sản phẩm
-                  </strong>
-                </div>
-              </div>
-
-              {/* Hình ảnh & Album Gallery */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/40 border border-amber-200/80 space-y-3">
-                <label className="font-extrabold text-[#342A24] uppercase tracking-wider block text-xs">
-                  🖼️ Hình ảnh đại diện &amp; Album chi tiết (Gallery)
-                </label>
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block text-[11px]">Ảnh đại diện chính (Thumbnail):</label>
-                  <input
-                    type="text"
-                    value={editThumbnail}
-                    onChange={(e) => setEditThumbnail(e.target.value)}
-                    placeholder="/images/products/pounch_1.png hoặc URL ảnh"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-mono outline-none bg-white focus:border-amber-400"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block text-[11px]">
-                    Album ảnh chi tiết (Nhiều ảnh để khách hàng tin cậy - Mỗi ảnh 1 dòng):
-                  </label>
-                  <textarea
-                    value={editImagesText}
-                    onChange={(e) => setEditImagesText(e.target.value)}
-                    placeholder={"/images/products/pounch_1.png\n/images/products/pounch_2.jpg\nhttps://example.com/anh-chi-tiet.jpg"}
-                    rows={3}
-                    className="w-full p-2.5 rounded-xl border border-gray-200 text-[11px] font-mono outline-none bg-white focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              {/* Phân loại & Ảnh riêng từng phân loại */}
-              {editVariants.length > 0 && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-2">
-                  <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
-                    🎨 Phân loại sản phẩm &amp; Ảnh riêng (Variant Photos)
-                  </label>
-                  <p className="text-[10px] text-gray-500">
-                    Khi khách hàng bấm chọn phân loại ở trang chi tiết, ảnh đại diện sẽ tự động chuyển sang ảnh riêng này.
-                  </p>
-                  <div className="space-y-2">
-                    {editVariants.map((v, vIdx) => (
-                      <div key={v.variant_id || vIdx} className="flex items-center gap-2 bg-white p-2 rounded-xl border border-emerald-100">
-                        <span className="font-bold text-xs text-gray-800 w-32 truncate">{v.name}:</span>
-                        <input
-                          type="text"
-                          value={v.image_url || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditVariants((prev) =>
-                              prev.map((item, i) => (i === vIdx ? { ...item, image_url: val } : item))
-                            );
-                          }}
-                          placeholder="URL ảnh riêng phân loại này..."
-                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-mono outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Các khung thông tin chi tiết (Tách bạch ở quản trị để dễ nhập liệu) */}
-              <div className="space-y-3 pt-2 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
-                    Chi tiết &amp; Thông số sản phẩm (Tách riêng ở quản trị)
-                  </label>
-                  <span className="text-[11px] text-gray-500 italic">
-                    Tự động đồng bộ lên bảng thông số Shopee ở trang bán hàng
-                  </span>
-                </div>
-
-                {/* Khung 1: Mô tả chung */}
-                <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                  <label className="font-bold text-gray-800 block text-xs">📋 Khung 1: Mô tả giới thiệu sản phẩm</label>
-                  <textarea
-                    value={editOverview}
-                    onChange={(e) => setEditOverview(e.target.value)}
-                    placeholder="Mô tả giới thiệu chi tiết sản phẩm, công năng và câu chuyện..."
-                    rows={3}
-                    className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Khung 2: Kích thước */}
-                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                    <label className="font-bold text-gray-800 block text-xs">📏 Khung 2: Kích thước &amp; Bảng Size</label>
-                    <textarea
-                      value={editSize}
-                      onChange={(e) => setEditSize(e.target.value)}
-                      placeholder="Ví dụ: 35cm x 40cm, quai dài 28cm..."
-                      rows={2}
-                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                    />
-                  </div>
-
-                  {/* Khung 3: Chất liệu */}
-                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                    <label className="font-bold text-gray-800 block text-xs">🧶 Khung 3: Chất liệu vải &amp; Phụ liệu</label>
-                    <textarea
-                      value={editMaterials}
-                      onChange={(e) => setEditMaterials(e.target.value)}
-                      placeholder="Ví dụ: Vải Canvas 12oz dày dặn, đứng form..."
-                      rows={2}
-                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Khung 4: Hướng dẫn bảo quản */}
-                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                    <label className="font-bold text-gray-800 block text-xs">🧼 Khung 4: Hướng dẫn bảo quản &amp; Giặt</label>
-                    <textarea
-                      value={editCare}
-                      onChange={(e) => setEditCare(e.target.value)}
-                      placeholder="Ví dụ: Giặt tay nhẹ nhàng, không dùng thuốc tẩy..."
-                      rows={2}
-                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                    />
-                  </div>
-
-                  {/* Khung 5: Thông số bổ sung khác */}
-                  <div className="p-3 rounded-2xl bg-gray-50/70 border border-gray-200/80 space-y-1">
-                    <label className="font-bold text-gray-800 block text-xs">⚙️ Khung 5: Thông số bổ sung khác</label>
-                    <textarea
-                      value={editExtraSpecs}
-                      onChange={(e) => setEditExtraSpecs(e.target.value)}
-                      placeholder={"Mỗi dòng 1 thông số (Tên: Giá trị)\nVí dụ:\nTính năng: Có ngăn phụ kéo khóa\nKhóa kéo: Kim loại YKK"}
-                      rows={2}
-                      className="w-full p-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-emerald-600 bg-white font-mono text-[11px]"
-                    />
-                  </div>
-                </div>
-
-                {/* Khung 6: Ý nghĩa gây quỹ */}
-                <div className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-1">
-                  <label className="font-bold text-emerald-950 block text-xs">💖 Khung 6: Ý nghĩa gây quỹ Mầm Mơ</label>
-                  <textarea
-                    value={editImpact}
-                    onChange={(e) => setEditImpact(e.target.value)}
-                    placeholder="Ý nghĩa và mục đích gây quỹ thiện nguyện..."
-                    rows={2}
-                    className="w-full p-2.5 rounded-xl border border-emerald-200 text-xs outline-none focus:border-emerald-600 bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3]"
-                >
-                  Lưu thay đổi ➔
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ProductEditModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSave={handleSaveEdit}
+        />
       )}
 
       {/* ========================================================
