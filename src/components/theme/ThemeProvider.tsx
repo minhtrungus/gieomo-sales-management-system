@@ -92,7 +92,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (settings?.coverTheme) {
           root.setAttribute("data-cover-theme", settings.coverTheme);
         }
-        if (settings?.faviconPreview) {
+        if (
+          settings?.faviconPreview &&
+          !settings.faviconPreview.startsWith("blob:") &&
+          !settings.faviconPreview.includes("supabase.co")
+        ) {
           updateFavicon(settings.faviconPreview);
         }
       } catch (err) {

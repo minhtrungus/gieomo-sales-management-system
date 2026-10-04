@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Upload, QrCode, Check, Globe, Share2, ExternalLink } from "lucide-react";
+import { Upload, QrCode, Check, Share2, ExternalLink } from "lucide-react";
 import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
 
@@ -28,14 +28,12 @@ export default function AdminSettingsPage() {
   const [bankHolder, setBankHolder] = useState("CLB MAM MO GIEO MO");
   const [bankName, setBankName] = useState("MB Bank (Quân Đội)");
   const [qrMode, setQrMode] = useState<"upload" | "auto">("auto");
-  const [qrImageUrl, setQrImageUrl] = useState<string>("/images/logo_gieo mơ.jpg");
+  const [qrImageUrl, setQrImageUrl] = useState<string>("/images/logo.png");
 
   // Branding Customization State
   const [activePalette, setActivePalette] = useState("soft-green");
   const [coverTheme, setCoverTheme] = useState("emerald");
   const [announcementText, setAnnouncementText] = useState("");
-  const [faviconPreview, setFaviconPreview] = useState<string>("/icon.png");
-  const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [isSaving, setIsSaving] = useState(false);
 
   // Password change state
@@ -83,8 +81,6 @@ export default function AdminSettingsPage() {
     setActivePalette(s.activePalette);
     setCoverTheme(s.coverTheme);
     if (s.announcementText !== undefined) setAnnouncementText(s.announcementText);
-    setFaviconPreview(s.faviconPreview);
-    setAvatarPreview(s.avatarPreview);
     if (s.facebookUrl !== undefined) setFacebookUrl(s.facebookUrl);
     if (s.tiktokUrl !== undefined) setTiktokUrl(s.tiktokUrl);
     if (s.instagramUrl !== undefined) setInstagramUrl(s.instagramUrl);
@@ -113,12 +109,12 @@ export default function AdminSettingsPage() {
           setBankHolder(fresh.bankHolder);
           setBankName(fresh.bankName);
           setQrMode(fresh.qrMode);
-          setQrImageUrl(fresh.qrImageUrl);
+          if (fresh.qrImageUrl && !fresh.qrImageUrl.startsWith("blob:")) {
+            setQrImageUrl(fresh.qrImageUrl);
+          }
           setActivePalette(fresh.activePalette);
           setCoverTheme(fresh.coverTheme);
           if (fresh.announcementText !== undefined) setAnnouncementText(fresh.announcementText);
-          setFaviconPreview(fresh.faviconPreview);
-          setAvatarPreview(fresh.avatarPreview);
           if (fresh.facebookUrl !== undefined) setFacebookUrl(fresh.facebookUrl);
           if (fresh.tiktokUrl !== undefined) setTiktokUrl(fresh.tiktokUrl);
           if (fresh.instagramUrl !== undefined) setInstagramUrl(fresh.instagramUrl);
@@ -129,27 +125,6 @@ export default function AdminSettingsPage() {
       .catch((err) => console.warn("Failed to fetch fresh settings:", err));
   }, []);
 
-
-  // Handle Favicon File Upload
-  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Url = reader.result as string;
-        setFaviconPreview(base64Url);
-        try {
-          const res = await uploadAsset(file, "content-media", `favicon-${Date.now()}.${file.name.split('.').pop()}`);
-          if (res.success && res.url) {
-            setFaviconPreview(res.url);
-          }
-        } catch {
-          // Keep base64 fallback
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   // Handle QR Image Upload
   const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,27 +139,6 @@ export default function AdminSettingsPage() {
           const res = await uploadAsset(file, "content-media", `vietqr-${Date.now()}.${file.name.split('.').pop()}`);
           if (res.success && res.url) {
             setQrImageUrl(res.url);
-          }
-        } catch {
-          // Keep base64 fallback
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Handle Avatar Upload
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Url = reader.result as string;
-        setAvatarPreview(base64Url);
-        try {
-          const res = await uploadAsset(file, "content-media", `avatar-${Date.now()}.${file.name.split('.').pop()}`);
-          if (res.success && res.url) {
-            setAvatarPreview(res.url);
           }
         } catch {
           // Keep base64 fallback
@@ -216,12 +170,12 @@ export default function AdminSettingsPage() {
       bankHolder,
       bankName,
       qrMode,
-      qrImageUrl: qrImageUrl.startsWith("blob:") ? "/images/logo_gieo mơ.jpg" : qrImageUrl,
+      qrImageUrl: qrImageUrl.startsWith("blob:") ? "/images/logo.png" : qrImageUrl,
       activePalette,
       coverTheme,
       announcementText: announcementText.trim(),
-      faviconPreview: faviconPreview.startsWith("blob:") ? "/icon.png" : faviconPreview,
-      avatarPreview: avatarPreview.startsWith("blob:") ? "/images/logo_gieo mơ.jpg" : avatarPreview,
+      faviconPreview: "/favicon.ico",
+      avatarPreview: "/images/logo.png",
       facebookUrl: facebookUrl.trim(),
       tiktokUrl: tiktokUrl.trim(),
       instagramUrl: instagramUrl.trim(),
@@ -254,100 +208,22 @@ export default function AdminSettingsPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="font-heading font-extrabold text-2xl text-[#231B16]">
-          Cài đặt hệ thống & Nhận diện thương hiệu
+          Cài đặt hệ thống &amp; Nhận diện thương hiệu
         </h1>
         <p className="text-xs text-[#7E7068] mt-0.5">
-          Tùy chỉnh Favicon, Avatar, Mã QR thanh toán, Thông tin liên hệ và Kênh truyền thông.
+          Tùy chỉnh Mã QR thanh toán, Phí vận chuyển, Thông tin liên hệ và Kênh truyền thông.
         </p>
       </div>
 
       <form onSubmit={handleSaveClick} className="space-y-6">
         {/* ========================================================
-            SECTION 1: FAVICON & AVATAR UPLOAD (CHO DESIGNER)
-            ======================================================== */}
-        <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-5">
-          <div className="flex items-center gap-2 border-b border-[#F0E5D8] pb-3">
-            <Globe className="w-5 h-5 text-[#2D6338]" />
-            <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-              1. Tải lên Favicon & Avatar Thương hiệu
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Favicon Upload Card */}
-            <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-3">
-              <span className="font-bold text-xs text-[#342A24] block">
-                Favicon Tab Trình Duyệt (.ico, .png, .svg)
-              </span>
-
-              {/* Browser tab mockup preview */}
-              <div className="p-2.5 rounded-xl bg-gray-100 border border-gray-300 flex items-center gap-2 max-w-xs shadow-2xs">
-                <div className="relative w-5 h-5 rounded-md overflow-hidden bg-white shrink-0 border border-gray-200">
-                  <Image src={faviconPreview} alt="Favicon" fill className="object-cover" />
-                </div>
-                <span className="text-[11px] font-semibold text-gray-800 truncate">
-                  Gieo Mơ — Little Pieces...
-                </span>
-                <span className="text-gray-400 ml-auto text-xs">×</span>
-              </div>
-
-              <div>
-                <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-[#FFFDF9] text-[#16381D] font-bold text-xs border border-[#9ed4a3] shadow-xs cursor-pointer transition-all">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Chọn tệp ảnh Favicon</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFaviconUpload}
-                    className="hidden"
-                  />
-                </label>
-                <span className="text-[10px] text-[#A89B92] block mt-1">
-                  Đề xuất ảnh vuông tỉ lệ 1:1 (32x32px hoặc 64x64px)
-                </span>
-              </div>
-            </div>
-
-            {/* Avatar / Logo BTC Upload Card */}
-            <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-3">
-              <span className="font-bold text-xs text-[#342A24] block">
-                Avatar / Logo BTC Mầm Mơ
-              </span>
-
-              <div className="flex items-center gap-3">
-                <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-[#BFE9C3] shadow-xs bg-white shrink-0">
-                  <Image src={avatarPreview} alt="Avatar BTC" fill className="object-cover" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-[#342A24] block">Biểu tượng hiển thị</span>
-                  <span className="text-[11px] text-[#7E7068]">Hiển thị tại Header, Footer và Admin</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-[#FFFDF9] text-[#16381D] font-bold text-xs border border-[#9ed4a3] shadow-xs cursor-pointer transition-all">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Tải lên ảnh Avatar mới</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================
-            SECTION 2: VIETQR & PAYMENT QR CODE UPLOAD
+            SECTION 1: VIETQR & PAYMENT QR CODE UPLOAD
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-5">
           <div className="flex items-center gap-2 border-b border-[#F0E5D8] pb-3">
             <QrCode className="w-5 h-5 text-[#E2884E]" />
             <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-              2. Cấu hình Mã QR Thanh Toán & Tài khoản Ngân hàng
+              1. Cấu hình Mã QR Thanh Toán &amp; Tài khoản Ngân hàng
             </h3>
           </div>
 
@@ -452,11 +328,11 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 3: CONTACT & SHIPPING SETTINGS
+            SECTION 2: CONTACT & SHIPPING SETTINGS
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-4">
           <h3 className="font-heading font-extrabold text-base text-[#231B16] border-b border-[#F0E5D8] pb-3">
-            3. Thông tin liên hệ & Cước phí giao hàng
+            2. Thông tin liên hệ &amp; Cước phí giao hàng
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -506,14 +382,14 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 4: KÊNH MẠNG XÃ HỘI (SOCIAL MEDIA)
+            SECTION 3: KÊNH MẠNG XÃ HỘI (SOCIAL MEDIA)
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-5">
           <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
             <div className="flex items-center gap-2">
               <Share2 className="w-5 h-5 text-[#2D6338]" />
               <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                4. Kênh Mạng Xã Hội (Social Media)
+                3. Kênh Mạng Xã Hội (Social Media)
               </h3>
             </div>
             <span className="text-[11px] font-bold text-[#2D6338] bg-[#BFE9C3]/40 px-2.5 py-1 rounded-full">
@@ -754,7 +630,7 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 5: BẢO MẬT & ĐỔI MẬT KHẨU THÀNH VIÊN (#25)
+            SECTION 4: BẢO MẬT & ĐỔI MẬT KHẨU THÀNH VIÊN (#25)
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft space-y-5">
           <div className="flex items-center gap-3 border-b border-[#F0E5D8] pb-4">
@@ -763,7 +639,7 @@ export default function AdminSettingsPage() {
             </div>
             <div>
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                5. Bảo mật &amp; Đổi mật khẩu tài khoản
+                4. Bảo mật &amp; Đổi mật khẩu tài khoản
               </h3>
               <p className="text-xs text-[#7E7068]">
                 Đổi mật khẩu đăng nhập trang Quản trị Ban Tổ Chức để đảm bảo an toàn dữ liệu.

@@ -39,7 +39,7 @@ export function Footer() {
             <Link href="/" className="flex items-center gap-3 group">
               <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#BFE9C3] shadow-xs shrink-0 bg-white">
                 <Image
-                  src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
+                  src="/images/logo.png"
                   alt={settings.siteName || "Gieo Mơ"}
                   fill
                   sizes="44px"

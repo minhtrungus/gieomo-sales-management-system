@@ -273,7 +273,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
         <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-[#F0E5D8]">
           <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#BFE9C3] shadow-2xs bg-white shrink-0">
             <Image
-              src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
+              src="/images/logo.png"
               alt="Admin BTC"
               fill
               sizes="32px"

@@ -1865,12 +1865,12 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   bankHolder: "NGUYEN THI TRUC HAN",
   bankName: "MB Bank (Quân Đội)",
   qrMode: "auto",
-  qrImageUrl: "/images/logo_gieo mơ.jpg",
+  qrImageUrl: "/images/logo.png",
   activePalette: "soft-green",
   coverTheme: "emerald",
   announcementText: "",
-  faviconPreview: "/icon.png",
-  avatarPreview: "/images/logo_gieo mơ.jpg",
+  faviconPreview: "/favicon.ico",
+  avatarPreview: "/images/logo.png",
   facebookUrl: "https://www.facebook.com/BanHangGieoMo",
   tiktokUrl: "https://www.tiktok.com/@vuongquocmam",
   instagramUrl: "https://www.instagram.com/mam.mer.oii",
@@ -1888,6 +1888,21 @@ export function syncSettingsFromServer(): void {
     .then((data) => {
       if (data?.success && data?.settings) {
         cachedSettings = { ...DEFAULT_SETTINGS, ...data.settings };
+        if (
+          !cachedSettings.avatarPreview ||
+          cachedSettings.avatarPreview.startsWith("blob:") ||
+          cachedSettings.avatarPreview.includes("supabase.co")
+        ) {
+          cachedSettings.avatarPreview = "/images/logo.png";
+        }
+        if (
+          !cachedSettings.faviconPreview ||
+          cachedSettings.faviconPreview.startsWith("blob:") ||
+          cachedSettings.faviconPreview.includes("supabase.co") ||
+          cachedSettings.faviconPreview.endsWith(".svg")
+        ) {
+          cachedSettings.faviconPreview = "/favicon.ico";
+        }
         localStorage.setItem("gieomo_site_settings", JSON.stringify(cachedSettings));
         window.dispatchEvent(new Event("gieomo_settings_updated"));
       }
@@ -1912,6 +1927,31 @@ export function getStoredSettings(): SiteSettings {
     }
     const parsed = JSON.parse(raw);
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
+
+    // Auto-clean stale blob / broken storage URLs
+    if (
+      !merged.avatarPreview ||
+      merged.avatarPreview.startsWith("blob:") ||
+      merged.avatarPreview.includes("supabase.co")
+    ) {
+      merged.avatarPreview = "/images/logo.png";
+    }
+    if (
+      !merged.faviconPreview ||
+      merged.faviconPreview.startsWith("blob:") ||
+      merged.faviconPreview.includes("supabase.co") ||
+      merged.faviconPreview.endsWith(".svg")
+    ) {
+      merged.faviconPreview = "/favicon.ico";
+    }
+    if (
+      !merged.qrImageUrl ||
+      merged.qrImageUrl.startsWith("blob:") ||
+      merged.qrImageUrl.includes("supabase.co")
+    ) {
+      merged.qrImageUrl = "/images/logo.png";
+    }
+
     cachedSettings = merged;
     return merged;
   } catch (e) {

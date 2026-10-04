@@ -46,7 +46,7 @@ export function Navbar() {
           <Link href="/" prefetch={true} className="flex items-center gap-3 group">
             <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFB98A] shadow-xs group-hover:scale-105 group-hover:rotate-3 transition-transform bg-white shrink-0">
               <Image
-                src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
+                src="/images/logo.png"
                 alt={settings.siteName || "Gieo Mơ"}
                 fill
                 sizes="44px"

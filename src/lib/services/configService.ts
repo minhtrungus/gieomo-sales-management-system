@@ -37,12 +37,12 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   bankHolder: "NGUYEN THI TRUC HAN",
   bankName: "MB Bank (Quân Đội)",
   qrMode: "auto",
-  qrImageUrl: "/images/logo_gieo mơ.jpg",
+  qrImageUrl: "/images/logo.png",
   activePalette: "soft-green",
   coverTheme: "emerald",
   announcementText: "",
-  faviconPreview: "/icon.png",
-  avatarPreview: "/images/logo_gieo mơ.jpg",
+  faviconPreview: "/favicon.ico",
+  avatarPreview: "/images/logo.png",
   shippingNote: "Giao hàng trong 3-5 ngày.",
   paymentNote: "Thanh toán qua chuyển khoản ngân hàng.",
   facebookUrl: "https://www.facebook.com/BanHangGieoMo",
@@ -59,6 +59,24 @@ export function rowsToSettings(rows: { config_key: string; config_value: string 
     map[r.config_key] = r.config_value;
   }
 
+  const rawAvatar = map.avatar_preview;
+  const validAvatar =
+    !rawAvatar || rawAvatar.startsWith("blob:") || rawAvatar.includes("supabase.co")
+      ? DEFAULT_SITE_SETTINGS.avatarPreview
+      : rawAvatar;
+
+  const rawFavicon = map.favicon_preview;
+  const validFavicon =
+    !rawFavicon || rawFavicon.startsWith("blob:") || rawFavicon.includes("supabase.co") || rawFavicon.endsWith(".svg")
+      ? DEFAULT_SITE_SETTINGS.faviconPreview
+      : rawFavicon;
+
+  const rawQr = map.qr_image_url;
+  const validQr =
+    !rawQr || rawQr.startsWith("blob:") || rawQr.includes("supabase.co")
+      ? DEFAULT_SITE_SETTINGS.qrImageUrl
+      : rawQr;
+
   return {
     siteName: map.site_name || DEFAULT_SITE_SETTINGS.siteName,
     contactPhone: map.contact_phone || DEFAULT_SITE_SETTINGS.contactPhone,
@@ -70,12 +88,12 @@ export function rowsToSettings(rows: { config_key: string; config_value: string 
     bankNumber: map.bank_number || DEFAULT_SITE_SETTINGS.bankNumber,
     bankHolder: map.bank_holder || DEFAULT_SITE_SETTINGS.bankHolder,
     qrMode: (map.qr_mode as "auto" | "upload") || DEFAULT_SITE_SETTINGS.qrMode,
-    qrImageUrl: map.qr_image_url || DEFAULT_SITE_SETTINGS.qrImageUrl,
+    qrImageUrl: validQr,
     activePalette: map.active_palette || DEFAULT_SITE_SETTINGS.activePalette,
     coverTheme: map.cover_theme || DEFAULT_SITE_SETTINGS.coverTheme,
     announcementText: map.announcement_text !== undefined ? map.announcement_text : DEFAULT_SITE_SETTINGS.announcementText,
-    faviconPreview: map.favicon_preview || DEFAULT_SITE_SETTINGS.faviconPreview,
-    avatarPreview: map.avatar_preview || DEFAULT_SITE_SETTINGS.avatarPreview,
+    faviconPreview: validFavicon,
+    avatarPreview: validAvatar,
     shippingNote: map.shipping_note || DEFAULT_SITE_SETTINGS.shippingNote,
     paymentNote: map.payment_note || DEFAULT_SITE_SETTINGS.paymentNote,
     facebookUrl: map.facebook_url !== undefined ? map.facebook_url : DEFAULT_SITE_SETTINGS.facebookUrl,

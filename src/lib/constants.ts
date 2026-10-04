@@ -9,7 +9,7 @@ export const OFFICIAL_STORE_CONFIG = {
   name: "Gieo Mơ",
   alternateName: "Little Pieces, Bigger Dreams",
   url: "https://gieomo.store",
-  logo: "https://gieomo.store/images/logo_gieo%20m%C6%A1.jpg",
+  logo: "https://gieomo.store/images/logo.png",
   description:
     "Tạp Hóa Gieo Mơ thuộc Tổ chức thiện nguyện Mầm Mơ - nơi những món hàng nhỏ bé lan tỏa yêu thương.",
   socialLinks: {
