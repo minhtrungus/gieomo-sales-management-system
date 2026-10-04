@@ -176,7 +176,7 @@ export function buildProductSpecRows(
   if (parsedInfo.careGuide) {
     rows.push({ label: "Hướng dẫn bảo quản", value: parsedInfo.careGuide });
   }
-  rows.push({ label: "Xuất xứ & Chế tác", value: "Việt Nam (Thủ công Mầm Mơ)" });
+  rows.push({ label: "Xuất xứ", value: "Việt Nam" });
   rows.push({
     label: "Tình trạng kho",
     value: currentStock > 0 ? `${currentStock} sản phẩm có sẵn` : "Tạm hết hàng",
