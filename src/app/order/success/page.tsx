@@ -482,6 +482,53 @@ function OrderSuccessContent() {
     link.download = `Chung-Nhan-Nguoi-Gieo-Mam-${customerName.replace(/\s+/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
+    return canvas;
+  };
+
+  // Smart Social Share: Uses native Web Share API on mobile (iOS/Android) to share the actual image file to Facebook/Instagram Story
+  const handleNativeShare = async () => {
+    try {
+      const customerName = order?.buyer_name || "Bạn đọc hảo tâm";
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1920;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Render the card onto canvas
+      await handleDownloadShareCard();
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `Chung-Nhan-Gieo-Mo-${customerName.replace(/\s+/g, "-")}.png`, {
+          type: "image/png",
+        });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: "Chứng nhận người gieo mầm — Gieo Mơ",
+              text: `Tôi vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn 🌱 gieomo.store`,
+            });
+            return;
+          } catch {
+            // User cancelled or share error
+          }
+        } else {
+          // Fallback on desktop: open Facebook web sharer
+          window.open(
+            `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://gieomo.store")}&quote=${encodeURIComponent(
+              `${customerName} vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn!`
+            )}`,
+            "_blank",
+            "noopener,noreferrer"
+          );
+        }
+      }, "image/png");
+    } catch {
+      handleDownloadShareCard();
+    }
   };
 
   return (
@@ -927,16 +974,14 @@ function OrderSuccessContent() {
               <span>Tải thẻ Story (PNG)</span>
             </button>
 
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://gieomo.store")}&quote=${encodeURIComponent(
-                `${order?.buyer_name || "Tôi"} vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn!`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
+            <button
+              type="button"
+              onClick={handleNativeShare}
+              className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
             >
-              <span>f Chia sẻ Facebook</span>
-            </a>
+              <Share2 className="w-4 h-4" />
+              <span>Đăng Story / Chia sẻ</span>
+            </button>
           </div>
         </div>
       )}
