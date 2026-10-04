@@ -127,6 +127,13 @@ export function ProductDetailClient({
     };
   }, [slug, initialProduct]);
 
+  // Keep document title synchronized with product name on the client tab
+  useEffect(() => {
+    if (product?.name) {
+      document.title = `Gieo Mơ | ${product.name}`;
+    }
+  }, [product?.name]);
+
   const [quantity, setQuantity] = useState(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -168,11 +175,13 @@ export function ProductDetailClient({
 
   const currentStock = useMemo(() => {
     if (!product) return 0;
-    return selectedVariant
-      ? (Number(selectedVariant.stock) || 0)
-      : (product.variants && product.variants.length > 0
-          ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-          : 0);
+    if (selectedVariant && selectedVariant.stock !== undefined && selectedVariant.stock !== null) {
+      return Number(selectedVariant.stock) || 0;
+    }
+    if (product.variants && product.variants.length > 0) {
+      return product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    }
+    return Number(product.stock) || 0;
   }, [product, selectedVariant]);
 
   const isOutOfStock = currentStock <= 0;

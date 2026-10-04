@@ -43,12 +43,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const product = await getProductBySlugServer(slug);
 
   if (!product) {
+    const formattedTitle = slug
+      ? decodeURIComponent(slug)
+          .replace(/[-_]+/g, " ")
+          .trim()
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+      : "Chi tiết sản phẩm";
+
     return {
-      title: "Sản phẩm không tồn tại",
-      description: "Không tìm thấy sản phẩm bạn yêu cầu trên cửa hàng gây quỹ Gieo Mơ.",
+      title: formattedTitle,
+      description: "Xem chi tiết sản phẩm thủ công gây quỹ và đồng hành cùng dự án Gieo Mơ.",
       openGraph: {
-        title: "Gieo Mơ | Sản phẩm không tồn tại",
-        description: "Không tìm thấy sản phẩm bạn yêu cầu trên cửa hàng gây quỹ Gieo Mơ.",
+        title: `Gieo Mơ | ${formattedTitle}`,
+        description: "Xem chi tiết sản phẩm thủ công gây quỹ và đồng hành cùng dự án Gieo Mơ.",
       },
     };
   }
