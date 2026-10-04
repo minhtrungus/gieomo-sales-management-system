@@ -8,47 +8,20 @@ import { useCartStore } from "@/store/cart";
 import dynamic from "next/dynamic";
 import { ShoppingBag, Search, Menu, X } from "lucide-react";
 
-import { getStoredSettings } from "@/lib/data/orderStore";
-
 const CartDrawer = dynamic(
   () => import("@/components/cart/CartDrawer").then((mod) => mod.CartDrawer),
   { ssr: false }
 );
-
-const COVER_THEME_MAP: Record<string, { bg: string; text: string; label: string }> = {
-  emerald: { bg: "bg-[#1B2B20]", text: "text-[#BFE9C3]", label: "🌱 Mầm Mơ — Little Pieces, Bigger Dreams • Gom từng mảnh nhỏ, dệt thành giấc mơ" },
-  "warm-autumn": { bg: "bg-[#422206]", text: "text-[#FFE7A8]", label: "🧵 Tạp hóa Gieo Mơ — Những món đồ thủ công may vá đong đầy yêu thương" },
-  "dreamy-blue": { bg: "bg-[#102A45]", text: "text-[#CFE8FF]", label: "✨ Tạp hóa Gieo Mơ — Gom từng mảnh nhỏ, dệt thành giấc mơ lớn" },
-  "pink-heart": { bg: "bg-[#451025]", text: "text-[#FFD1E1]", label: "🌸 Mầm Mơ Handmade — Cùng Mầm gieo những hạt mơ tươi đẹp" },
-};
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [coverTheme, setCoverTheme] = useState("emerald");
-  const [customAnnouncement, setCustomAnnouncement] = useState("");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    try {
-      const s = getStoredSettings();
-      if (s?.coverTheme) setCoverTheme(s.coverTheme);
-      if (s?.announcementText !== undefined) setCustomAnnouncement(s.announcementText);
-    } catch {}
-
-    const handleUpdate = () => {
-      try {
-        const s = getStoredSettings();
-        if (s?.coverTheme) setCoverTheme(s.coverTheme);
-        if (s?.announcementText !== undefined) setCustomAnnouncement(s.announcementText);
-      } catch {}
-    };
-
-    window.addEventListener("gieomo_settings_updated", handleUpdate);
-    return () => window.removeEventListener("gieomo_settings_updated", handleUpdate);
   }, []);
 
   const itemCount = useCartStore((state) =>
@@ -63,14 +36,11 @@ export function Navbar() {
     { href: "/faq", label: "FAQ" },
   ];
 
-  const currentTheme = COVER_THEME_MAP[coverTheme] || COVER_THEME_MAP.emerald;
-  const ribbonText = customAnnouncement.trim() || currentTheme.label;
-
   return (
     <>
-      {/* Dynamic Campaign Announcement Ribbon (Controlled by Admin Settings Mục 3) */}
-      <div className={`w-full py-1.5 px-4 text-center text-[11px] sm:text-xs font-bold transition-colors ${currentTheme.bg} ${currentTheme.text} shadow-xs`}>
-        {ribbonText}
+      {/* Brand Slogan Ribbon */}
+      <div className="w-full py-1.5 px-4 text-center text-[11px] sm:text-xs font-bold bg-[#1B2B20] text-[#BFE9C3] shadow-xs">
+        🌱 Mầm Mơ — Little Pieces, Bigger Dreams • Gom từng mảnh nhỏ, dệt thành giấc mơ
       </div>
 
       <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE] shadow-2xs">

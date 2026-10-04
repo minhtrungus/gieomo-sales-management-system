@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Palette, Upload, QrCode, Check, Globe, Sparkles, Building2, Share2, ExternalLink, Lock, Eye } from "lucide-react";
+import { Upload, QrCode, Check, Globe, Share2, ExternalLink } from "lucide-react";
 import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
 
@@ -129,20 +129,6 @@ export default function AdminSettingsPage() {
       .catch((err) => console.warn("Failed to fetch fresh settings:", err));
   }, []);
 
-  const palettes = [
-    { id: "soft-green", name: "Soft Green (Mầm Mơ)", color: "#BFE9C3" },
-    { id: "powder-blue", name: "Powder Blue (Mộng Mơ)", color: "#CFE8FF" },
-    { id: "butter-yellow", name: "Butter Yellow (Ánh Nắng)", color: "#FFE7A8" },
-    { id: "warm-orange", name: "Warm Orange (Nút Áo)", color: "#FFB98A" },
-    { id: "soft-pink", name: "Soft Pink (Tình Nguyện)", color: "#FFD1E1" },
-  ];
-
-  const coverThemes = [
-    { id: "emerald", name: "Xanh Mầm Mơ (Màu chủ đạo)", defaultSlogan: "🌱 Mầm Mơ — Little Pieces, Bigger Dreams • Gom từng mảnh nhỏ, dệt thành giấc mơ", bg: "bg-[#1B2B20] text-[#BFE9C3]" },
-    { id: "warm-autumn", name: "Nâu Ấm Áp (Thế giới may vá)", defaultSlogan: "🧵 Tạp hóa Gieo Mơ — Những món đồ thủ công may vá đong đầy yêu thương", bg: "bg-[#422206] text-[#FFE7A8]" },
-    { id: "dreamy-blue", name: "Xanh Mơ Mộng (Powder Blue)", defaultSlogan: "✨ Tạp hóa Gieo Mơ — Gom từng mảnh nhỏ, dệt thành giấc mơ lớn", bg: "bg-[#102A45] text-[#CFE8FF]" },
-    { id: "pink-heart", name: "Hồng Dịu Dàng (Soft Pink)", defaultSlogan: "🌸 Mầm Mơ Handmade — Cùng Mầm gieo những hạt mơ tươi đẹp", bg: "bg-[#451025] text-[#FFD1E1]" },
-  ];
 
   // Handle Favicon File Upload
   const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,7 +233,7 @@ export default function AdminSettingsPage() {
           Cài đặt hệ thống & Nhận diện thương hiệu
         </h1>
         <p className="text-xs text-[#7E7068] mt-0.5">
-          Tùy chỉnh Favicon, Mã QR thanh toán, Palette nhận diện, Cover chiến dịch và thông tin ngân hàng.
+          Tùy chỉnh Favicon, Avatar, Mã QR thanh toán, Thông tin liên hệ và Kênh truyền thông.
         </p>
       </div>
 
@@ -442,128 +428,11 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 3: PALETTE & COVER COLOR PICKER
-            ======================================================== */}
-        <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-5">
-          <div className="flex items-center gap-2 border-b border-[#F0E5D8] pb-3">
-            <Palette className="w-5 h-5 text-[#2D6338]" />
-            <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-              3. Màu chủ đạo (Palette) & Cover Header theo chiến dịch
-            </h3>
-          </div>
-
-          {/* Palette Selector */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-[#342A24] block">
-              Bảng màu nhận diện chính (Tokens từ palete_mau.jpg):
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              {palettes.map((pal) => (
-                <button
-                  key={pal.id}
-                  type="button"
-                  onClick={() => setActivePalette(pal.id)}
-                  className={`p-3 rounded-2xl border text-left transition-all flex flex-col items-center gap-2 relative cursor-pointer ${
-                    activePalette === pal.id
-                      ? "border-[#2D6338] bg-[#BFE9C3]/20 shadow-2xs ring-2 ring-[#2D6338]/30"
-                      : "border-[#F0E5D8] hover:border-[#FFB98A]"
-                  }`}
-                >
-                  <div
-                    className="w-8 h-8 rounded-full border border-black/10 flex items-center justify-center shadow-xs"
-                    style={{ backgroundColor: pal.color }}
-                  >
-                    {activePalette === pal.id && <Check className="w-4 h-4 text-[#16381D] font-extrabold" />}
-                  </div>
-                  <span className="text-[11px] font-bold text-[#342A24] text-center leading-tight">
-                    {pal.name.split(" ")[0]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Dynamic Cover Color */}
-          <div className="space-y-2 pt-2">
-            <label className="text-xs font-bold text-[#342A24] block">
-              Chủ đề Cover Header &amp; Thanh thông báo theo mùa / chiến dịch:
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {coverThemes.map((cov) => (
-                <button
-                  key={cov.id}
-                  type="button"
-                  onClick={() => setCoverTheme(cov.id)}
-                  className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${cov.bg} ${
-                    coverTheme === cov.id ? "ring-2 ring-[#BFE9C3] scale-[1.01]" : "opacity-80 hover:opacity-100"
-                  }`}
-                >
-                  <span className="text-xs font-bold">{cov.name}</span>
-                  {coverTheme === cov.id && <Check className="w-4 h-4 text-[#BFE9C3]" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Announcement Text Input */}
-          <div className="space-y-1.5 pt-2">
-            <label className="text-xs font-bold text-[#342A24] block">
-              Dòng chữ thông báo chạy trên đầu trang (Tùy chỉnh):
-            </label>
-            <input
-              type="text"
-              value={announcementText}
-              onChange={(e) => setAnnouncementText(e.target.value)}
-              placeholder="Để trống sẽ dùng câu khẩu hiệu chuẩn của Mầm Mơ theo màu đã chọn"
-              className="w-full p-2.5 rounded-xl border border-gray-300 text-xs text-[#231B16] bg-white outline-none focus:border-[#2D6338]"
-            />
-            <p className="text-[11px] text-[#7E7068]">
-              Bạn có thể tự nhập thông báo của nhóm (ví dụ: đợt mở bán mới, ưu đãi freeship, hoặc thông điệp ý nghĩa). Nếu để trống, hệ thống sẽ tự động hiển thị slogan của Mầm Mơ.
-            </p>
-          </div>
-
-          {/* Real-time Visual Live Preview */}
-          <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#342A24]">
-              <Eye className="w-4 h-4 text-[#2D6338]" />
-              <span>Xem trước hiển thị thực tế trên Website (Live Preview):</span>
-            </div>
-            <div className="rounded-xl overflow-hidden border border-gray-300 shadow-2xs">
-              <div className={`py-1.5 px-3 text-center text-[11px] font-bold transition-colors ${
-                coverThemes.find((c) => c.id === coverTheme)?.bg || "bg-[#1B2B20] text-[#BFE9C3]"
-              }`}>
-                {announcementText.trim() || coverThemes.find((c) => c.id === coverTheme)?.defaultSlogan}
-              </div>
-              <div className="bg-[#FFF8EE] p-3 flex items-center justify-between border-t border-[#F0E5D8]">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full border border-gray-300 bg-white relative overflow-hidden">
-                    <Image src={avatarPreview || "/images/logo_gieo mơ.jpg"} alt="" fill className="object-cover" />
-                  </div>
-                  <span className="font-extrabold text-xs text-[#342A24]">{siteName || "Gieo Mơ"}</span>
-                </div>
-                <div
-                  className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-black/10 shadow-xs"
-                  style={{
-                    backgroundColor: palettes.find((p) => p.id === activePalette)?.color || "#BFE9C3",
-                    color: "#16381D",
-                  }}
-                >
-                  Màu nhấn: {palettes.find((p) => p.id === activePalette)?.name.split(" ")[0]}
-                </div>
-              </div>
-            </div>
-            <p className="text-[10px] text-[#7E7068]">
-              Khi bạn bấm <strong>&quot;Lưu tất cả thay đổi cấu hình&quot;</strong>, thanh thông báo đầu trang và các điểm nhấn trên website công khai sẽ cập nhật theo chủ đề này ngay lập tức.
-            </p>
-          </div>
-        </div>
-
-        {/* ========================================================
-            SECTION 4: CONTACT & SHIPPING SETTINGS
+            SECTION 3: CONTACT & SHIPPING SETTINGS
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-4">
           <h3 className="font-heading font-extrabold text-base text-[#231B16] border-b border-[#F0E5D8] pb-3">
-            4. Thông tin liên hệ & Cước phí giao hàng
+            3. Thông tin liên hệ & Cước phí giao hàng
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -613,14 +482,14 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 5: KÊNH MẠNG XÃ HỘI (SOCIAL MEDIA)
+            SECTION 4: KÊNH MẠNG XÃ HỘI (SOCIAL MEDIA)
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-soft space-y-5">
           <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
             <div className="flex items-center gap-2">
               <Share2 className="w-5 h-5 text-[#2D6338]" />
               <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                5. Kênh Mạng Xã Hội (Social Media)
+                4. Kênh Mạng Xã Hội (Social Media)
               </h3>
             </div>
             <span className="text-[11px] font-bold text-[#2D6338] bg-[#BFE9C3]/40 px-2.5 py-1 rounded-full">
@@ -861,7 +730,7 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* ========================================================
-            SECTION 6: BẢO MẬT & ĐỔI MẬT KHẨU THÀNH VIÊN (#25)
+            SECTION 5: BẢO MẬT & ĐỔI MẬT KHẨU THÀNH VIÊN (#25)
             ======================================================== */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft space-y-5">
           <div className="flex items-center gap-3 border-b border-[#F0E5D8] pb-4">
@@ -870,7 +739,7 @@ export default function AdminSettingsPage() {
             </div>
             <div>
               <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-                6. Bảo mật &amp; Đổi mật khẩu tài khoản
+                5. Bảo mật &amp; Đổi mật khẩu tài khoản
               </h3>
               <p className="text-xs text-[#7E7068]">
                 Đổi mật khẩu đăng nhập trang Quản trị Ban Tổ Chức để đảm bảo an toàn dữ liệu.

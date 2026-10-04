@@ -132,7 +132,7 @@ export default function AdminMessagesPage() {
 
   // Review statistics
   const reviewStats = useMemo(() => {
-    if (reviews.length === 0) return { avg: 5.0, count: 5, stars5: 0, withImages: 0 };
+    if (reviews.length === 0) return { avg: 0, count: 0, stars5: 0, withImages: 0 };
     const sum = reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
     const avg = Number((sum / reviews.length).toFixed(1));
     const stars5 = reviews.filter((r) => r.rating === 5).length;
@@ -427,7 +427,7 @@ export default function AdminMessagesPage() {
               <span className="text-[11px] font-bold text-[#7E7068] block">Điểm trung bình</span>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-2xl font-extrabold text-[#2D6338] font-mono">
-                  {reviewStats.avg}
+                  {reviewStats.count > 0 ? reviewStats.avg : "—"}
                 </span>
                 <span className="text-xs text-amber-500 font-bold">★ / 5.0</span>
               </div>
