@@ -113,16 +113,22 @@ export default function ProductsPage() {
           </div>
         ) : (
           <EmptyState
-            title="Không tìm thấy sản phẩm"
-            description="Hãy thử tìm kiếm với từ khóa khác xem nhé!"
+            title={debouncedSearch.trim() ? "Không tìm thấy sản phẩm" : "Chưa có sản phẩm nào"}
+            description={
+              debouncedSearch.trim()
+                ? `Không tìm thấy sản phẩm phù hợp với từ khóa "${debouncedSearch}". Hãy thử tìm kiếm với từ khóa khác xem nhé!`
+                : "Tạp hóa Gieo Mơ đang chuẩn bị những món quà handmade yêu thương, bạn vui lòng quay lại sau nhé!"
+            }
             action={
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="mt-3 px-4 py-2 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-colors cursor-pointer"
-              >
-                Xóa từ khóa tìm kiếm
-              </button>
+              debouncedSearch.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="mt-3 px-4 py-2 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Xóa từ khóa tìm kiếm
+                </button>
+              ) : undefined
             }
           />
         )}

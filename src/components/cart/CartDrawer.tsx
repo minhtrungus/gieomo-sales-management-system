@@ -18,16 +18,23 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
-  const { items, removeItem, updateQuantity, getSubtotal, getItemCount } = useCartStore();
+  const { items, removeItem, updateQuantity, getSubtotal, getItemCount, validateCart } = useCartStore();
   const [freeshipVoucher, setFreeshipVoucher] = useState<Voucher | null>(null);
+  const [removedAlert, setRemovedAlert] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      const res = validateCart();
+      if (res && res.removedCount > 0) {
+        setRemovedAlert(true);
+      }
       const vouchers = getStoredVouchers().filter((v) => v.status === "active");
       const found = vouchers.find((v) => v.discount_type === "freeship" && (v.min_order_value || 0) > 0);
       setFreeshipVoucher(found || null);
+    } else {
+      setRemovedAlert(false);
     }
-  }, [isOpen]);
+  }, [isOpen, validateCart]);
 
   if (!isOpen) return null;
 
@@ -41,6 +48,22 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   return (
     <Drawer open={isOpen} onClose={onClose} title={`Giỏ hàng của bạn (${count})`}>
       <div className="flex flex-col h-full">
+        {removedAlert && (
+          <div className="mb-3 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <span>ℹ️</span>
+              <span>Một số sản phẩm không còn kinh doanh hoặc hết hàng đã được tự động gỡ khỏi giỏ.</span>
+            </div>
+            <button
+              onClick={() => setRemovedAlert(false)}
+              className="text-amber-700 hover:text-amber-900 font-bold text-xs p-1"
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {items.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-4">
             <EmptyState

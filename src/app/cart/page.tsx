@@ -13,7 +13,7 @@ import { getStoredVouchers, getStoredSettings, DEFAULT_SETTINGS } from "@/lib/da
 import type { Voucher } from "@/types/database";
 
 export default function CartPage() {
-  const { items, removeItem, updateQuantity, clearCart, getSubtotal } = useCartStore();
+  const { items, removeItem, updateQuantity, clearCart, getSubtotal, validateCart } = useCartStore();
 
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [allVouchers, setAllVouchers] = useState<Voucher[]>([]);
@@ -24,11 +24,16 @@ export default function CartPage() {
     discountType: string;
   } | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [removedAlert, setRemovedAlert] = useState(false);
 
   useEffect(() => {
+    const res = validateCart();
+    if (res && res.removedCount > 0) {
+      setRemovedAlert(true);
+    }
     setSettings(getStoredSettings());
     setAllVouchers(getStoredVouchers().filter((v) => v.status === "active"));
-  }, []);
+  }, [validateCart]);
 
   const subtotal = getSubtotal();
   const totalItemCount = items.reduce((acc, it) => acc + it.quantity, 0);
@@ -105,6 +110,22 @@ export default function CartPage() {
         <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 mb-8 text-balance">
           Giỏ hàng gây quỹ ({items.length})
         </h1>
+
+        {removedAlert && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs sm:text-sm flex items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <span className="text-lg">ℹ️</span>
+              <span>Một số sản phẩm không còn kinh doanh hoặc hết hàng đã được tự động gỡ khỏi giỏ hàng của bạn.</span>
+            </div>
+            <button
+              onClick={() => setRemovedAlert(false)}
+              className="text-amber-700 hover:text-amber-900 font-bold text-xs p-1"
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="py-16 bg-white rounded-3xl border border-emerald-100 p-8 text-center">

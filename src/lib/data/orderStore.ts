@@ -1312,7 +1312,9 @@ export async function clearAllStoredProducts(): Promise<void> {
   if (typeof window !== "undefined") {
     localStorage.setItem("gieomo_products", JSON.stringify([]));
     localStorage.setItem("gieomo_products_cleared_v3", "true");
+    localStorage.removeItem("gieomo-cart");
     window.dispatchEvent(new Event("gieomo_products_updated"));
+    window.dispatchEvent(new Event("gieomo_cart_updated"));
     try {
       await fetch("/api/products?id=all", { method: "DELETE" });
     } catch (e) {
@@ -1328,6 +1330,8 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (localStorage.getItem("gieomo_products_cleared_v3") !== "true") {
     localStorage.setItem("gieomo_products", JSON.stringify([]));
     localStorage.setItem("gieomo_products_cleared_v3", "true");
+    localStorage.removeItem("gieomo-cart");
+    window.dispatchEvent(new Event("gieomo_cart_updated"));
     cachedProducts = [];
     MOCK_PRODUCTS.length = 0;
     fetch("/api/products?id=all", { method: "DELETE" }).catch(() => {});
@@ -1526,7 +1530,27 @@ export function deleteStoredProduct(productId: string): void {
     const updated = list.filter((p) => p.product_id !== productId && p.slug !== productId);
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
+
+    // Prune deleted product from active cart
+    try {
+      const rawCart = localStorage.getItem("gieomo-cart");
+      if (rawCart) {
+        const parsed = JSON.parse(rawCart);
+        if (parsed?.state?.items) {
+          parsed.state.items = parsed.state.items.filter(
+            (i: any) =>
+              i.product_id !== productId &&
+              i.product_id !== target?.product_id &&
+              i.slug !== productId &&
+              i.slug !== target?.slug
+          );
+          localStorage.setItem("gieomo-cart", JSON.stringify(parsed));
+        }
+      }
+    } catch {}
+
     window.dispatchEvent(new Event("gieomo_products_updated"));
+    window.dispatchEvent(new Event("gieomo_cart_updated"));
 
     // Sync deletion to Supabase
     const params = new URLSearchParams();
@@ -2185,7 +2209,27 @@ export function deleteStoredCombo(comboId: string): void {
     const updated = combos.filter((c) => c.combo_id !== comboId && c.slug !== comboId);
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
+
+    // Prune deleted combo from active cart
+    try {
+      const rawCart = localStorage.getItem("gieomo-cart");
+      if (rawCart) {
+        const parsed = JSON.parse(rawCart);
+        if (parsed?.state?.items) {
+          parsed.state.items = parsed.state.items.filter(
+            (i: any) =>
+              i.combo_id !== comboId &&
+              i.combo_id !== target?.combo_id &&
+              i.slug !== comboId &&
+              i.slug !== target?.slug
+          );
+          localStorage.setItem("gieomo-cart", JSON.stringify(parsed));
+        }
+      }
+    } catch {}
+
     window.dispatchEvent(new Event("gieomo_combos_updated"));
+    window.dispatchEvent(new Event("gieomo_cart_updated"));
 
     const params = new URLSearchParams();
     if (target?.combo_id) params.set("id", target.combo_id);
@@ -2497,6 +2541,7 @@ export function clearAllMockData(includeCatalog = true): void {
     // Always clear products and combos as requested
     localStorage.setItem("gieomo_products", JSON.stringify([]));
     localStorage.setItem("gieomo_combos", JSON.stringify([]));
+    localStorage.removeItem("gieomo-cart");
     cachedProducts = [];
     cachedCombos = [];
 
@@ -2511,6 +2556,7 @@ export function clearAllMockData(includeCatalog = true): void {
     window.dispatchEvent(new Event("gieomo_combos_updated"));
     window.dispatchEvent(new Event("gieomo_notifications_updated"));
     window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+    window.dispatchEvent(new Event("gieomo_cart_updated"));
   } catch (e) {
     console.error("Error clearing mock data", e);
   }

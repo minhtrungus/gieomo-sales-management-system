@@ -23,11 +23,15 @@ function getCookieRef(): string | null {
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { items, getSubtotal, clearCart } = useCartStore();
+  const { items, getSubtotal, clearCart, validateCart } = useCartStore();
   const subtotal = getSubtotal();
   const totalItemCount = items.reduce((acc, it) => acc + it.quantity, 0);
 
   const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    validateCart();
+  }, [validateCart]);
 
   useEffect(() => {
     setSiteSettings(getStoredSettings());
