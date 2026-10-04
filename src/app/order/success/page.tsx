@@ -60,6 +60,17 @@ function OrderSuccessContent() {
             if (latest.payment_status === "paid") {
               setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
               setHasConfirmedPayment(true);
+
+              // Send order confirmation email upon successful payment detection
+              fetch("/api/notify/email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  type: "payment_received",
+                  order: latest,
+                  toEmail: latest.buyer_email || undefined,
+                }),
+              }).catch(() => {});
             }
           }
         })
@@ -109,9 +120,42 @@ function OrderSuccessContent() {
     }
   };
 
-  const handleConfirmPaymentSubmit = () => {
+  const handleConfirmPaymentSubmit = async () => {
     setHasConfirmedPayment(true);
     setIsConfirmModalOpen(false);
+
+    if (orderCode) {
+      try {
+        const payload: any = {
+          order_code: orderCode,
+          payment_status: "paid",
+        };
+        if (proofImage) {
+          payload.internal_note = `[Khách đính kèm ảnh biên lai CK]`;
+          payload.payment_proof = proofImage;
+        }
+        await fetch("/api/orders", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        // Trigger confirmation email upon payment confirmation
+        if (order) {
+          fetch("/api/notify/email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "order_confirmation",
+              order: { ...order, payment_status: "paid" },
+              toEmail: order.buyer_email || undefined,
+            }),
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn("Error updating payment confirmation:", err);
+      }
+    }
   };
 
   // Check gift voucher eligibility
@@ -409,110 +453,105 @@ function OrderSuccessContent() {
         {paymentMethod === "banking" ? (
           <div className="space-y-4 pt-2">
             {/* QR Code — Primary, Top, Large */}
-            <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-sm">
-              <p className="text-sm font-extrabold text-emerald-950 mb-3">
-                📱 Quét mã QR để chuyển khoản ngay
+            <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-soft">
+              <p className="text-sm font-extrabold text-[#231B16] mb-1">
+                📱 Quét mã VietQR chuyển khoản
               </p>
-              <p className="text-xs text-gray-600 mb-4 max-w-sm">
-                Mã QR đã tự động điền đúng <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> và nội dung <strong>{orderCode}</strong>. Chỉ cần mở App ngân hàng → quét mã.
+              <p className="text-xs text-[#7E7068] mb-3">
+                Đã tự động điền <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> & nội dung <strong>{orderCode}</strong>
               </p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={vietQrUrl}
-                alt="VietQR Chuyển khoản đúng số tiền"
-                className="w-56 sm:w-64 h-auto object-contain rounded-xl shadow-sm border border-gray-100"
+                alt="VietQR"
+                className="w-56 sm:w-64 h-auto object-contain rounded-xl shadow-xs border border-[#F0E5D8]"
               />
-              <div className="pt-3 flex items-center gap-3">
+              <div className="pt-2.5 flex items-center gap-4 text-xs font-bold">
                 <a
                   href={vietQrUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-bold text-emerald-800 hover:underline inline-flex items-center gap-1"
+                  className="text-[#2D6338] hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Mở ảnh QR to hơn</span>
+                  <span>Mở ảnh to</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
                 <a
                   href={vietQrUrl}
                   download={`QR-${orderCode}.png`}
-                  className="text-xs font-bold text-gray-600 hover:underline inline-flex items-center gap-1"
+                  className="text-[#7E7068] hover:text-[#231B16] inline-flex items-center gap-1"
                 >
                   <Download className="w-3 h-3" />
                   <span>Tải ảnh QR</span>
                 </a>
               </div>
-              <span className="text-[10px] text-gray-400 mt-2">
-                Hỗ trợ mọi App ngân hàng: MB, VCB, Momo, Techcombank, ACB, TPBank...
-              </span>
             </div>
 
-            {/* Direct Bank Details — Always Visible & Open, Only Memo is Copyable */}
+            {/* Direct Bank Details */}
             <div className="rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] p-4 space-y-3 text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-[#F0E5D8]">
-                <span className="font-bold text-[#5C4D44] text-xs">🏦 Thông tin chuyển khoản thủ công:</span>
-                <span className="text-[11px] text-gray-400">MB Bank (Quân Đội)</span>
+                <span className="font-bold text-[#5C4D44] text-xs">🏦 Chuyển khoản thủ công:</span>
+                <span className="text-[11px] text-gray-500 font-semibold">{bankAccount.bankName}</span>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                 <div>
-                  <span className="text-gray-500 block">Ngân hàng:</span>
-                  <span className="font-bold text-gray-900 text-xs">{bankAccount.bankName}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Chủ tài khoản:</span>
+                  <span className="text-gray-500 block text-[11px]">Chủ tài khoản:</span>
                   <span className="font-bold text-gray-900 text-xs">{bankAccount.accountHolder}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 block">Số tài khoản:</span>
-                  <span className="font-mono font-bold text-emerald-950 text-sm">{bankAccount.accountNumber}</span>
+                  <span className="text-gray-500 block text-[11px]">Số tài khoản:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-emerald-950 text-sm">{bankAccount.accountNumber}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
+                    >
+                      {copiedItem === "stk" ? "Đã chép" : "Chép"}
+                    </button>
+                  </div>
                 </div>
                 <div>
-                  <span className="text-gray-500 block">Số tiền cần chuyển:</span>
+                  <span className="text-gray-500 block text-[11px]">Số tiền:</span>
                   <span className="font-extrabold text-emerald-950 text-sm">{finalAmount.toLocaleString("vi-VN")}đ</span>
                 </div>
-              </div>
-
-              <div className="pt-2 border-t border-[#F0E5D8]">
-                <span className="text-gray-600 font-bold block mb-1">
-                  Nội dung chuyển khoản (Bắt buộc):
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 text-sm tracking-wider inline-block">
-                    {bankAccount.transferMemo}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
-                    className="px-3 py-1.5 rounded-xl bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95 shadow-2xs"
-                  >
-                    {copiedItem === "memo" ? <Check className="w-3.5 h-3.5 text-red-700" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedItem === "memo" ? "Đã chép mã" : "Sao chép mã"}</span>
-                  </button>
+                <div>
+                  <span className="text-gray-500 block text-[11px]">Nội dung CK:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-xs tracking-wider">
+                      {bankAccount.transferMemo}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 hover:bg-red-200 text-red-800 cursor-pointer"
+                    >
+                      {copiedItem === "memo" ? "Đã chép" : "Chép"}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
-                  💡 <em>Quét mã QR là cách nhanh và chuẩn xác nhất, App ngân hàng sẽ tự điền STK, số tiền và nội dung đơn cho bạn.</em>
-                </p>
               </div>
             </div>
 
             {/* Customer Payment Confirmation CTA */}
-            <div className="pt-4 border-t border-gray-100">
+            <div className="pt-3 border-t border-gray-100">
               {hasConfirmedPayment ? (
-                <div className="p-4 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] flex items-center justify-center gap-2 font-bold animate-in fade-in">
-                  <span className="text-base">✅</span>
-                  <span>Đã ghi nhận bạn chuyển khoản thành công! Ban Tổ Chức đang đối soát giao dịch và chuẩn bị đơn hàng cho bạn.</span>
+                <div className="p-3.5 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] flex items-center justify-center gap-2 font-bold animate-in fade-in">
+                  <span>✅</span>
+                  <span>Đã nhận thông tin thanh toán! Đơn hàng đang được chuẩn bị.</span>
                 </div>
               ) : (
                 <div className="space-y-2 text-center">
                   <p className="text-xs text-[#7E7068]">
-                    Sau khi quét mã hoặc chuyển tiền xong trên App ngân hàng, bạn vui lòng bấm nút bên dưới để BTC tiến hành xác nhận ngay:
+                    Đã chuyển khoản thành công trên App ngân hàng?
                   </p>
                   <button
                     type="button"
                     onClick={() => setIsConfirmModalOpen(true)}
-                    className="w-full sm:w-auto px-6 py-3 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-sm border border-[#9ed4a3] transition-all active:scale-95 cursor-pointer inline-flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-sm border border-[#9ed4a3] transition-all active:scale-95 cursor-pointer inline-flex items-center justify-center gap-2"
                   >
-                    <span>✓ Tôi đã chuyển khoản xong - Xác nhận thanh toán</span>
+                    <span>✓ Tôi đã chuyển khoản xong</span>
                   </button>
                 </div>
               )}
@@ -796,59 +835,81 @@ function OrderSuccessContent() {
 
       {/* MODAL: XÁC NHẬN ĐÃ CHUYỂN KHOẢN */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
-            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-emerald-100 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">💳</span>
-                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                  Xác nhận đã thanh toán VietQR
+                <span className="text-xl">💳</span>
+                <h3 className="font-heading font-extrabold text-base text-emerald-950">
+                  Xác nhận chuyển khoản VietQR
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer text-sm"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-[#7E7068] leading-relaxed">
-              Bạn xác nhận đã chuyển khoản <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> cho đơn hàng <strong>{orderCode}</strong>?
-            </p>
+            <div className="p-3 rounded-2xl bg-cream/70 border border-emerald-100 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Mã đơn hàng:</span>
+                <span className="font-mono font-bold text-emerald-950">{orderCode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Số tiền:</span>
+                <span className="font-extrabold text-emerald-950">{finalAmount.toLocaleString("vi-VN")}đ</span>
+              </div>
+            </div>
 
             {/* Proof image upload input */}
-            <div className="space-y-1.5 text-xs">
-              <label className="font-bold text-[#342A24] block">
+            <div className="space-y-2 text-xs">
+              <label className="font-bold text-gray-700 block">
                 Ảnh biên lai chuyển khoản (Tùy chọn):
               </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#BFE9C3] file:text-[#16381D] hover:file:bg-[#aee0b3] cursor-pointer"
-              />
-              {proofImage && (
-                <div className="mt-2 relative w-24 h-24 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+
+              {proofImage ? (
+                <div className="relative inline-block rounded-2xl overflow-hidden border border-emerald-300 bg-gray-50 shadow-2xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={proofImage} alt="Biên lai" className="w-full h-full object-cover" />
+                  <img src={proofImage} alt="Biên lai" className="w-32 h-32 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setProofImage(null)}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white hover:bg-black text-[10px] cursor-pointer"
+                    title="Xóa ảnh"
+                  >
+                    ✕
+                  </button>
                 </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center p-4 rounded-2xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/40 hover:bg-emerald-50/70 transition-colors cursor-pointer text-center group">
+                  <span className="text-lg mb-1 group-hover:scale-110 transition-transform">📷</span>
+                  <span className="text-xs font-bold text-emerald-900">Tải ảnh biên lai lên</span>
+                  <span className="text-[10px] text-gray-500 mt-0.5">Hỗ trợ JPG, PNG (tối đa 5MB)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#F0E5D8]">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer"
               >
-                Chưa, kiểm tra lại
+                Đóng
               </button>
               <button
                 type="button"
                 onClick={handleConfirmPaymentSubmit}
-                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer"
               >
                 Đã chuyển khoản xong ➔
               </button>

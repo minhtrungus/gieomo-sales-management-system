@@ -442,6 +442,38 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               />
             </div>
           </div>
+
+          {/* Payment Proof Receipt Image Box */}
+          {(order.payment_proof || (order.internal_note && order.internal_note.includes("[Ảnh biên lai]"))) && (
+            <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-2xs space-y-3">
+              <h3 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
+                <span>🧾</span> Ảnh biên lai chuyển khoản
+              </h3>
+              {(() => {
+                const proofSrc =
+                  order.payment_proof ||
+                  order.internal_note?.match(/\[Ảnh biên lai\]:\s*(data:image\/[^\s]+|https?:\/\/[^\s]+)/)?.[1] ||
+                  "";
+                if (!proofSrc) return null;
+                return (
+                  <div className="space-y-2">
+                    <div className="relative w-full rounded-2xl overflow-hidden border border-emerald-100 bg-gray-50 group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={proofSrc}
+                        alt="Biên lai chuyển khoản"
+                        className="w-full h-auto max-h-72 object-contain mx-auto cursor-pointer hover:scale-105 transition-transform"
+                        onClick={() => window.open(proofSrc, "_blank")}
+                      />
+                    </div>
+                    <p className="text-center text-[11px] text-gray-500 font-medium">
+                      (Nhấp vào ảnh để mở to toàn màn hình)
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </div>

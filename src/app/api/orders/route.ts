@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { orderCode, orderId, orderStatus, paymentStatus, deliveryStatus, delivery_status, internalNote, assignedShipperId } = await request.json();
+    const { orderCode, orderId, orderStatus, paymentStatus, deliveryStatus, delivery_status, internalNote, paymentProof, payment_proof, assignedShipperId } = await request.json();
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const supabase = createAdminClient();
 
@@ -67,6 +67,9 @@ export async function PATCH(request: Request) {
     }
     if (internalNote !== undefined) {
       updateData.internal_note = internalNote;
+    }
+    if (paymentProof || payment_proof) {
+      updateData.payment_proof = paymentProof || payment_proof;
     }
     if (assignedShipperId !== undefined) {
       updateData.assigned_shipper_id = assignedShipperId || null;

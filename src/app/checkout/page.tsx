@@ -398,19 +398,21 @@ function CheckoutContent() {
 
     saveNewOrder(newOrderRecord);
 
-    // Send order confirmation email asynchronously (if Resend is configured)
-    try {
-      fetch("/api/notify/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "order_confirmation",
-          order: newOrderRecord,
-          toEmail: formData.buyer_email || undefined,
-        }),
-      }).catch(() => {});
-    } catch {
-      // ignore
+    // Send order confirmation email asynchronously only for non-banking orders (defer banking until paid)
+    if (paymentMethod !== "banking") {
+      try {
+        fetch("/api/notify/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "order_confirmation",
+            order: newOrderRecord,
+            toEmail: formData.buyer_email || undefined,
+          }),
+        }).catch(() => {});
+      } catch {
+        // ignore
+      }
     }
 
     // Save to local customer history and update customers store
@@ -508,7 +510,7 @@ function CheckoutContent() {
               </div>
 
               <Input
-                label="Email (Không bắt buộc - nhận thông báo đơn hàng)"
+                label="Email (nhận thông báo đơn)"
                 placeholder="nguyenvana@example.com"
                 type="email"
                 value={formData.buyer_email}
@@ -605,8 +607,8 @@ function CheckoutContent() {
                     ]}
                   />
                   <Input
-                    label="Địa chỉ chi tiết nhận hàng (Số nhà, tên đường, phường/xã...) *"
-                    placeholder="Ví dụ: 123 Nguyễn Huệ, Phường Bến Nghé"
+                    label="Địa chỉ chi tiết nhận hàng *"
+                    placeholder="Số nhà, tên đường, phường/xã..."
                     value={formData.address_detail}
                     onChange={(e) => handleInputChange("address_detail", e.target.value)}
                     error={errors.address_detail}
@@ -772,10 +774,10 @@ function CheckoutContent() {
                 />
                 <div>
                   <span className="block text-xs font-bold text-emerald-950">
-                    Chuyển khoản VietQR (Napas247)
+                    Chuyển khoản VietQR 24/7
                   </span>
                   <span className="block text-[11px] text-gray-500 mt-0.5">
-                    Mã QR tự động điền STK, số tiền và nội dung chuyển khoản sau khi bấm đặt hàng.
+                    Quét mã QR tự động điền STK, số tiền và nội dung đối soát.
                   </span>
                 </div>
               </div>

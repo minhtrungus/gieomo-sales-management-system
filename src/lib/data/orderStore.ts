@@ -454,6 +454,37 @@ export function updateStoredOrderNotes(orderId: string, notes: { customer_note?:
   }
 }
 
+export function updateStoredPaymentProof(orderId: string, proof: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const updated = orders.map((o) =>
+      o.order_id === orderId || o.order_code === orderId
+        ? {
+          ...o,
+          payment_proof: proof,
+          updated_at: new Date().toISOString(),
+        }
+        : o
+    );
+    cachedOrders = updated;
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        paymentProof: proof,
+      }),
+    }).catch(() => {});
+
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error updating payment proof", e);
+  }
+}
+
 export function updateStoredOrderWarehouse(orderId: string, warehouseId: string): void {
   if (typeof window === "undefined") return;
   try {

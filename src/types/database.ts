@@ -274,6 +274,7 @@ export interface Order {
   cancel_reason?: string | null;
   customer_note?: string | null;
   internal_note?: string | null;
+  payment_proof?: string | null;
   warehouse_id?: string | null;
   warehouse_name?: string | null;
   created_at: string;
