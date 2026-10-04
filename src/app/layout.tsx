@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Montserrat } from "next/font/google";
+import { Montserrat, Caveat, Playfair_Display } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
@@ -15,6 +15,20 @@ const montserrat = Montserrat({
   subsets: ["latin", "vietnamese"],
   display: "swap",
   weight: ["300", "400", "500", "600", "700"],
+});
+
+const caveat = Caveat({
+  variable: "--font-handwriting",
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  weight: ["400", "600", "700"],
+});
+
+const playfair = Playfair_Display({
+  variable: "--font-serif",
+  subsets: ["latin", "vietnamese"],
+  display: "swap",
+  weight: ["400", "600", "700"],
 });
 
 // Note: Boldonse will be loaded via CSS @font-face when font file is provided.
@@ -85,7 +99,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="vi" className={`${montserrat.variable} h-full`} suppressHydrationWarning>
+    <html lang="vi" className={`${montserrat.variable} ${caveat.variable} ${playfair.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <OrganizationJsonLd />
         <ReferralTracker />

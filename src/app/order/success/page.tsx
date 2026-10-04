@@ -165,164 +165,274 @@ function OrderSuccessContent() {
   }, [finalAmount]);
 
   // Generate and download High-Res 9:16 Social Story PNG (1080 x 1920)
-  const handleDownloadShareCard = () => {
+  const handleDownloadShareCard = async () => {
     const canvas = document.createElement("canvas");
     canvas.width = 1080;
     canvas.height = 1920;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Background Gradient (warm pastel cream)
+    const customerName = order?.buyer_name || "Bạn đọc hảo tâm";
+    const now = new Date();
+    const dateStr = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
+    const orderItems = order?.items && order.items.length > 0
+      ? order.items
+      : [{ item_name_snapshot: "Pouch May Thủ Công Gieo Mơ", quantity: 1 }];
+    const giftPackageName = orderItems
+      .map((it: any) => it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm may thủ công")
+      .join(", ");
+
+    // 1. Background Gradient (warm artisanal parchment paper)
     const bgGrad = ctx.createLinearGradient(0, 0, 0, 1920);
-    bgGrad.addColorStop(0, "#FAF6F0");
-    bgGrad.addColorStop(0.5, "#FFFDF9");
-    bgGrad.addColorStop(1, "#EBF7EE");
+    bgGrad.addColorStop(0, "#FFFDF7");
+    bgGrad.addColorStop(0.5, "#FAF4E8");
+    bgGrad.addColorStop(1, "#F3ECE0");
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1080, 1920);
 
-    // Decorative Borders
-    ctx.strokeStyle = "#BFE9C3";
-    ctx.lineWidth = 14;
-    ctx.strokeRect(40, 40, 1000, 1840);
+    // Subtle paper edge border
+    ctx.strokeStyle = "#E8DEC8";
+    ctx.lineWidth = 20;
+    ctx.strokeRect(30, 30, 1020, 1860);
 
-    // Dashed inner sewing border
-    ctx.strokeStyle = "#16381D";
+    // Handcrafted sewing stitch border (dark green dashed)
+    ctx.strokeStyle = "#2D6338";
     ctx.lineWidth = 4;
-    ctx.setLineDash([16, 12]);
-    ctx.strokeRect(65, 65, 950, 1790);
+    ctx.setLineDash([18, 14]);
+    ctx.strokeRect(60, 60, 960, 1800);
     ctx.setLineDash([]);
 
-    // Header Tag
-    ctx.fillStyle = "#BFE9C3";
-    ctx.beginPath();
-    ctx.roundRect(310, 110, 460, 80, 40);
-    ctx.fill();
-
-    ctx.fillStyle = "#16381D";
-    ctx.font = "bold 32px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("🌱 TẠP HÓA GIEO MƠ", 540, 160);
-
-    // Subtitle
-    ctx.fillStyle = "#7E7068";
-    ctx.font = "italic 24px sans-serif";
-    ctx.fillText("Dự Án Gây Quỹ Thiện Nguyện Của Mầm Mơ", 540, 225);
-
-    // Decorative Floral / Sewing Sparkle
-    ctx.fillStyle = "#2D6338";
-    ctx.font = "46px sans-serif";
-    ctx.fillText("🧵  ✨  🌿  ✨  ✂️", 540, 295);
-
-    // Main Quote Box
-    ctx.fillStyle = "#16381D";
-    ctx.beginPath();
-    ctx.roundRect(90, 360, 900, 300, 40);
-    ctx.fill();
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 38px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("“ Tôi vừa cùng Mầm Mơ", 540, 470);
-    ctx.fillText("gieo một giấc mơ", 540, 530);
-    ctx.fillText("cho trẻ em khó khăn 🌱 ”", 540, 590);
-
-    // Certificate Card Container
+    // Inner parchment letter container
     ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
-    ctx.roundRect(110, 720, 860, 840, 36);
+    ctx.roundRect(85, 85, 910, 1750, 32);
     ctx.fill();
     ctx.strokeStyle = "#F0E5D8";
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Certificate Title
-    ctx.fillStyle = "#A89B92";
-    ctx.font = "bold 24px sans-serif";
-    ctx.fillText("CHỨNG NHẬN NGƯỜI GIEO MẦM", 540, 790);
-
-    // Customer Name
-    const customerName = order?.buyer_name || "Bạn đọc hảo tâm";
-    ctx.fillStyle = "#231B16";
-    ctx.font = "bold 52px sans-serif";
-    ctx.fillText(customerName, 540, 865);
-
-    // Order Code & Date
-    ctx.fillStyle = "#2D6338";
-    ctx.font = "bold 28px monospace";
-    ctx.fillText(`MÃ ĐƠN HÀNG: ${orderCode}`, 540, 925);
-
-    const now = new Date();
-    const dateStr = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
-    ctx.fillStyle = "#7E7068";
-    ctx.font = "24px sans-serif";
-    ctx.fillText(`Ngày gieo duyên: ${dateStr}`, 540, 970);
-
-    // Horizontal Divider
-    ctx.strokeStyle = "#F0E5D8";
-    ctx.lineWidth = 2;
+    // Top-right Wax Seal (Con dấu sáp Mầm Mơ)
+    ctx.save();
+    ctx.fillStyle = "#22542B";
     ctx.beginPath();
-    ctx.moveTo(170, 1020);
-    ctx.lineTo(910, 1020);
+    ctx.arc(880, 190, 65, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#D4AF37";
+    ctx.lineWidth = 4;
     ctx.stroke();
 
-    // Products List
-    ctx.fillStyle = "#5C4D44";
-    ctx.font = "bold 26px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("SẢN PHẨM ĐÓNG GÓP:", 170, 1075);
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(880, 190, 52, 0, Math.PI * 2);
+    ctx.stroke();
 
-    const orderItems = order?.items && order.items.length > 0
-      ? order.items
-      : [{ item_name_snapshot: "Sản phẩm may thủ công Mầm Mơ", quantity: 1 }];
-
-    ctx.font = "28px sans-serif";
-    ctx.fillStyle = "#231B16";
-    let curY = 1130;
-    orderItems.slice(0, 4).forEach((it: any) => {
-      const name = it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm";
-      const truncated = name.length > 32 ? name.slice(0, 30) + "..." : name;
-      ctx.fillText(`• ${truncated}`, 170, curY);
-      ctx.textAlign = "right";
-      ctx.fillText(`x${it.quantity}`, 910, curY);
-      ctx.textAlign = "left";
-      curY += 54;
-    });
-
-    // Contribution Amount (if not hidden)
-    if (!hidePriceOnCard) {
-      ctx.fillStyle = "#FAF6F0";
-      ctx.beginPath();
-      ctx.roundRect(170, 1370, 740, 90, 20);
-      ctx.fill();
-
-      ctx.fillStyle = "#7E7068";
-      ctx.font = "bold 26px sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("Số tiền đóng góp quỹ:", 200, 1425);
-
-      ctx.fillStyle = "#16381D";
-      ctx.font = "bold 36px sans-serif";
-      ctx.textAlign = "right";
-      ctx.fillText(`${finalAmount.toLocaleString("vi-VN")}đ`, 880, 1427);
-    }
-
-    // Footer Mission Statement
-    ctx.fillStyle = "#2D6338";
+    ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("100% Lợi Nhuận Dành Cho Trẻ Em Khó Khăn 🌱", 540, 1640);
+    ctx.fillText("🌱", 880, 180);
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("MẦM MƠ", 880, 212);
+    ctx.restore();
+
+    // PHÂN KHU 1: HEADER (Nhận diện & Lời chào)
+    // Logo & Brand Name
+    ctx.fillStyle = "#BFE9C3";
+    ctx.beginPath();
+    ctx.roundRect(140, 140, 420, 54, 27);
+    ctx.fill();
+
+    ctx.fillStyle = "#16381D";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🌿 TẠP HÓA GIEO MƠ", 350, 175);
 
     ctx.fillStyle = "#7E7068";
-    ctx.font = "22px sans-serif";
-    ctx.fillText("Từng món quà nhỏ trao đi là thêm cơ hội đến trường cho các em.", 540, 1685);
+    ctx.font = "italic 20px sans-serif";
+    ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ", 350, 225);
+
+    // Main Big Headline: CẢM ƠN NGƯỜI GIEO MẦM
+    ctx.fillStyle = "#16381D";
+    ctx.font = "bold 48px 'Playfair Display', Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.fillText("CẢM ƠN NGƯỜI GIEO MẦM", 540, 315);
+
+    ctx.fillStyle = "#65B374";
+    ctx.font = "32px sans-serif";
+    ctx.fillText("✨  🌿  🌱  🌿  ✨", 540, 365);
+
+    // PHÂN KHU 2: SPOTLIGHT - TÔN VINH KHÁCH HÀNG (Trọng tâm)
+    // Ribbon / Spotlight Box
+    ctx.fillStyle = "#FFFDF9";
+    ctx.beginPath();
+    ctx.roundRect(120, 420, 840, 390, 32);
+    ctx.fill();
+    ctx.strokeStyle = "#BFE9C3";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Small intro label
+    ctx.fillStyle = "#7E7068";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText("GỬI TẶNG BẠN", 540, 470);
+
+    // Customer Name (LỚN NHẤT & Cursive Handwriting)
+    ctx.fillStyle = "#16381D";
+    ctx.font = "bold 78px 'Caveat', 'Dancing Script', cursive, sans-serif";
+    ctx.fillText(customerName, 540, 565);
+
+    // Inspiring message text
+    ctx.fillStyle = "#342A24";
+    ctx.font = "italic 26px 'Playfair Display', Georgia, serif";
+    const quoteLine1 = `“ ${customerName} vừa cùng Gieo Mơ gieo một hạt mơ,`;
+    const quoteLine2 = "thắp một hy vọng cho trẻ em khó khăn 🌱 ”";
+    ctx.fillText(quoteLine1, 540, 660);
+    ctx.fillText(quoteLine2, 540, 705);
+
+    ctx.fillStyle = "#65B374";
+    ctx.font = "20px sans-serif";
+    ctx.fillText("Từng món quà nhỏ trao đi là thêm cơ hội đến trường cho các em.", 540, 765);
+
+    // PHÂN KHU 3: BẰNG CHỨNG HÀNH ĐỘNG (Tem bưu chính / Vintage Postal Stamp)
+    ctx.fillStyle = "#FAF6F0";
+    ctx.beginPath();
+    ctx.roundRect(120, 850, 840, 440, 28);
+    ctx.fill();
+    ctx.strokeStyle = "#E8DEC8";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Vintage Postmark circle stamp (Dấu mộc bưu điện)
+    ctx.save();
+    ctx.translate(820, 960);
+    ctx.rotate(-0.15);
+    ctx.strokeStyle = "rgba(45, 99, 56, 0.4)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 65, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 52, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#2D6338";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GIEO MƠ POST", 0, -25);
+    ctx.font = "bold 14px monospace";
+    ctx.fillText(dateStr, 0, 5);
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("VIỆT NAM", 0, 30);
+    ctx.restore();
+
+    // Action Evidence Details
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#5C4D44";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("📦 GÓI QUÀ BẠN ĐÃ CHỌN:", 160, 915);
+
+    // Products list
+    ctx.font = "24px sans-serif";
+    ctx.fillStyle = "#231B16";
+    let curY = 965;
+    orderItems.slice(0, 3).forEach((it: any) => {
+      const name = it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Mầm Mơ";
+      const truncated = name.length > 34 ? name.slice(0, 32) + "..." : name;
+      ctx.fillText(`• ${truncated}`, 160, curY);
+      ctx.textAlign = "right";
+      ctx.fillText(`x${it.quantity}`, 720, curY);
+      ctx.textAlign = "left";
+      curY += 46;
+    });
+
+    // Date of Sowing
+    ctx.fillStyle = "#5C4D44";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("📅 NGÀY GIEO HẠT:", 160, 1140);
+    ctx.fillStyle = "#16381D";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText(dateStr, 380, 1140);
+
+    // Price if not hidden
+    if (!hidePriceOnCard) {
+      ctx.fillStyle = "#5C4D44";
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("🌱 ĐÓNG GÓP QUỸ:", 160, 1210);
+      ctx.fillStyle = "#16381D";
+      ctx.font = "bold 28px sans-serif";
+      ctx.fillText(`${finalAmount.toLocaleString("vi-VN")}đ`, 380, 1210);
+    }
+
+    // PHÂN KHU 4: THÚC ĐẨY BÁN HÀNG & CTA LAN TỎA
+    // Trust Badge (Bảo chứng niềm tin)
+    ctx.fillStyle = "#EBF7EE";
+    ctx.beginPath();
+    ctx.roundRect(120, 1330, 840, 90, 45);
+    ctx.fill();
+    ctx.strokeStyle = "#A5D6A7";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
 
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 26px sans-serif";
-    ctx.fillText("gieomo.vn  •  fb.com/mammo.project", 540, 1750);
+    ctx.textAlign = "center";
+    ctx.fillText("🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN", 540, 1385);
 
-    // Download trigger
+    // Spread the word CTA & QR Code Container
+    ctx.fillStyle = "#FFFDF9";
+    ctx.beginPath();
+    ctx.roundRect(120, 1455, 840, 240, 28);
+    ctx.fill();
+    ctx.strokeStyle = "#F0E5D8";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // CTA Text on the left
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#16381D";
+    ctx.font = "bold 28px 'Playfair Display', Georgia, serif";
+    ctx.fillText("Cùng lan tỏa mầm xanh!", 160, 1530);
+
+    ctx.fillStyle = "#5C4D44";
+    ctx.font = "22px sans-serif";
+    ctx.fillText(`Quét mã để cùng ${customerName}`, 160, 1580);
+    ctx.fillText("gieo thêm những mầm xanh mới nhé! 🌱", 160, 1618);
+
+    // Load and draw QR Code
+    try {
+      const qrImg = new window.Image();
+      qrImg.crossOrigin = "anonymous";
+      qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-253-249";
+
+      await new Promise<void>((resolve) => {
+        qrImg.onload = () => {
+          ctx.drawImage(qrImg, 740, 1475, 190, 190);
+          resolve();
+        };
+        qrImg.onerror = () => {
+          // Fallback box if offline
+          ctx.fillStyle = "#2D6338";
+          ctx.fillRect(740, 1475, 190, 190);
+          ctx.fillStyle = "#FFFFFF";
+          ctx.font = "bold 18px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("gieomo.store", 835, 1575);
+          resolve();
+        };
+        setTimeout(resolve, 1500); // 1.5s fallback
+      });
+    } catch {
+      // ignore
+    }
+
+    // FOOTER
+    ctx.fillStyle = "#7E7068";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("gieomo.store  •  facebook.com/BanHangGieoMo", 540, 1755);
+
+    // Trigger download
     const link = document.createElement("a");
-    link.download = `The-Mua-Hang-Gieo-Mo-${orderCode}.png`;
+    link.download = `Chung-Nhan-Nguoi-Gieo-Mam-${customerName.replace(/\s+/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -653,29 +763,100 @@ function OrderSuccessContent() {
             </label>
           </div>
 
-          {/* Card Preview Banner Mockup */}
-          <div className="relative rounded-2xl overflow-hidden border-2 border-dashed border-emerald-300 bg-linear-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#EAF7ED] p-5 text-center space-y-3 shadow-inner">
-            <div className="flex items-center justify-center gap-2">
-              <div className="relative w-8 h-8 rounded-full overflow-hidden border border-emerald-400 bg-white">
-                <Image src="/images/logo.png" alt="Logo" fill sizes="32px" className="object-cover" />
+          {/* Card Preview Banner Mockup (Story 9:16 Style) */}
+          <div className="relative rounded-3xl overflow-hidden border-2 border-dashed border-[#BFE9C3] bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] p-6 text-center space-y-4 shadow-inner max-w-md mx-auto">
+            {/* Wax Seal */}
+            <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
+              <span className="text-xs leading-none">🌱</span>
+              <span className="text-[7.5px] font-bold tracking-tight mt-0.5">MẦM MƠ</span>
+            </div>
+
+            {/* Header: Brand and Big Typography */}
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-[11px] font-extrabold">
+                <span>🌿</span>
+                <span>TẠP HÓA GIEO MƠ</span>
               </div>
-              <span className="text-xs font-extrabold text-[#1B3622] tracking-wide uppercase">
-                TẠP HÓA GIEO MƠ • MẦM MƠ
-              </span>
+              <p className="text-[10.5px] text-[#7E7068] italic">Dự án bán hàng gây quỹ của Mầm Mơ</p>
+              <h3 className="font-serif text-xl sm:text-2xl font-black text-[#16381D] tracking-wide pt-1">
+                CẢM ƠN NGƯỜI GIEO MẦM
+              </h3>
+              <div className="text-xs text-[#65B374]">✨ 🌿 🌱 🌿 ✨</div>
             </div>
 
-            <div className="p-3 bg-white/90 rounded-2xl border border-emerald-100 shadow-xs inline-block max-w-sm mx-auto w-full">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">CHỨNG NHẬN NGƯỜI GIEO MẦM</span>
-              <h4 className="font-heading font-black text-lg text-emerald-950 mt-0.5">
+            {/* Spotlight Customer Box */}
+            <div className="p-4 rounded-2xl bg-white/95 border border-[#E8DEC8] shadow-xs space-y-2">
+              <span className="text-[10px] font-bold text-[#7E7068] uppercase tracking-widest block">Gửi tặng bạn</span>
+              <h2 className="font-handwriting text-4xl sm:text-5xl font-bold text-[#16381D] tracking-wide leading-tight py-1">
                 {order?.buyer_name || "Bạn đọc hảo tâm"}
-              </h4>
-              <span className="text-xs font-mono font-bold text-emerald-700 block mt-0.5">
-                Mã đơn: #{orderCode}
-              </span>
+              </h2>
+              <p className="font-serif italic text-xs sm:text-sm text-[#342A24] leading-relaxed">
+                &ldquo;{order?.buyer_name || "Bạn"} vừa cùng Gieo Mơ gieo một hạt mơ, thắp một hy vọng cho trẻ em khó khăn 🌱&rdquo;
+              </p>
             </div>
 
-            <p className="text-xs text-[#2D6338] italic font-medium max-w-md mx-auto">
-              &ldquo;{shareQuote}&rdquo;
+            {/* Postal Stamp / Evidence Box */}
+            <div className="p-3.5 rounded-2xl bg-[#FFFDF9] border border-dashed border-[#DED1BC] text-left text-xs space-y-2 relative overflow-hidden">
+              {/* Postmark stamp */}
+              <div className="absolute right-2 top-2 w-16 h-16 rounded-full border-2 border-emerald-900/20 text-[8px] font-mono text-emerald-900/60 flex flex-col items-center justify-center -rotate-12 pointer-events-none">
+                <span className="font-bold">GIEO MƠ</span>
+                <span>{(() => { const d = new Date(); return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth()+1).toString().padStart(2, "0")}`; })()}</span>
+                <span>POST</span>
+              </div>
+
+              <div>
+                <span className="text-[10.5px] text-[#5C4D44] font-bold block">📦 Gói quà bạn đã chọn:</span>
+                <span className="font-bold text-gray-900 text-xs block truncate pr-16">
+                  {order?.items && order.items.length > 0
+                    ? order.items.map((it: any) => it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Mầm Mơ").join(", ")
+                    : "Pouch May Thủ Công Gieo Mơ"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                <div>
+                  <span className="text-gray-500">📅 Ngày gieo hạt: </span>
+                  <span className="font-bold text-[#16381D]">
+                    {(() => {
+                      const d = new Date();
+                      return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
+                    })()}
+                  </span>
+                </div>
+                {!hidePriceOnCard && (
+                  <div>
+                    <span className="text-gray-500">🌱 Đóng góp: </span>
+                    <span className="font-extrabold text-[#16381D]">{finalAmount.toLocaleString("vi-VN")}đ</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Trust Badge */}
+            <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[11px] font-extrabold text-[#16381D]">
+              🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN
+            </div>
+
+            {/* CTA & QR Code */}
+            <div className="p-3 rounded-2xl bg-white/90 border border-[#F0E5D8] flex items-center justify-between gap-3 text-left">
+              <div>
+                <span className="font-serif font-bold text-xs text-[#16381D] block">Cùng lan tỏa mầm xanh!</span>
+                <span className="text-[10.5px] text-[#5C4D44] leading-tight block mt-0.5">
+                  Quét mã để cùng <strong>{order?.buyer_name || "bạn"}</strong> gieo thêm những mầm xanh nhé! 🌱
+                </span>
+              </div>
+              <div className="shrink-0 w-16 h-16 rounded-xl border border-[#F0E5D8] overflow-hidden bg-white p-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-255-255"
+                  alt="QR Code"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            </div>
+
+            <p className="text-[10px] text-[#7E7068] font-medium">
+              gieomo.store • facebook.com/BanHangGieoMo
             </p>
           </div>
 
@@ -685,7 +866,7 @@ function OrderSuccessContent() {
               onClick={() => setIsShareModalOpen(true)}
               className="px-4 py-3 rounded-2xl bg-cream hover:bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
             >
-              <span>👁️ Xem trước thẻ Story</span>
+              <span>👁️ Xem trước thẻ Story (9:16)</span>
             </button>
 
             <button
@@ -698,7 +879,9 @@ function OrderSuccessContent() {
             </button>
 
             <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://mammo.vn")}&quote=${encodeURIComponent(shareQuote)}`}
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://gieomo.store")}&quote=${encodeURIComponent(
+                `${order?.buyer_name || "Tôi"} vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn!`
+              )}`}
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
@@ -725,19 +908,19 @@ function OrderSuccessContent() {
 
       {/* MODAL: XEM TRƯỚC THẺ CHIA SẺ STORY */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 animate-in zoom-in-95 text-left max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📸</span>
                 <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                  Thẻ mua hàng gây quỹ Mầm Mơ
+                  Thẻ chứng nhận tự hào (Story 9:16)
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsShareModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer text-sm"
               >
                 ✕
               </button>
@@ -746,66 +929,100 @@ function OrderSuccessContent() {
             {/* Story Card Mockup Container */}
             <div
               id="story-card-mockup"
-              className="relative p-6 rounded-3xl bg-linear-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#EAF7ED] border-4 border-dashed border-[#BFE9C3] shadow-md space-y-4 text-center overflow-hidden"
+              className="relative p-6 rounded-3xl bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] border-4 border-dashed border-[#BFE9C3] shadow-md space-y-4 text-center overflow-hidden"
             >
-              {/* Header with Official Logo */}
-              <div className="flex items-center justify-center gap-2.5">
-                <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-emerald-400 bg-white shadow-xs">
-                  <Image src="/images/logo.png" alt="Logo" fill sizes="36px" className="object-cover" />
-                </div>
-                <div className="text-left">
-                  <span className="text-[11px] font-extrabold text-emerald-950 tracking-wider uppercase block leading-none">
-                    TẠP HÓA GIEO MƠ
-                  </span>
-                  <span className="text-[9.5px] text-[#7E7068] font-medium leading-none mt-0.5 block">
-                    Dự án gây quỹ Mầm Mơ
-                  </span>
-                </div>
+              {/* Wax Seal */}
+              <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
+                <span className="text-xs leading-none">🌱</span>
+                <span className="text-[7.5px] font-bold tracking-tight mt-0.5">MẦM MƠ</span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/95 border border-emerald-100 shadow-2xs space-y-1">
-                <p className="font-heading font-bold text-[10.5px] text-gray-400 uppercase tracking-widest">
-                  Chứng nhận người gieo mầm
-                </p>
-                <h4 className="font-heading font-extrabold text-xl text-emerald-950">
+              {/* Header */}
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#BFE9C3] text-[#16381D] text-[11px] font-extrabold">
+                  <span>🌿</span>
+                  <span>TẠP HÓA GIEO MƠ</span>
+                </div>
+                <p className="text-[10.5px] text-[#7E7068] italic">Dự án bán hàng gây quỹ của Mầm Mơ</p>
+                <h3 className="font-serif text-xl sm:text-2xl font-black text-[#16381D] tracking-wide pt-1">
+                  CẢM ƠN NGƯỜI GIEO MẦM
+                </h3>
+                <div className="text-xs text-[#65B374]">✨ 🌿 🌱 🌿 ✨</div>
+              </div>
+
+              {/* Customer Spotlight Box */}
+              <div className="p-4 rounded-2xl bg-white/95 border border-[#E8DEC8] shadow-xs space-y-2">
+                <span className="text-[10px] font-bold text-[#7E7068] uppercase tracking-widest block">Gửi tặng bạn</span>
+                <h2 className="font-handwriting text-4xl sm:text-5xl font-bold text-[#16381D] tracking-wide leading-tight py-1">
                   {order?.buyer_name || "Bạn đọc hảo tâm"}
-                </h4>
-                <p className="text-xs font-mono text-emerald-700 font-bold">
-                  Mã đơn: #{orderCode}
+                </h2>
+                <p className="font-serif italic text-xs sm:text-sm text-[#342A24] leading-relaxed">
+                  &ldquo;{order?.buyer_name || "Bạn"} vừa cùng Gieo Mơ gieo một hạt mơ, thắp một hy vọng cho trẻ em khó khăn 🌱&rdquo;
                 </p>
               </div>
 
-              {/* Quote */}
-              <div className="p-4 rounded-2xl bg-emerald-900 text-white space-y-1.5 shadow-sm">
-                <span className="text-lg">✨</span>
-                <p className="font-heading font-extrabold text-sm leading-snug">
-                  &ldquo;{shareQuote}&rdquo;
-                </p>
-              </div>
+              {/* Postal Stamp / Action Evidence */}
+              <div className="p-3.5 rounded-2xl bg-[#FFFDF9] border border-dashed border-[#DED1BC] text-left text-xs space-y-2 relative overflow-hidden">
+                {/* Postmark stamp */}
+                <div className="absolute right-2 top-2 w-16 h-16 rounded-full border-2 border-emerald-900/20 text-[8px] font-mono text-emerald-900/60 flex flex-col items-center justify-center -rotate-12 pointer-events-none">
+                  <span className="font-bold">GIEO MƠ</span>
+                  <span>{(() => { const d = new Date(); return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth()+1).toString().padStart(2, "0")}`; })()}</span>
+                  <span>POST</span>
+                </div>
 
-              {/* Items summary */}
-              <div className="text-left text-xs bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 space-y-1">
-                <span className="text-[10px] font-bold text-gray-500 block uppercase tracking-wider">Sản phẩm ủng hộ:</span>
-                <div className="divide-y divide-gray-100 max-h-24 overflow-y-auto">
-                  {(order?.items && order.items.length > 0 ? order.items : [{ item_name_snapshot: "Sản phẩm may thủ công Mầm Mơ", quantity: 1 }]).map((it: any, idx: number) => (
-                    <div key={idx} className="py-1 flex justify-between items-center text-[11.5px]">
-                      <span className="truncate pr-2 font-medium text-gray-800">• {it.item_name_snapshot || it.product_name_snapshot}</span>
-                      <span className="font-bold text-gray-600 shrink-0">x{it.quantity}</span>
+                <div>
+                  <span className="text-[10.5px] text-[#5C4D44] font-bold block">📦 Gói quà bạn đã chọn:</span>
+                  <span className="font-bold text-gray-900 text-xs block truncate pr-16">
+                    {order?.items && order.items.length > 0
+                      ? order.items.map((it: any) => it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Mầm Mơ").join(", ")
+                      : "Pouch May Thủ Công Gieo Mơ"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                  <div>
+                    <span className="text-gray-500">📅 Ngày gieo hạt: </span>
+                    <span className="font-bold text-[#16381D]">
+                      {(() => {
+                        const d = new Date();
+                        return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
+                      })()}
+                    </span>
+                  </div>
+                  {!hidePriceOnCard && (
+                    <div>
+                      <span className="text-gray-500">🌱 Đóng góp: </span>
+                      <span className="font-extrabold text-[#16381D]">{finalAmount.toLocaleString("vi-VN")}đ</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
-              {/* Amount if not hidden */}
-              {!hidePriceOnCard && (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-emerald-100 text-xs">
-                  <span className="text-gray-500 font-medium">Số tiền đóng góp quỹ:</span>
-                  <span className="font-extrabold text-emerald-950 text-sm">{finalAmount.toLocaleString("vi-VN")}đ</span>
-                </div>
-              )}
+              {/* Trust Badge */}
+              <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[11px] font-extrabold text-[#16381D]">
+                🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN
+              </div>
 
-              <p className="text-[10px] text-gray-500 italic">
-                100% lợi nhuận chuyển đổi thành tập vở, dụng cụ học tập cho trẻ em khó khăn.
+              {/* QR Code CTA */}
+              <div className="p-3 rounded-2xl bg-white/90 border border-[#F0E5D8] flex items-center justify-between gap-3 text-left">
+                <div>
+                  <span className="font-serif font-bold text-xs text-[#16381D] block">Cùng lan tỏa mầm xanh!</span>
+                  <span className="text-[10.5px] text-[#5C4D44] leading-tight block mt-0.5">
+                    Quét mã để cùng <strong>{order?.buyer_name || "bạn"}</strong> gieo thêm những mầm xanh nhé! 🌱
+                  </span>
+                </div>
+                <div className="shrink-0 w-16 h-16 rounded-xl border border-[#F0E5D8] overflow-hidden bg-white p-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-255-255"
+                    alt="QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[#7E7068] font-medium">
+                gieomo.store • facebook.com/BanHangGieoMo
               </p>
             </div>
 
