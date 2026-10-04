@@ -8,20 +8,44 @@ import { useCartStore } from "@/store/cart";
 import dynamic from "next/dynamic";
 import { ShoppingBag, Search, Menu, X } from "lucide-react";
 
+import { getStoredSettings } from "@/lib/data/orderStore";
+
 const CartDrawer = dynamic(
   () => import("@/components/cart/CartDrawer").then((mod) => mod.CartDrawer),
   { ssr: false }
 );
+
+const COVER_THEME_MAP: Record<string, { bg: string; text: string; label: string }> = {
+  emerald: { bg: "bg-[#1B2B20]", text: "text-[#BFE9C3]", label: "✨ Dự án gây quỹ thiện nguyện Mầm Mơ — Little Pieces, Bigger Dreams" },
+  "warm-autumn": { bg: "bg-[#422206]", text: "text-[#FFE7A8]", label: "🍂 Mùa Thu Ấm Áp — Mỗi món hàng là một yêu thương gửi đến trẻ em nghèo" },
+  "dreamy-blue": { bg: "bg-[#102A45]", text: "text-[#CFE8FF]", label: "☁️ Giấc Mơ Mây — Đồng hành cùng các em nhỏ tại điểm trường vùng cao" },
+  "pink-heart": { bg: "bg-[#451025]", text: "text-[#FFD1E1]", label: "🌸 Trái Tim Thiện Nguyện — 100% lợi nhuận gây quỹ nuôi em" },
+};
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [coverTheme, setCoverTheme] = useState("emerald");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
+    try {
+      const s = getStoredSettings();
+      if (s?.coverTheme) setCoverTheme(s.coverTheme);
+    } catch {}
+
+    const handleUpdate = () => {
+      try {
+        const s = getStoredSettings();
+        if (s?.coverTheme) setCoverTheme(s.coverTheme);
+      } catch {}
+    };
+
+    window.addEventListener("gieomo_settings_updated", handleUpdate);
+    return () => window.removeEventListener("gieomo_settings_updated", handleUpdate);
   }, []);
 
   const itemCount = useCartStore((state) =>
@@ -36,8 +60,15 @@ export function Navbar() {
     { href: "/faq", label: "FAQ" },
   ];
 
+  const currentTheme = COVER_THEME_MAP[coverTheme] || COVER_THEME_MAP.emerald;
+
   return (
     <>
+      {/* Dynamic Campaign Announcement Ribbon (Controlled by Admin Settings Mục 3) */}
+      <div className={`w-full py-1.5 px-4 text-center text-[11px] sm:text-xs font-bold transition-colors ${currentTheme.bg} ${currentTheme.text} shadow-xs`}>
+        {currentTheme.label}
+      </div>
+
       <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE] shadow-2xs">
         <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6 lg:px-8 max-w-7xl">
           {/* Brand Logo with Real Artwork */}
@@ -92,7 +123,7 @@ export function Navbar() {
             <Link
               href="/products"
               prefetch={true}
-              className="p-2.5 text-[#5C4D44] hover:text-[#231B16] hover:bg-[#FFF4E5] rounded-full transition-colors hidden sm:flex border border-transparent hover:border-[#F0E5D8]"
+              className="p-2 text-[#5C4D44] hover:text-[#231B16] hover:bg-[#FFF4E5] rounded-full transition-colors flex border border-[#F0E5D8] sm:border-transparent hover:border-[#F0E5D8]"
               title="Tìm kiếm sản phẩm"
             >
               <Search className="w-4 h-4" />

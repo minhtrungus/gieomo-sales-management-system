@@ -85,7 +85,11 @@ export function ProductDetailClient({
   const parsedInfo = parseProductDescription(product.description, product.specs, product.impact_story ?? undefined);
   const addItem = useCartStore((state) => state.addItem);
 
-  const currentStock = selectedVariant?.stock ?? 10;
+  const currentStock = selectedVariant
+    ? (Number(selectedVariant.stock) || 0)
+    : (product.variants && product.variants.length > 0
+        ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+        : 0);
   const isOutOfStock = currentStock <= 0;
 
   const specRows = buildProductSpecRows(product, parsedInfo, currentStock);
@@ -128,7 +132,7 @@ export function ProductDetailClient({
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 pb-24 sm:pb-12">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-gray-500 mb-6">
           <Link href="/" className="hover:text-emerald-800 transition-colors">Trang chủ</Link>
@@ -290,16 +294,24 @@ export function ProductDetailClient({
               <button
                 onClick={handleAddToCart}
                 disabled={isOutOfStock}
-                className="w-full py-3.5 px-6 rounded-2xl bg-cream hover:bg-emerald-50 border-2 border-emerald-600 text-emerald-950 font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50 whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
+                className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all shadow-xs flex items-center justify-center gap-1.5 ${
+                  isOutOfStock
+                    ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                    : "bg-cream hover:bg-emerald-50 border-2 border-emerald-600 text-emerald-950 active:scale-98 cursor-pointer"
+                }`}
               >
-                🛒 Thêm vào giỏ
+                {isOutOfStock ? "Tạm hết hàng" : "🛒 Thêm vào giỏ"}
               </button>
               <button
                 onClick={handleBuyNow}
                 disabled={isOutOfStock}
-                className="w-full py-3.5 px-6 rounded-2xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-sm transition-all shadow-xs active:scale-98 disabled:opacity-50 whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
+                className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all shadow-xs flex items-center justify-center gap-1.5 ${
+                  isOutOfStock
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-emerald-900 hover:bg-emerald-950 text-white active:scale-98 cursor-pointer"
+                }`}
               >
-                ⚡ Mua ngay
+                {isOutOfStock ? "Đang chờ nhập hàng" : "⚡ Mua ngay"}
               </button>
             </div>
           </div>
@@ -412,10 +424,42 @@ export function ProductDetailClient({
         </div>
       </main>
 
+      {/* Mobile Sticky CTA Bar */}
+      <aside aria-label="Thanh mua hàng nhanh" className="sm:hidden fixed bottom-0 left-0 right-0 p-3 bg-[#FFFDF9]/95 backdrop-blur-md border-t border-[#F0E5D8] z-30 flex items-center justify-between gap-3 shadow-lg">
+        <div className="flex flex-col min-w-0">
+          <span className="text-[10px] text-[#7E7068] font-bold uppercase tracking-wider">Tổng tiền</span>
+          <MoneyDisplay amount={product.price * quantity} className="text-base font-extrabold text-[#231B16] truncate" />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleAddToCart}
+            disabled={isOutOfStock}
+            className={`px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-xs flex items-center gap-1 ${
+              isOutOfStock
+                ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                : "bg-cream border border-[#2D6338] text-[#1B3622] active:scale-95 cursor-pointer"
+            }`}
+          >
+            🛒 Giỏ
+          </button>
+          <button
+            onClick={handleBuyNow}
+            disabled={isOutOfStock}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all shadow-xs flex items-center gap-1 ${
+              isOutOfStock
+                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-[#2D6338] hover:bg-[#1B3622] text-white active:scale-95 cursor-pointer"
+            }`}
+          >
+            ⚡ Mua ngay
+          </button>
+        </div>
+      </aside>
+
       <Footer />
 
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 animate-slide-up pointer-events-auto">
+        <div className="fixed bottom-16 sm:bottom-5 right-5 z-50 animate-slide-up pointer-events-auto">
           <Toast type="success" message={toastMessage} onClose={() => setToastMessage(null)} />
         </div>
       )}

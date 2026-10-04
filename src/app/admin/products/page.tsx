@@ -148,7 +148,8 @@ export default function AdminProductsPage() {
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
               {filteredProducts.map((p, idx) => {
-                const totalStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) ?? 10;
+                const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? 0;
+                const isOutOfStock = totalStock <= 0;
                 return (
                   <tr key={p.product_id} className="hover:bg-[#FFFDF9] transition-colors">
                     <td className="py-2.5 px-2.5 text-center text-[#7E7068] font-bold text-[11px]">
@@ -180,13 +181,13 @@ export default function AdminProductsPage() {
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <span className={`font-bold px-2 py-0.5 rounded-full inline-block text-[10.5px] ${
-                        totalStock <= 5
-                          ? "bg-red-50 text-red-700 border border-red-200"
+                        isOutOfStock
+                          ? "bg-red-100 text-red-800 border border-red-300"
                           : totalStock <= 10
-                          ? "bg-amber-50 text-amber-700 border border-amber-200"
-                          : "text-[#342A24]"
+                          ? "bg-amber-50 text-amber-800 border border-amber-200"
+                          : "bg-emerald-50 text-emerald-800 border border-emerald-200"
                       }`}>
-                        {totalStock} món
+                        {isOutOfStock ? "Hết hàng (0)" : `${totalStock} món`}
                       </span>
                     </td>
 
@@ -196,9 +197,21 @@ export default function AdminProductsPage() {
                         className="cursor-pointer transition-transform active:scale-95"
                         title="Bấm để chuyển đổi Đang bán / Nháp"
                       >
-                        <Badge variant={p.status === "active" ? "brand" : "default"} className="text-[10px] px-2 py-0.5">
-                          {p.status === "active" ? "Đang bán" : "Nháp"}
-                        </Badge>
+                        {p.status === "active" ? (
+                          isOutOfStock ? (
+                            <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              Đang bán (Hết kho)
+                            </span>
+                          ) : (
+                            <Badge variant="brand" className="text-[10px] px-2 py-0.5">
+                              Đang bán
+                            </Badge>
+                          )
+                        ) : (
+                          <Badge variant="default" className="text-[10px] px-2 py-0.5">
+                            Nháp
+                          </Badge>
+                        )}
                       </button>
                     </td>
 

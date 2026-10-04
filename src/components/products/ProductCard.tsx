@@ -19,7 +19,9 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const defaultVariant = product.variants?.[0];
-  const stockCount = defaultVariant ? defaultVariant.stock : 10;
+  const stockCount = product.variants && product.variants.length > 0
+    ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+    : (defaultVariant ? Number(defaultVariant.stock) || 0 : 0);
   const isOutOfStock = stockCount <= 0;
 
   const handleQuickAdd = (e: React.MouseEvent) => {
@@ -44,7 +46,7 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
   };
 
   return (
-    <div className="group relative flex flex-col bg-white rounded-3xl border border-[#F0E5D8] overflow-hidden shadow-soft hover:shadow-card-hover transition-transform duration-200 hover:-translate-y-0.5 will-change-transform">
+    <div className={`group relative flex flex-col bg-white rounded-3xl border border-[#F0E5D8] overflow-hidden shadow-soft hover:shadow-card-hover transition-transform duration-200 hover:-translate-y-0.5 will-change-transform ${isOutOfStock ? "opacity-90" : ""}`}>
       {/* Stretched Link covering the whole card for instant, clean navigation with prefetch */}
       <Link
         href={`/products/${product.slug}`}
@@ -61,7 +63,7 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
             alt={product.name}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            className={`object-cover group-hover:scale-105 transition-transform duration-500 ${isOutOfStock ? "grayscale-[30%]" : ""}`}
           />
         ) : (
           <div className="flex flex-col items-center gap-1 text-[#7E7068]">
@@ -70,14 +72,20 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
           </div>
         )}
 
-        {/* Badge Tag */}
-        {product.badge_label && (
+        {/* Out of Stock Overlay Badge */}
+        {isOutOfStock ? (
+          <div className="absolute top-3 left-3 z-20 pointer-events-none">
+            <span className="px-2.5 py-1 rounded-full bg-red-600/90 text-white text-[10px] font-extrabold uppercase shadow-sm">
+              Tạm hết hàng
+            </span>
+          </div>
+        ) : product.badge_label ? (
           <div className="absolute top-3 left-3 z-20 pointer-events-none">
             <Badge variant={product.badge === "best_seller" ? "accent" : "brand"}>
               {product.badge_label}
             </Badge>
           </div>
-        )}
+        ) : null}
 
         {/* Discount tag if any */}
         {product.compare_at_price && product.compare_at_price > product.price && (
