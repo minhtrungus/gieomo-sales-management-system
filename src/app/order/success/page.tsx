@@ -8,7 +8,16 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
-import { getStoredOrders, getStoredSettings, getStoredVouchers, DEFAULT_SETTINGS, type SiteSettings } from "@/lib/data/orderStore";
+import {
+  getStoredOrders,
+  getStoredSettings,
+  getStoredVouchers,
+  updateStoredOrderStatus,
+  updateStoredPaymentStatus,
+  updateStoredPaymentProof,
+  DEFAULT_SETTINGS,
+  type SiteSettings,
+} from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
 import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift } from "lucide-react";
 import { compressImage } from "@/lib/utils/imageCompressor";
@@ -40,9 +49,27 @@ function OrderSuccessContent() {
 
   useEffect(() => {
     const orders = getStoredOrders();
-    const found = orders.find((o) => o.order_code === orderCode);
+    const found = orders.find((o) => o.order_code === orderCode || o.order_id === orderCode);
     if (found) {
       setOrder(found);
+      if (
+        found.payment_status === "paid" ||
+        found.payment_proof ||
+        found.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
+      ) {
+        setHasConfirmedPayment(true);
+        if (found.payment_proof) setProofImage(found.payment_proof);
+      }
+    }
+
+    // Also restore cached confirmation state
+    try {
+      const localConfirmed = localStorage.getItem(`gieomo_confirmed_${orderCode}`) === "true";
+      const localProof = localStorage.getItem(`gieomo_proof_${orderCode}`);
+      if (localConfirmed) setHasConfirmedPayment(true);
+      if (localProof && !proofImage) setProofImage(localProof);
+    } catch {
+      // ignore
     }
   }, [orderCode]);
 
@@ -126,9 +153,29 @@ function OrderSuccessContent() {
 
     if (orderCode) {
       try {
+        localStorage.setItem(`gieomo_confirmed_${orderCode}`, "true");
+        if (proofImage) {
+          localStorage.setItem(`gieomo_proof_${orderCode}`, proofImage);
+          updateStoredPaymentProof(orderCode, proofImage);
+        }
+        updateStoredPaymentStatus(orderCode, "paid");
+        updateStoredOrderStatus(orderCode, "confirmed");
+
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                payment_status: "paid",
+                order_status: "confirmed",
+                payment_proof: proofImage || prev.payment_proof,
+              }
+            : prev
+        );
+
         const payload: any = {
           order_code: orderCode,
           payment_status: "paid",
+          order_status: "confirmed",
         };
         if (proofImage) {
           payload.internal_note = `[Khách đính kèm ảnh biên lai CK]`;
@@ -211,7 +258,7 @@ function OrderSuccessContent() {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Top-right Wax Seal (Con dấu sáp Mầm Mơ)
+    // Top-right Wax Seal (Con dấu sáp Gieo Mơ)
     ctx.save();
     ctx.fillStyle = "#22542B";
     ctx.beginPath();
@@ -230,9 +277,9 @@ function OrderSuccessContent() {
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌱", 880, 180);
+    ctx.fillText("🌿", 880, 180);
     ctx.font = "bold 13px sans-serif";
-    ctx.fillText("MẦM MƠ", 880, 212);
+    ctx.fillText("GIEO MƠ", 880, 212);
     ctx.restore();
 
     // PHÂN KHU 1: HEADER (Nhận diện & Lời chào)
@@ -373,9 +420,9 @@ function OrderSuccessContent() {
     ctx.stroke();
 
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 26px sans-serif";
+    ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN", 540, 1385);
+    ctx.fillText("🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ", 540, 1385);
 
     // Spread the word CTA & QR Code Container
     ctx.fillStyle = "#FFFDF9";
@@ -765,10 +812,12 @@ function OrderSuccessContent() {
 
           {/* Card Preview Banner Mockup (Story 9:16 Style) */}
           <div className="relative rounded-3xl overflow-hidden border-2 border-dashed border-[#BFE9C3] bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] p-6 text-center space-y-4 shadow-inner max-w-md mx-auto">
-            {/* Wax Seal */}
+            {/* Wax Seal with Gieo Mơ Logo */}
             <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
-              <span className="text-xs leading-none">🌱</span>
-              <span className="text-[7.5px] font-bold tracking-tight mt-0.5">MẦM MƠ</span>
+              <div className="relative w-5 h-5 rounded-full overflow-hidden bg-white">
+                <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="20px" className="object-cover" />
+              </div>
+              <span className="text-[7px] font-extrabold tracking-tight mt-0.5">GIEO MƠ</span>
             </div>
 
             {/* Header: Brand and Big Typography */}
@@ -833,8 +882,8 @@ function OrderSuccessContent() {
             </div>
 
             {/* Trust Badge */}
-            <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[11px] font-extrabold text-[#16381D]">
-              🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN
+            <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[10.5px] sm:text-[11px] font-extrabold text-[#16381D]">
+              🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ
             </div>
 
             {/* CTA & QR Code */}
@@ -931,10 +980,12 @@ function OrderSuccessContent() {
               id="story-card-mockup"
               className="relative p-6 rounded-3xl bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] border-4 border-dashed border-[#BFE9C3] shadow-md space-y-4 text-center overflow-hidden"
             >
-              {/* Wax Seal */}
+              {/* Wax Seal with Gieo Mơ Logo */}
               <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
-                <span className="text-xs leading-none">🌱</span>
-                <span className="text-[7.5px] font-bold tracking-tight mt-0.5">MẦM MƠ</span>
+                <div className="relative w-5 h-5 rounded-full overflow-hidden bg-white">
+                  <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="20px" className="object-cover" />
+                </div>
+                <span className="text-[7px] font-extrabold tracking-tight mt-0.5">GIEO MƠ</span>
               </div>
 
               {/* Header */}
@@ -999,8 +1050,8 @@ function OrderSuccessContent() {
               </div>
 
               {/* Trust Badge */}
-              <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[11px] font-extrabold text-[#16381D]">
-                🌱 100% LỢI NHUẬN GÂY QUỸ CHO TRẺ EM KHÓ KHĂN
+              <div className="px-3 py-1.5 rounded-full bg-[#EBF7EE] border border-[#A5D6A7] text-[10.5px] sm:text-[11px] font-extrabold text-[#16381D]">
+                🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ
               </div>
 
               {/* QR Code CTA */}
