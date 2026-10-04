@@ -38,15 +38,3 @@ ON storage.objects FOR ALL
 TO service_role
 USING (bucket_id = 'content-media')
 WITH CHECK (bucket_id = 'content-media');
-
--- 4. Add freeship to discount_type enum if not present
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum 
-    WHERE enumlabel = 'freeship' 
-    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'discount_type')
-  ) THEN
-    ALTER TYPE discount_type ADD VALUE 'freeship';
-  END IF;
-END $$;
