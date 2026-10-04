@@ -214,7 +214,7 @@ function OrderSuccessContent() {
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  // Generate High-Res 9:16 Social Story Canvas (1080 x 1920)
+  // Generate High-Res 9:16 Social Story Canvas (1080 x 1920) with strict Instagram Safe Areas
   const generateShareCanvas = async (): Promise<HTMLCanvasElement | null> => {
     // Wait for custom fonts to be ready
     try {
@@ -224,6 +224,23 @@ function OrderSuccessContent() {
     } catch {
       // ignore
     }
+
+    // Helper to load image cross-origin safely
+    const loadImg = (src: string): Promise<HTMLImageElement | null> => {
+      return new Promise((resolve) => {
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+        setTimeout(() => resolve(null), 2500);
+      });
+    };
+
+    const [logoImg, qrImg] = await Promise.all([
+      loadImg("/images/logo.png"),
+      loadImg("https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-253-249"),
+    ]);
 
     const canvas = document.createElement("canvas");
     canvas.width = 1080;
@@ -246,82 +263,91 @@ function OrderSuccessContent() {
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1080, 1920);
 
-    // Subtle paper edge border
+    // Subtle paper edge border (inside story safe zone)
     ctx.strokeStyle = "#E8DEC8";
-    ctx.lineWidth = 20;
-    ctx.strokeRect(30, 30, 1020, 1860);
+    ctx.lineWidth = 18;
+    ctx.strokeRect(25, 180, 1030, 1500);
 
     // Handcrafted sewing stitch border (dark green dashed)
     ctx.strokeStyle = "#2D6338";
     ctx.lineWidth = 4;
     ctx.setLineDash([18, 14]);
-    ctx.strokeRect(60, 60, 960, 1800);
+    ctx.strokeRect(50, 205, 980, 1450);
     ctx.setLineDash([]);
 
     // Inner parchment letter container
     ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
-    ctx.roundRect(85, 85, 910, 1750, 32);
+    ctx.roundRect(75, 230, 930, 1400, 32);
     ctx.fill();
     ctx.strokeStyle = "#F0E5D8";
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Top-right Wax Seal (Con dấu sáp Gieo Mơ)
+    // Top-right Wax Seal with Full Official Gieo Mơ Logo (No extra text badge)
     ctx.save();
+    // Outer golden rim
     ctx.fillStyle = "#22542B";
     ctx.beginPath();
-    ctx.arc(880, 190, 65, 0, Math.PI * 2);
+    ctx.arc(880, 310, 58, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#D4AF37";
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(255,255,255,0.4)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(880, 190, 52, 0, Math.PI * 2);
-    ctx.stroke();
-
+    // Inner circular white background
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 26px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("🌿", 880, 180);
-    ctx.font = "bold 13px 'Montserrat', sans-serif";
-    ctx.fillText("GIEO MƠ", 880, 212);
+    ctx.beginPath();
+    ctx.arc(880, 310, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Clip and draw full logo
+    if (logoImg) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(880, 310, 48, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, 880 - 48, 310 - 48, 96, 96);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#16381D";
+      ctx.font = "bold 20px 'Montserrat', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("GIEO MƠ", 880, 317);
+    }
     ctx.restore();
 
     // PHÂN KHU 1: HEADER (Nhận diện & Lời chào)
-    // Logo & Brand Name
+    // Logo & Brand Name Pill
     ctx.fillStyle = "#BFE9C3";
     ctx.beginPath();
-    ctx.roundRect(140, 140, 420, 54, 27);
+    ctx.roundRect(130, 275, 420, 52, 26);
     ctx.fill();
 
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 22px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌿 TẠP HÓA GIEO MƠ", 350, 175);
+    ctx.fillText("🌿 TẠP HÓA GIEO MƠ", 340, 308);
 
     ctx.fillStyle = "#7E7068";
-    ctx.font = "italic 20px 'Montserrat', sans-serif";
-    ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ", 350, 225);
+    ctx.font = "italic 19px 'Montserrat', sans-serif";
+    ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ", 340, 355);
 
     // Main Big Headline: CẢM ƠN NGƯỜI GIEO MẦM
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 46px 'Playfair Display', Georgia, serif";
     ctx.textAlign = "center";
-    ctx.fillText("CẢM ƠN NGƯỜI GIEO MẦM", 540, 315);
+    ctx.fillText("CẢM ƠN NGƯỜI GIEO MẦM", 540, 412);
 
     ctx.fillStyle = "#65B374";
-    ctx.font = "30px sans-serif";
-    ctx.fillText("✨  🌿  🌱  🌿  ✨", 540, 365);
+    ctx.font = "28px sans-serif";
+    ctx.fillText("✨  🌿  🌱  🌿  ✨", 540, 450);
 
     // PHÂN KHU 2: SPOTLIGHT - TÔN VINH KHÁCH HÀNG (Trọng tâm)
     // Ribbon / Spotlight Box
     ctx.fillStyle = "#FFFDF9";
     ctx.beginPath();
-    ctx.roundRect(120, 420, 840, 390, 32);
+    ctx.roundRect(120, 475, 840, 290, 28);
     ctx.fill();
     ctx.strokeStyle = "#BFE9C3";
     ctx.lineWidth = 3;
@@ -330,32 +356,32 @@ function OrderSuccessContent() {
     // Small intro label
     ctx.fillStyle = "#7E7068";
     ctx.font = "bold 18px 'Montserrat', sans-serif";
-    ctx.fillText("GỬI TẶNG BẠN", 540, 470);
+    ctx.fillText("GỬI TẶNG BẠN", 540, 520);
 
     // Customer Name (LỚN NHẤT & Cursive Handwriting with responsive scale)
     ctx.fillStyle = "#16381D";
     const nameLen = customerName.length;
-    const nameFontSize = nameLen > 24 ? 60 : nameLen > 16 ? 70 : 82;
+    const nameFontSize = nameLen > 24 ? 58 : nameLen > 16 ? 68 : 80;
     ctx.font = `bold ${nameFontSize}px 'Caveat', cursive, sans-serif`;
-    ctx.fillText(customerName, 540, 565);
+    ctx.fillText(customerName, 540, 590);
 
     // Inspiring message text
     ctx.fillStyle = "#342A24";
-    ctx.font = "italic 25px 'Playfair Display', Georgia, serif";
+    ctx.font = "italic 24px 'Playfair Display', Georgia, serif";
     const safeShortName = nameLen > 20 ? customerName.slice(0, 18) + "..." : customerName;
     const quoteLine1 = `“ ${safeShortName} vừa cùng Gieo Mơ gieo một hạt mơ,`;
     const quoteLine2 = "thắp một hy vọng cho trẻ em khó khăn 🌱 ”";
-    ctx.fillText(quoteLine1, 540, 660);
-    ctx.fillText(quoteLine2, 540, 705);
+    ctx.fillText(quoteLine1, 540, 655);
+    ctx.fillText(quoteLine2, 540, 690);
 
     ctx.fillStyle = "#65B374";
-    ctx.font = "20px 'Montserrat', sans-serif";
-    ctx.fillText("Từng món quà nhỏ trao đi là thêm cơ hội đến trường cho các em.", 540, 765);
+    ctx.font = "19px 'Montserrat', sans-serif";
+    ctx.fillText("Từng món quà nhỏ trao đi là thêm cơ hội đến trường cho các em.", 540, 735);
 
     // PHÂN KHU 3: BẰNG CHỨNG HÀNH ĐỘNG (Tem bưu chính / Vintage Postal Stamp)
     ctx.fillStyle = "#FAF6F0";
     ctx.beginPath();
-    ctx.roundRect(120, 850, 840, 360, 28);
+    ctx.roundRect(120, 785, 840, 290, 24);
     ctx.fill();
     ctx.strokeStyle = "#E8DEC8";
     ctx.lineWidth = 3;
@@ -363,36 +389,36 @@ function OrderSuccessContent() {
 
     // Vintage Postmark circle stamp (Dấu mộc bưu điện)
     ctx.save();
-    ctx.translate(820, 955);
+    ctx.translate(830, 880);
     ctx.rotate(-0.15);
     ctx.strokeStyle = "rgba(45, 99, 56, 0.4)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(0, 0, 65, 0, Math.PI * 2);
+    ctx.arc(0, 0, 60, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(0, 0, 52, 0, Math.PI * 2);
+    ctx.arc(0, 0, 48, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = "#2D6338";
-    ctx.font = "bold 12px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("GIEO MƠ POST", 0, -25);
-    ctx.font = "bold 14px monospace";
-    ctx.fillText(dateStr, 0, 5);
     ctx.font = "bold 11px sans-serif";
-    ctx.fillText("VIỆT NAM", 0, 30);
+    ctx.textAlign = "center";
+    ctx.fillText("GIEO MƠ POST", 0, -22);
+    ctx.font = "bold 13px monospace";
+    ctx.fillText(dateStr, 0, 4);
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("VIỆT NAM", 0, 26);
     ctx.restore();
 
     // Action Evidence Details
     ctx.textAlign = "left";
     ctx.fillStyle = "#5C4D44";
     ctx.font = "bold 20px 'Montserrat', sans-serif";
-    ctx.fillText("📦 GÓI QUÀ BẠN ĐÃ CHỌN:", 160, 915);
+    ctx.fillText("📦 GÓI QUÀ BẠN ĐÃ CHỌN:", 160, 835);
 
     // Products list
-    ctx.font = "24px 'Montserrat', sans-serif";
+    ctx.font = "23px 'Montserrat', sans-serif";
     ctx.fillStyle = "#231B16";
-    let curY = 965;
+    let curY = 880;
     orderItems.slice(0, 3).forEach((it: any) => {
       const name = it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Mầm Mơ";
       const truncated = name.length > 32 ? name.slice(0, 30) + "..." : name;
@@ -400,36 +426,36 @@ function OrderSuccessContent() {
       ctx.textAlign = "right";
       ctx.fillText(`x${it.quantity}`, 720, curY);
       ctx.textAlign = "left";
-      curY += 46;
+      curY += 42;
     });
 
     // Date of Sowing
     ctx.fillStyle = "#5C4D44";
     ctx.font = "bold 20px 'Montserrat', sans-serif";
-    ctx.fillText("📅 NGÀY GIEO HẠT:", 160, 1140);
+    ctx.fillText("📅 NGÀY GIEO HẠT:", 160, 1030);
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 24px 'Montserrat', sans-serif";
-    ctx.fillText(dateStr, 380, 1140);
+    ctx.fillText(dateStr, 380, 1030);
 
     // PHÂN KHU 4: THÚC ĐẨY BÁN HÀNG & CTA LAN TỎA
     // Trust Badge (Bảo chứng niềm tin)
     ctx.fillStyle = "#EBF7EE";
     ctx.beginPath();
-    ctx.roundRect(120, 1250, 840, 85, 42.5);
+    ctx.roundRect(120, 1095, 840, 75, 37.5);
     ctx.fill();
     ctx.strokeStyle = "#A5D6A7";
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 24px 'Montserrat', sans-serif";
+    ctx.font = "bold 23px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ", 540, 1303);
+    ctx.fillText("🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ", 540, 1142);
 
     // Spread the word CTA & QR Code Container
     ctx.fillStyle = "#FFFDF9";
     ctx.beginPath();
-    ctx.roundRect(120, 1375, 840, 240, 28);
+    ctx.roundRect(120, 1190, 840, 200, 24);
     ctx.fill();
     ctx.strokeStyle = "#F0E5D8";
     ctx.lineWidth = 2;
@@ -438,46 +464,32 @@ function OrderSuccessContent() {
     // CTA Text on the left
     ctx.textAlign = "left";
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 28px 'Playfair Display', Georgia, serif";
-    ctx.fillText("Cùng lan tỏa mầm xanh!", 160, 1450);
+    ctx.font = "bold 27px 'Playfair Display', Georgia, serif";
+    ctx.fillText("Cùng lan tỏa mầm xanh!", 160, 1250);
 
     ctx.fillStyle = "#5C4D44";
-    ctx.font = "22px 'Montserrat', sans-serif";
+    ctx.font = "21px 'Montserrat', sans-serif";
     const safeCTAname = nameLen > 18 ? customerName.slice(0, 16) + "..." : customerName;
-    ctx.fillText(`Quét mã để cùng ${safeCTAname}`, 160, 1500);
-    ctx.fillText("gieo thêm những mầm xanh mới nhé! 🌱", 160, 1538);
+    ctx.fillText(`Quét mã để cùng ${safeCTAname}`, 160, 1295);
+    ctx.fillText("gieo thêm những mầm xanh mới nhé! 🌱", 160, 1330);
 
-    // Load and draw QR Code
-    try {
-      const qrImg = new window.Image();
-      qrImg.crossOrigin = "anonymous";
-      qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-253-249";
-
-      await new Promise<void>((resolve) => {
-        qrImg.onload = () => {
-          ctx.drawImage(qrImg, 740, 1395, 200, 200);
-          resolve();
-        };
-        qrImg.onerror = () => {
-          ctx.fillStyle = "#2D6338";
-          ctx.fillRect(740, 1395, 200, 200);
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 18px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("gieomo.store", 840, 1500);
-          resolve();
-        };
-        setTimeout(resolve, 1500);
-      });
-    } catch {
-      // ignore
+    // Draw QR Code
+    if (qrImg) {
+      ctx.drawImage(qrImg, 750, 1210, 160, 160);
+    } else {
+      ctx.fillStyle = "#2D6338";
+      ctx.fillRect(750, 1210, 160, 160);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("gieomo.store", 830, 1295);
     }
 
-    // FOOTER
+    // FOOTER (Brand & URL)
     ctx.fillStyle = "#7E7068";
-    ctx.font = "bold 22px 'Montserrat', sans-serif";
+    ctx.font = "bold 21px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("gieomo.store  •  facebook.com/BanHangGieoMo", 540, 1695);
+    ctx.fillText("gieomo.store  •  facebook.com/BanHangGieoMo", 540, 1480);
 
     return canvas;
   };
@@ -885,12 +897,11 @@ function OrderSuccessContent() {
 
           {/* Card Preview Banner Mockup (Story 9:16 Style) */}
           <div className="relative rounded-3xl overflow-hidden border-2 border-dashed border-[#BFE9C3] bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] p-6 text-center space-y-4 shadow-inner max-w-md mx-auto">
-            {/* Wax Seal with Gieo Mơ Logo */}
-            <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
-              <div className="relative w-5 h-5 rounded-full overflow-hidden bg-white">
-                <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="20px" className="object-cover" />
+            {/* Full Wax Seal with Official Gieo Mơ Logo */}
+            <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-white border-2 border-[#D4AF37] shadow-md flex items-center justify-center p-0.5 overflow-hidden z-10 rotate-6">
+              <div className="relative w-full h-full rounded-full overflow-hidden">
+                <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="48px" className="object-cover" />
               </div>
-              <span className="text-[7px] font-extrabold tracking-tight mt-0.5">GIEO MƠ</span>
             </div>
 
             {/* Header: Brand and Big Typography */}
@@ -1047,12 +1058,11 @@ function OrderSuccessContent() {
               id="story-card-mockup"
               className="relative p-6 rounded-3xl bg-linear-to-b from-[#FFFDF8] via-[#FAF4E8] to-[#F3ECE0] border-4 border-dashed border-[#BFE9C3] shadow-md space-y-4 text-center overflow-hidden"
             >
-              {/* Wax Seal with Gieo Mơ Logo */}
-              <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-[#22542B] border-2 border-[#D4AF37] shadow-md flex flex-col items-center justify-center text-white rotate-12 z-10">
-                <div className="relative w-5 h-5 rounded-full overflow-hidden bg-white">
-                  <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="20px" className="object-cover" />
+              {/* Full Wax Seal with Official Gieo Mơ Logo */}
+              <div className="absolute top-4 right-4 w-12 h-12 rounded-full bg-white border-2 border-[#D4AF37] shadow-md flex items-center justify-center p-0.5 overflow-hidden z-10 rotate-6">
+                <div className="relative w-full h-full rounded-full overflow-hidden">
+                  <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="48px" className="object-cover" />
                 </div>
-                <span className="text-[7px] font-extrabold tracking-tight mt-0.5">GIEO MƠ</span>
               </div>
 
               {/* Header */}
