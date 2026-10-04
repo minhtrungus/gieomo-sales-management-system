@@ -51,7 +51,6 @@ export function Navbar() {
                 fill
                 sizes="44px"
                 className="object-cover"
-                priority
               />
             </div>
             <div className="flex flex-col">

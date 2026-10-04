@@ -11,7 +11,7 @@ import { ProductReviews } from "@/components/products/ProductReviews";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -287,46 +287,118 @@ export function ProductDetailClient({
         </nav>
 
         {/* Product Detail Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-xs mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft mb-12">
           {/* Gallery - Left 6 Cols */}
           <div className="lg:col-span-6 space-y-4">
-            <div className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-cream border border-emerald-100 overflow-hidden flex items-center justify-center">
-              {displayImages[selectedImageIndex] || customActiveImage ? (
-                <Image
-                  src={customActiveImage || displayImages[selectedImageIndex] || displayImages[0]}
-                  alt={product.name}
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  className="object-cover transition-all duration-300"
-                  priority
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-emerald-800/60">
-                  <span className="text-6xl">🧵</span>
-                  <span className="text-sm font-medium">Mầm Mơ Handmade</span>
+            <div className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none">
+              {/* Render all display images with smooth, gentle crossfade transition */}
+              {displayImages.map((img, idx) => {
+                const isCurrent = !customActiveImage && selectedImageIndex === idx;
+                return (
+                  <div
+                    key={img + idx}
+                    className={`absolute inset-0 transition-all duration-700 ease-in-out ${
+                      isCurrent
+                        ? "opacity-100 scale-100 z-10"
+                        : "opacity-0 scale-[1.03] pointer-events-none z-0"
+                    }`}
+                  >
+                    <Image
+                      src={img}
+                      alt={`${product.name} - ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      className="object-cover"
+                      priority={idx === 0}
+                    />
+                  </div>
+                );
+              })}
+
+              {/* Custom Variant Active Image (if selected directly) */}
+              {customActiveImage && (
+                <div className="absolute inset-0 z-20 transition-all duration-700 ease-in-out opacity-100 scale-100">
+                  <Image
+                    src={customActiveImage}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    className="object-cover"
+                  />
                 </div>
+              )}
+
+              {/* Navigation Arrows if more than 1 image */}
+              {displayImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCustomActiveImage(null);
+                      setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : displayImages.length - 1));
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-white/90 hover:bg-white text-[#342A24] shadow-soft backdrop-blur-xs opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 active:scale-95 cursor-pointer"
+                    aria-label="Ảnh trước"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCustomActiveImage(null);
+                      setSelectedImageIndex((prev) => (prev < displayImages.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-white/90 hover:bg-white text-[#342A24] shadow-soft backdrop-blur-xs opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 active:scale-95 cursor-pointer"
+                    aria-label="Ảnh tiếp theo"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Slide dots indicator */}
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-xs">
+                    {displayImages.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setSelectedImageIndex(i);
+                          setCustomActiveImage(null);
+                        }}
+                        className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
+                          selectedImageIndex === i && !customActiveImage ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/80"
+                        }`}
+                        aria-label={`Chuyển đến ảnh ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
             {/* Thumbnails */}
             {displayImages.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {displayImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setSelectedImageIndex(idx);
-                      setCustomActiveImage(null);
-                    }}
-                    className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
-                      selectedImageIndex === idx && !customActiveImage
-                        ? "border-emerald-700 ring-2 ring-emerald-700/20 shadow-xs"
-                        : "border-gray-200 opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    <Image src={img} alt="" fill sizes="80px" className="object-cover" />
-                  </button>
-                ))}
+              <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
+                {displayImages.map((img, idx) => {
+                  const isActive = selectedImageIndex === idx && !customActiveImage;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setSelectedImageIndex(idx);
+                        setCustomActiveImage(null);
+                      }}
+                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition-all duration-300 cursor-pointer ${
+                        isActive
+                          ? "border-[#2D6338] ring-2 ring-[#2D6338]/20 shadow-soft scale-105"
+                          : "border-[#F0E5D8] opacity-60 hover:opacity-100 hover:border-[#FFB98A]"
+                      }`}
+                    >
+                      <Image src={img} alt="" fill sizes="80px" className="object-cover transition-transform duration-500 hover:scale-105" />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -495,7 +567,7 @@ export function ProductDetailClient({
 
                 <div className="rounded-2xl border border-gray-200/90 overflow-hidden bg-white shadow-2xs">
                   <div className="divide-y divide-gray-100 text-xs sm:text-sm">
-                    {specRows.map((row, idx) => (
+                    {specRows.map((row: any, idx: number) => (
                       <div
                         key={row.label}
                         className={`flex items-start transition-colors ${
