@@ -119,17 +119,125 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
  * Fetch a single product by slug from Supabase or fallback to mock data
  */
 export async function getProductBySlugServer(slug: string): Promise<ExtendedProduct | null> {
+  if (!slug) return null;
+  const decodedSlug = decodeURIComponent(slug);
+
   try {
     const products = await getProductsServer(true);
-    const found = products.find((p) => p.slug === slug);
+    const found = products.find(
+      (p) =>
+        p.slug === slug ||
+        p.slug === decodedSlug ||
+        p.product_id === slug ||
+        p.product_id === decodedSlug
+    );
     if (found) return found;
 
+    // Direct Supabase query as fallback if getProductsServer didn't catch it
+    try {
+      const supabase = createAdminClient();
+      const { data: p } = await supabase
+        .from("products")
+        .select(`
+          product_id,
+          category_id,
+          name,
+          slug,
+          short_description,
+          description,
+          price,
+          compare_at_price,
+          cost_price,
+          status,
+          featured,
+          sort_order,
+          weight_gram,
+          thumbnail,
+          created_at,
+          updated_at,
+          category:product_categories(category_id, name, slug, description, image_url, status, sort_order, created_at),
+          variants:product_variants(variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at),
+          media:product_media(media_id, url, sort_order, alt_text)
+        `)
+        .or(`slug.eq.${slug},slug.eq.${decodedSlug},product_id.eq.${slug},product_id.eq.${decodedSlug}`)
+        .maybeSingle();
+
+      if (p) {
+        const mediaImages = (p.media || [])
+          .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+          .map((m: any) => m.url);
+        const fallbackImage = (p.slug && DEFAULT_PRODUCT_IMAGES[p.slug]) || "/images/products/pounch_1.png";
+        const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
+
+        const variants: ProductVariant[] = (p.variants || []).map((v: any) => {
+          const stock = v.stock ?? 0;
+          const wh1 = Math.ceil(stock * 0.7);
+          const wh2 = stock - wh1;
+          return {
+            ...v,
+            stock,
+            stock_warehouse_1: wh1,
+            stock_warehouse_2: wh2,
+            warehouse_stocks: {
+              "wh-ufm": wh1,
+              "wh-lang": wh2,
+              "wh-1": wh1,
+              "wh-2": wh2,
+            },
+          };
+        });
+
+        return {
+          product_id: p.product_id,
+          category_id: p.category_id,
+          name: p.name,
+          slug: p.slug,
+          short_description: p.short_description,
+          description: p.description,
+          price: Number(p.price) || 0,
+          compare_at_price: p.compare_at_price ? Number(p.compare_at_price) : null,
+          cost_price: p.cost_price ? Number(p.cost_price) : null,
+          status: p.status || "draft",
+          featured: Boolean(p.featured),
+          sort_order: p.sort_order || 1,
+          weight_gram: p.weight_gram || 100,
+          thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
+          category: (Array.isArray(p.category) ? p.category[0] : p.category) || undefined,
+          variants,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+        };
+      }
+    } catch {
+      // Supabase not available
+    }
+
     const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
-    return MOCK_PRODUCTS.find((p) => p.slug === slug) ?? null;
+    return (
+      MOCK_PRODUCTS.find(
+        (p) =>
+          p.slug === slug ||
+          p.slug === decodedSlug ||
+          p.product_id === slug ||
+          p.product_id === decodedSlug
+      ) ?? null
+    );
   } catch (err) {
     console.warn("[getProductBySlugServer] Error:", err);
-    const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
-    return MOCK_PRODUCTS.find((p) => p.slug === slug) ?? null;
+    try {
+      const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
+      return (
+        MOCK_PRODUCTS.find(
+          (p) =>
+            p.slug === slug ||
+            p.slug === decodedSlug ||
+            p.product_id === slug ||
+            p.product_id === decodedSlug
+        ) ?? null
+      );
+    } catch {
+      return null;
+    }
   }
 }
 

@@ -111,17 +111,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
   const product = await getProductBySlugServer(slug);
 
-  if (!product) {
-    notFound();
-  }
-
   const allProducts = await getProductsServer(false);
   const relatedProducts = (allProducts.length > 0 ? allProducts : MOCK_PRODUCTS)
-    .filter((p) => p.status === "active" && p.product_id !== product.product_id)
+    .filter((p) => p.status === "active" && (!product || p.product_id !== product.product_id))
     .slice(0, 3);
 
   return (
     <ProductDetailClient
+      slug={slug}
       initialProduct={product}
       initialRelatedProducts={relatedProducts}
     />

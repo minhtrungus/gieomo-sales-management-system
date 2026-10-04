@@ -18,52 +18,121 @@ import { useCartStore } from "@/store/cart";
 import { Toast } from "@/components/ui/Toast";
 
 interface ProductDetailClientProps {
-  initialProduct: ExtendedProduct;
-  initialRelatedProducts: ExtendedProduct[];
+  slug: string;
+  initialProduct?: ExtendedProduct | null;
+  initialRelatedProducts?: ExtendedProduct[];
 }
 
 export function ProductDetailClient({
+  slug,
   initialProduct,
-  initialRelatedProducts,
+  initialRelatedProducts = [],
 }: ProductDetailClientProps) {
   const router = useRouter();
 
-  const [product, setProduct] = useState<ExtendedProduct>(() => {
+  const [product, setProduct] = useState<ExtendedProduct | null>(() => {
+    if (initialProduct) return initialProduct;
     if (typeof window !== "undefined") {
       const list = getStoredProducts();
-      const found = list.find((p) => p.slug === initialProduct.slug || p.product_id === initialProduct.product_id);
+      const decodedSlug = decodeURIComponent(slug);
+      const found = list.find(
+        (p) =>
+          p.slug === slug ||
+          p.slug === decodedSlug ||
+          p.product_id === slug ||
+          p.product_id === decodedSlug
+      );
       if (found) return found;
     }
-    return initialProduct;
+    return null;
   });
 
-  const [selectedVariant, setSelectedVariant] = useState(product.variants?.[0] ?? null);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialProduct && !product);
+  const [selectedVariant, setSelectedVariant] = useState<any>(product?.variants?.[0] ?? null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
 
   useEffect(() => {
-    const updateProduct = () => {
+    let isMounted = true;
+
+    const resolveProduct = async () => {
+      const decodedSlug = decodeURIComponent(slug);
       const list = getStoredProducts();
-      const found = list.find((p) => p.slug === initialProduct.slug || p.product_id === initialProduct.product_id);
+      let found = list.find(
+        (p) =>
+          p.slug === slug ||
+          p.slug === decodedSlug ||
+          p.product_id === slug ||
+          p.product_id === decodedSlug
+      );
+
+      // If not in localStorage, fetch from API
+      if (!found) {
+        try {
+          const res = await fetch("/api/products?includeDrafts=true");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.products && Array.isArray(data.products)) {
+              found = data.products.find(
+                (p: ExtendedProduct) =>
+                  p.slug === slug ||
+                  p.slug === decodedSlug ||
+                  p.product_id === slug ||
+                  p.product_id === decodedSlug
+              );
+            }
+          }
+        } catch (err) {
+          console.warn("[ProductDetailClient] Error fetching API products:", err);
+        }
+      }
+
+      if (isMounted) {
+        if (found) {
+          setProduct(found);
+          setSelectedVariant((prev: any) => {
+            if (!prev) return found?.variants?.[0] ?? null;
+            return found?.variants?.find((v: any) => v.variant_id === prev.variant_id) ?? found?.variants?.[0] ?? null;
+          });
+        }
+        setIsLoading(false);
+      }
+    };
+
+    resolveProduct();
+
+    const handleUpdated = () => {
+      const decodedSlug = decodeURIComponent(slug);
+      const list = getStoredProducts();
+      const found = list.find(
+        (p) =>
+          p.slug === slug ||
+          p.slug === decodedSlug ||
+          p.product_id === slug ||
+          p.product_id === decodedSlug
+      );
       if (found) {
         setProduct(found);
-        setSelectedVariant((prev) => {
+        setSelectedVariant((prev: any) => {
           if (!prev) return found.variants?.[0] ?? null;
-          return found.variants?.find((v) => v.variant_id === prev.variant_id) ?? found.variants?.[0] ?? null;
+          return found.variants?.find((v: any) => v.variant_id === prev.variant_id) ?? found.variants?.[0] ?? null;
         });
       }
     };
 
-    updateProduct();
-    window.addEventListener("gieomo_products_updated", updateProduct);
-    return () => window.removeEventListener("gieomo_products_updated", updateProduct);
-  }, [initialProduct.slug, initialProduct.product_id]);
+    window.addEventListener("gieomo_products_updated", handleUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("gieomo_products_updated", handleUpdated);
+    };
+  }, [slug, initialProduct]);
 
   const [quantity, setQuantity] = useState(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Gallery images combined
   const displayImages = useMemo(() => {
+    if (!product) return ["/images/products/pounch_1.png"];
     const base = product.images && product.images.length > 0
       ? [...product.images]
       : [product.thumbnail || "/images/products/pounch_1.png"];
@@ -91,17 +160,27 @@ export function ProductDetailClient({
     }
   };
 
-  const parsedInfo = parseProductDescription(product.description, product.specs, product.impact_story ?? undefined);
+  const parsedInfo = useMemo(() => {
+    return parseProductDescription(product?.description || "", product?.specs, product?.impact_story ?? undefined);
+  }, [product]);
+
   const addItem = useCartStore((state) => state.addItem);
 
-  const currentStock = selectedVariant
-    ? (Number(selectedVariant.stock) || 0)
-    : (product.variants && product.variants.length > 0
-        ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-        : 0);
+  const currentStock = useMemo(() => {
+    if (!product) return 0;
+    return selectedVariant
+      ? (Number(selectedVariant.stock) || 0)
+      : (product.variants && product.variants.length > 0
+          ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+          : 0);
+  }, [product, selectedVariant]);
+
   const isOutOfStock = currentStock <= 0;
 
-  const specRows = buildProductSpecRows(product, parsedInfo, currentStock);
+  const specRows = useMemo(() => {
+    if (!product) return [];
+    return buildProductSpecRows(product, parsedInfo, currentStock);
+  }, [product, parsedInfo, currentStock]);
 
   // Reset quantity when variant changes to prevent stale values exceeding stock
   useEffect(() => {
@@ -109,7 +188,7 @@ export function ProductDetailClient({
   }, [selectedVariant?.variant_id, currentStock]);
 
   const handleAddToCart = () => {
-    if (isOutOfStock) return;
+    if (!product || isOutOfStock) return;
 
     addItem({
       product_id: product.product_id,
@@ -134,8 +213,55 @@ export function ProductDetailClient({
   const relatedProducts = initialRelatedProducts.length > 0
     ? initialRelatedProducts
     : getStoredProducts()
-        .filter((p) => p.status === "active" && p.product_id !== product.product_id)
+        .filter((p) => p.status === "active" && (!product || p.product_id !== product.product_id))
         .slice(0, 3);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
+        <Navbar />
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 flex flex-col items-center justify-center">
+          <div className="w-10 h-10 border-4 border-[#BFE9C3] border-t-[#2D6338] rounded-full animate-spin mb-4" />
+          <p className="text-xs sm:text-sm font-medium text-[#7E7068]">Đang tải thông tin sản phẩm...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#FFF8EE]">
+        <Navbar />
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-xl py-16 text-center flex flex-col items-center justify-center">
+          <div className="w-16 h-16 rounded-3xl bg-[#FFF0E6] flex items-center justify-center text-3xl mb-4 shadow-soft">
+            🌱
+          </div>
+          <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] mb-3 tracking-tight">
+            Không tìm thấy sản phẩm
+          </h1>
+          <p className="text-xs sm:text-sm text-[#7E7068] mb-8 leading-relaxed max-w-md">
+            Sản phẩm bạn đang tìm kiếm có thể đã được cập nhật, tạm dừng gây quỹ hoặc đường dẫn không chính xác.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            <Link
+              href="/products"
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-xs sm:text-sm transition-all shadow-soft text-center cursor-pointer"
+            >
+              Khám phá sản phẩm khác
+            </Link>
+            <Link
+              href="/"
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white border border-[#F0E5D8] hover:bg-gray-50 text-[#7E7068] font-bold text-xs sm:text-sm transition-all text-center cursor-pointer"
+            >
+              Về trang chủ
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-cream/60">

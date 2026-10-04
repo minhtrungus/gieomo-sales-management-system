@@ -1412,8 +1412,16 @@ export function getStoredProducts(): ExtendedProduct[] {
 }
 
 export function getStoredProductBySlug(slug: string): ExtendedProduct | undefined {
+  if (!slug) return undefined;
   const products = getStoredProducts();
-  return products.find((p) => p.slug === slug);
+  const decodedSlug = decodeURIComponent(slug);
+  return products.find(
+    (p) =>
+      p.slug === slug ||
+      p.slug === decodedSlug ||
+      p.product_id === slug ||
+      p.product_id === decodedSlug
+  );
 }
 
 export async function saveNewProduct(
