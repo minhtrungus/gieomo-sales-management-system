@@ -10,7 +10,6 @@ import {
   getStoredProducts,
   updateStoredProduct,
   deleteStoredProduct,
-  clearAllStoredProducts,
   toggleStoredProductStatus,
   toggleStoredProductFeatured,
 } from "@/lib/data/orderStore";
@@ -20,8 +19,6 @@ import { ProductEditModal } from "./ProductEditModal";
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
-  const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState(false);
-  const [isClearingAll, setIsClearingAll] = useState(false);
 
   useEffect(() => {
     setProducts(getStoredProducts());
@@ -105,16 +102,6 @@ export default function AdminProductsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {products.length > 0 && (
-            <button
-              onClick={() => setIsConfirmClearAllOpen(true)}
-              className="px-4 py-2.5 rounded-full bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs flex items-center gap-1.5 transition-all border border-red-200 active:scale-95 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Xóa sạch kho ({products.length})</span>
-            </button>
-          )}
-
           <Link
             href="/admin/products/new"
             className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
@@ -359,45 +346,7 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* MODAL 3: XÁC NHẬN XÓA TOÀN BỘ SẢN PHẨM */}
-      {isConfirmClearAllOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-left animate-in zoom-in-95">
-            <div className="flex items-center gap-3 border-b border-[#F0E5D8] pb-3 text-red-600">
-              <Trash2 className="w-5 h-5" />
-              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                Xác nhận xóa sạch toàn bộ sản phẩm?
-              </h3>
-            </div>
-            <p className="text-xs text-[#5C4D44] leading-relaxed">
-              Thao tác này sẽ xóa toàn bộ <strong>{products.length}</strong> sản phẩm mẫu/test khỏi kho và hệ thống, đưa số lượng về 0 để bạn bắt đầu tạo các mặt hàng gây quỹ thật.
-            </p>
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmClearAllOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                disabled={isClearingAll}
-                onClick={async () => {
-                  setIsClearingAll(true);
-                  await clearAllStoredProducts();
-                  setProducts([]);
-                  setIsClearingAll(false);
-                  setIsConfirmClearAllOpen(false);
-                }}
-                className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              >
-                {isClearingAll ? "Đang xóa..." : "Xác nhận xóa sạch ➔"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
