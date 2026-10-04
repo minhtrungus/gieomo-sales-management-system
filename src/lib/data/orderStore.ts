@@ -29,9 +29,40 @@ let cachedMembers: StoredMember[] | null = null;
 let hasSyncedVouchersWithServer = false;
 let hasSyncedPickupPointsWithServer = false;
 let hasSyncedContactMessagesWithServer = false;
+let hasSyncedOrdersWithServer = false;
+
+export function syncOrdersFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedOrdersWithServer) return;
+  hasSyncedOrdersWithServer = true;
+  safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200")
+    .then((data) => {
+      if (data?.success && Array.isArray(data.orders)) {
+        const current = getStoredOrders();
+        const map = new Map<string, Order>();
+        for (const o of current) {
+          map.set(o.order_id || o.order_code, o);
+        }
+        for (const sOrd of data.orders) {
+          map.set(sOrd.order_id || sOrd.order_code, sOrd);
+        }
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        cachedOrders = merged;
+        localStorage.setItem("gieomo_orders", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_orders_updated"));
+      }
+    })
+    .catch((err) => {
+      console.warn("Could not sync orders from server:", err);
+    });
+}
 
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return [];
+  if (!hasSyncedOrdersWithServer) {
+    syncOrdersFromServer();
+  }
   if (cachedOrders !== null) return cachedOrders;
   try {
     const raw = localStorage.getItem("gieomo_orders");
@@ -1216,15 +1247,20 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (!hasSyncedProductsWithServer) {
     syncProductsFromServer();
   }
-  if (cachedProducts !== null) return cachedProducts;
+  if (cachedProducts !== null && cachedProducts.length > 0) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
     const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+    if (!products || products.length === 0) {
+      cachedProducts = MOCK_PRODUCTS;
+      localStorage.setItem("gieomo_products", JSON.stringify(MOCK_PRODUCTS));
+      return MOCK_PRODUCTS;
+    }
     cachedProducts = products;
     return products;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
-    return [];
+    return MOCK_PRODUCTS;
   }
 }
 
@@ -1233,47 +1269,84 @@ export function getStoredProductBySlug(slug: string): ExtendedProduct | undefine
   return products.find((p) => p.slug === slug);
 }
 
-export function saveNewProduct(product: ExtendedProduct): void {
+export async function saveNewProduct(
+  product: ExtendedProduct
+): Promise<{ success: boolean; product_id?: string; error?: string }> {
   // Ensure variants have warehouse stock values
-  const normalizedVariants = product.variants?.map((v) => ({
+  const normalizedVariants = product.variants?.map((v, i) => ({
     ...v,
+    stock: v.stock || 0,
     stock_warehouse_1: v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7),
-    stock_warehouse_2: v.stock_warehouse_2 ?? (v.stock - (v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7))),
+    stock_warehouse_2:
+      v.stock_warehouse_2 ??
+      ((v.stock || 0) - (v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7))),
   }));
 
-  const productToSave: ExtendedProduct = {
+  let productToSave: ExtendedProduct = {
     ...product,
     variants: normalizedVariants,
   };
 
-  // Sync with mock data array in memory
-  if (!MOCK_PRODUCTS.some((p) => p.product_id === productToSave.product_id || p.slug === productToSave.slug)) {
+  // 1. Sync to Supabase DB FIRST
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productToSave),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        console.error("[saveNewProduct] Server error:", data?.error);
+        return {
+          success: false,
+          error: data?.error || "Lỗi lưu sản phẩm vào cơ sở dữ liệu",
+        };
+      }
+      if (data.product_id) {
+        productToSave = { ...productToSave, product_id: data.product_id };
+      }
+    } catch (netErr: any) {
+      console.warn("[saveNewProduct] Network error syncing to server:", netErr);
+    }
+  }
+
+  // 2. Sync with mock data array in memory
+  if (
+    !MOCK_PRODUCTS.some(
+      (p) =>
+        p.product_id === productToSave.product_id || p.slug === productToSave.slug
+    )
+  ) {
     MOCK_PRODUCTS.unshift(productToSave);
   }
 
-  if (typeof window === "undefined") return;
-  try {
-    const list = getStoredProducts();
-    const updated = [
-      productToSave,
-      ...list.filter((p) => p.product_id !== productToSave.product_id && p.slug !== productToSave.slug),
-    ];
-    cachedProducts = updated;
-    localStorage.setItem("gieomo_products", JSON.stringify(updated));
-    window.dispatchEvent(new Event("gieomo_products_updated"));
-
-    // Sync to Supabase DB in background
-    fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(productToSave),
-    }).catch((err) => console.warn("Could not persist new product to server:", err));
-  } catch (e) {
-    console.error("Error saving new product", e);
+  // 3. Persist to localStorage & dispatch update event
+  if (typeof window !== "undefined") {
+    try {
+      const list = getStoredProducts();
+      const updated = [
+        productToSave,
+        ...list.filter(
+          (p) =>
+            p.product_id !== productToSave.product_id &&
+            p.slug !== productToSave.slug
+        ),
+      ];
+      cachedProducts = updated;
+      localStorage.setItem("gieomo_products", JSON.stringify(updated));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
+    } catch (e) {
+      console.error("Error saving new product to localStorage", e);
+    }
   }
+
+  return { success: true, product_id: productToSave.product_id };
 }
 
-export function updateStoredProduct(product: ExtendedProduct): void {
+export async function updateStoredProduct(
+  product: ExtendedProduct
+): Promise<{ success: boolean; error?: string }> {
   if (!MOCK_PRODUCTS.some((p) => p.product_id === product.product_id)) {
     MOCK_PRODUCTS.unshift(product);
   } else {
@@ -1281,23 +1354,34 @@ export function updateStoredProduct(product: ExtendedProduct): void {
     if (idx !== -1) MOCK_PRODUCTS[idx] = product;
   }
 
-  if (typeof window === "undefined") return;
-  try {
-    const list = getStoredProducts();
-    const updated = list.map((p) => (p.product_id === product.product_id ? product : p));
-    cachedProducts = updated;
-    localStorage.setItem("gieomo_products", JSON.stringify(updated));
-    window.dispatchEvent(new Event("gieomo_products_updated"));
+  if (typeof window !== "undefined") {
+    try {
+      const list = getStoredProducts();
+      const updated = list.map((p) =>
+        p.product_id === product.product_id ? product : p
+      );
+      cachedProducts = updated;
+      localStorage.setItem("gieomo_products", JSON.stringify(updated));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
 
-    // Sync to Supabase DB in background
-    fetch("/api/products", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: product.product_id, product }),
-    }).catch((err) => console.warn("Could not update product on server:", err));
-  } catch (e) {
-    console.error("Error updating product", e);
+      // Sync to Supabase DB
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: product.product_id, product }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        console.warn("[updateStoredProduct] Server warning:", data?.error);
+        return { success: false, error: data?.error };
+      }
+    } catch (e: any) {
+      console.error("Error updating product", e);
+      return { success: false, error: e?.message };
+    }
   }
+
+  return { success: true };
 }
 
 export function toggleStoredProductStatus(productId: string, newStatus: "active" | "draft"): void {
@@ -1894,18 +1978,68 @@ export function deleteStoredCategory(categoryId: string): void {
 // === COMBOS STORE ===
 
 let cachedCombos: ExtendedCombo[] | null = null;
+let hasSyncedCombosWithServer = false;
+
+export function syncCombosFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedCombosWithServer) return;
+  hasSyncedCombosWithServer = true;
+  safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos")
+    .then((data) => {
+      if (data?.success && Array.isArray(data.combos) && data.combos.length > 0) {
+        const current = getStoredCombos();
+        const map = new Map<string, ExtendedCombo>();
+        for (const c of current) {
+          map.set(c.slug || c.combo_id, c);
+        }
+        for (const sC of data.combos) {
+          const mapped: ExtendedCombo = {
+            combo_id: sC.combo_id,
+            name: sC.name,
+            slug: sC.slug,
+            price: Number(sC.price) || 0,
+            description: sC.description || "",
+            thumbnail: sC.image_url || "/images/products/set_combo_1.jpg",
+            status: sC.status || "active",
+            featured: Boolean(sC.featured),
+            sort_order: Number(sC.sort_order) || 1,
+            created_at: sC.created_at || new Date().toISOString(),
+            items: (sC.combo_items || []).map((ci: any) => ({
+              product_id: ci.product_id,
+              quantity: ci.quantity || 1,
+              name: ci.product?.name || "Sản phẩm",
+              slug: ci.product?.slug || "",
+            })),
+          };
+          map.set(sC.slug || sC.combo_id, mapped);
+        }
+        const merged = Array.from(map.values());
+        cachedCombos = merged;
+        localStorage.setItem("gieomo_combos", JSON.stringify(merged));
+        window.dispatchEvent(new Event("gieomo_combos_updated"));
+      }
+    })
+    .catch(() => {});
+}
 
 export function getStoredCombos(): ExtendedCombo[] {
   if (typeof window === "undefined") return MOCK_COMBOS;
-  if (cachedCombos !== null) return cachedCombos;
+  if (!hasSyncedCombosWithServer) {
+    syncCombosFromServer();
+  }
+  if (cachedCombos !== null && cachedCombos.length > 0) return cachedCombos;
   try {
     const raw = localStorage.getItem("gieomo_combos");
     const combos: ExtendedCombo[] = raw ? JSON.parse(raw) : [];
+    if (!combos || combos.length === 0) {
+      cachedCombos = MOCK_COMBOS;
+      localStorage.setItem("gieomo_combos", JSON.stringify(MOCK_COMBOS));
+      return MOCK_COMBOS;
+    }
     cachedCombos = combos;
     return combos;
   } catch (e) {
     console.error("Error reading gieomo_combos", e);
-    return [];
+    return MOCK_COMBOS;
   }
 }
 
@@ -1913,10 +2047,20 @@ export function saveNewCombo(combo: ExtendedCombo): void {
   if (typeof window === "undefined") return;
   try {
     const combos = getStoredCombos();
-    const updated = [combo, ...combos.filter((c) => c.combo_id !== combo.combo_id && c.slug !== combo.slug)];
+    const updated = [
+      combo,
+      ...combos.filter((c) => c.combo_id !== combo.combo_id && c.slug !== combo.slug),
+    ];
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/combos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(combo),
+    }).catch((err) => console.warn("Could not persist combo to server:", err));
   } catch (e) {
     console.error("Error saving new combo", e);
   }
@@ -1930,6 +2074,13 @@ export function updateStoredCombo(combo: ExtendedCombo): void {
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/combos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(combo),
+    }).catch((err) => console.warn("Could not update combo on server:", err));
   } catch (e) {
     console.error("Error updating combo", e);
   }
@@ -1943,6 +2094,10 @@ export function deleteStoredCombo(comboId: string): void {
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
+
+    fetch(`/api/combos?id=${encodeURIComponent(comboId)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete combo on server:", err));
   } catch (e) {
     console.error("Error deleting combo", e);
   }
@@ -2264,16 +2419,8 @@ export function clearAllMockData(includeCatalog = true): void {
   }
 }
 
-// Automatic one-time client side purge to ensure old mock products, orders & inventory logs are wiped
-if (typeof window !== "undefined") {
-  try {
-    if (localStorage.getItem("gieomo_data_wiped_v5") !== "true") {
-      clearAllMockData(true);
-    }
-  } catch {
-    // ignore
-  }
-}
+// Client-side purge removed to prevent wiping user products and catalog
+
 
 export function restoreSeedMockData(): void {
   if (typeof window === "undefined") return;

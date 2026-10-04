@@ -75,19 +75,14 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       const res = await uploadAsset(file, "product-media");
       if (res.success && res.url) {
         onSuccess(res.url);
-        return;
+      } else {
+        alert(`Lỗi tải ảnh: ${res.error || "Không thể tải lên"}`);
       }
-    } catch (err) {
-      console.warn("Upload service error, fallback to data url:", err);
-    }
-    // Fallback to local Data URL
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) onSuccess(e.target.result as string);
+    } catch (err: any) {
+      alert(`Lỗi kết nối khi tải ảnh: ${err?.message || "Lỗi không xác định"}`);
+    } finally {
       setLoading?.(false);
-    };
-    reader.onerror = () => setLoading?.(false);
-    reader.readAsDataURL(file);
+    }
   };
 
   // Upload multiple images to gallery
@@ -99,26 +94,18 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       const newUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        let uploadedUrl = "";
-        try {
-          const res = await uploadAsset(file, "product-media");
-          if (res.success && res.url) {
-            uploadedUrl = res.url;
-          }
-        } catch (err) {}
-        if (!uploadedUrl) {
-          uploadedUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (ev) => resolve((ev.target?.result as string) || "");
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(file);
-          });
+        const res = await uploadAsset(file, "product-media");
+        if (res.success && res.url) {
+          newUrls.push(res.url);
+        } else {
+          alert(`Lỗi tải ảnh "${file.name}": ${res.error || "Không thể tải lên"}`);
         }
-        if (uploadedUrl) newUrls.push(uploadedUrl);
       }
       if (newUrls.length > 0) {
         setImages((prev) => Array.from(new Set([...prev, ...newUrls])));
       }
+    } catch (err: any) {
+      alert(`Lỗi tải ảnh: ${err?.message || "Lỗi kết nối"}`);
     } finally {
       setUploadingGallery(false);
       e.target.value = "";

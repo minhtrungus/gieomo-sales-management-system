@@ -72,8 +72,8 @@ export default function AdminProductsPage() {
   };
 
   // Save edited product
-  const handleSaveEdit = (updated: ExtendedProduct) => {
-    updateStoredProduct(updated);
+  const handleSaveEdit = async (updated: ExtendedProduct) => {
+    await updateStoredProduct(updated);
     setProducts(getStoredProducts());
     setEditingProduct(null);
   };

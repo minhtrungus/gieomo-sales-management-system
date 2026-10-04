@@ -270,26 +270,58 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
 
     // 3. Upsert variants if present
     if (product.variants && product.variants.length > 0) {
-      for (const v of product.variants) {
+      for (let i = 0; i < product.variants.length; i++) {
+        const v = product.variants[i];
         const isVarUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.variant_id);
+
+        let sku = v.sku?.trim() || null;
+        if (!sku) {
+          const cleanPart = (product.slug || "prod").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+          sku = `GM-${cleanPart || "PROD"}-0${i + 1}`;
+        }
+
+        // Avoid unique SKU constraint collisions across different products
+        if (sku) {
+          const { data: exSkuVar } = await supabase
+            .from("product_variants")
+            .select("variant_id, product_id")
+            .eq("sku", sku)
+            .maybeSingle();
+
+          if (exSkuVar && exSkuVar.product_id !== savedProductId) {
+            sku = `${sku}-${Date.now().toString().slice(-4)}`;
+          }
+        }
+
         const varPayload: any = {
           product_id: savedProductId,
-          name: v.name,
-          sku: v.sku || null,
+          name: v.name || "Mặc định",
+          sku,
           price: v.price || null,
           compare_at_price: v.compare_at_price || null,
           cost_price: v.cost_price || null,
           stock: v.stock || 0,
           weight_gram: v.weight_gram || 100,
           status: v.status || "active",
-          sort_order: v.sort_order || 1,
+          sort_order: v.sort_order || i + 1,
           updated_at: new Date().toISOString(),
         };
 
         if (isVarUuid) {
-          await supabase.from("product_variants").upsert({ ...varPayload, variant_id: v.variant_id });
-        } else if (v.sku) {
-          const { data: exVar } = await supabase.from("product_variants").select("variant_id").eq("product_id", savedProductId).eq("sku", v.sku).maybeSingle();
+          const { error: upErr } = await supabase
+            .from("product_variants")
+            .upsert({ ...varPayload, variant_id: v.variant_id });
+          if (upErr) {
+            console.warn("[upsertProductServer] Upsert variant failed, inserting new:", upErr.message);
+            await supabase.from("product_variants").insert(varPayload);
+          }
+        } else if (sku) {
+          const { data: exVar } = await supabase
+            .from("product_variants")
+            .select("variant_id")
+            .eq("product_id", savedProductId)
+            .eq("sku", sku)
+            .maybeSingle();
           if (exVar) {
             await supabase.from("product_variants").update(varPayload).eq("variant_id", exVar.variant_id);
           } else {
@@ -301,17 +333,21 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
       }
     }
 
-    // 4. Save media images if present
+    // 4. Save media images if present (filter out bulky base64 data URIs)
     if (product.images && product.images.length > 0) {
-      // Clear existing media & re-insert
       await supabase.from("product_media").delete().eq("product_id", savedProductId);
-      const mediaRows = product.images.map((url, idx) => ({
-        product_id: savedProductId,
-        url,
-        sort_order: idx + 1,
-        media_type: "image",
-      }));
-      await supabase.from("product_media").insert(mediaRows);
+      const validImages = product.images.filter(
+        (url) => url && typeof url === "string" && !url.startsWith("data:")
+      );
+      if (validImages.length > 0) {
+        const mediaRows = validImages.map((url, idx) => ({
+          product_id: savedProductId,
+          url,
+          sort_order: idx + 1,
+          media_type: "image",
+        }));
+        await supabase.from("product_media").insert(mediaRows);
+      }
     }
 
     return { success: true, product_id: savedProductId };

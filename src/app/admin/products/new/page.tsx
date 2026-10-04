@@ -48,13 +48,18 @@ export default function AdminNewProductPage() {
   // Unified Media Images: images[0] is the main cover (thumbnail), rest are gallery images
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
   const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
+  // Form submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   // Variants list: Stock is always 0 initially. Stock is determined by "Nhập kho" (Inflow).
   const [variants, setVariants] = useState([
-    { name: "Mặc định", sku: "GM-SKU-01", stock: 0, imageUrl: "" },
+    { name: "Mặc định", sku: "", stock: 0, imageUrl: "" },
   ]);
 
   const handleNameChange = (val: string) => {
@@ -75,8 +80,8 @@ export default function AdminNewProductPage() {
       ...prev,
       {
         name: `Phân loại ${prev.length + 1}`,
-        sku: `GM-SKU-0${prev.length + 1}`,
-        stock: 0, // Quy tắc: Mặc định chưa có tồn kho, cập nhật qua phiếu Nhập kho
+        sku: "",
+        stock: 0,
         imageUrl: "",
       },
     ]);
@@ -92,37 +97,24 @@ export default function AdminNewProductPage() {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
+    setUploadError(null);
     try {
       const newUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        let uploadedUrl = "";
-        try {
-          const res = await uploadAsset(file, "product-media");
-          if (res.success && res.url) {
-            uploadedUrl = res.url;
-          }
-        } catch {
-          // fallback to base64 DataURL if storage not configured
-        }
-
-        if (!uploadedUrl) {
-          uploadedUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (ev) => resolve((ev.target?.result as string) || "");
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(file);
-          });
-        }
-
-        if (uploadedUrl) {
-          newUrls.push(uploadedUrl);
+        const res = await uploadAsset(file, "product-media");
+        if (res.success && res.url) {
+          newUrls.push(res.url);
+        } else {
+          setUploadError(`Lỗi tải ảnh "${file.name}": ${res.error || "Không thể tải lên"}`);
         }
       }
 
       if (newUrls.length > 0) {
         setImages((prev) => Array.from(new Set([...prev, ...newUrls])));
       }
+    } catch (err: any) {
+      setUploadError(err?.message || "Lỗi tải ảnh");
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -152,8 +144,15 @@ export default function AdminNewProductPage() {
     setShowUrlInput(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      setSubmitError("Vui lòng nhập tên sản phẩm!");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     const fullDescription = [
       descOverview.trim(),
@@ -173,9 +172,9 @@ export default function AdminNewProductPage() {
       product_id: prodId,
       category_id: null,
       category: null,
-      name,
+      name: name.trim(),
       slug: cleanSlug,
-      short_description: shortDescription,
+      short_description: shortDescription.trim(),
       description: fullDescription,
       price: Number(price) || 0,
       compare_at_price: compareAtPrice ? Number(compareAtPrice) : null,
@@ -185,14 +184,16 @@ export default function AdminNewProductPage() {
       sort_order: 1,
       thumbnail: mainThumbnail,
       images: allImages,
-      impact_story: descImpact || undefined,
+      impact_story: descImpact.trim() || undefined,
       variants: variants.map((v, i) => {
-        // Nghiệp vụ: Hàng mới tạo mặc định tồn kho = 0. Số lượng do Nhập kho quyết định.
+        const cleanSku =
+          v.sku?.trim() ||
+          `GM-${(cleanSlug || "PROD").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)}-0${i + 1}`;
         return {
           variant_id: `var-${Date.now()}-${i}`,
           product_id: prodId,
-          name: v.name,
-          sku: v.sku || `GM-${cleanSlug.toUpperCase().slice(0, 6)}-0${i + 1}`,
+          name: v.name?.trim() || "Mặc định",
+          sku: cleanSku,
           stock: 0,
           stock_warehouse_1: 0,
           stock_warehouse_2: 0,
@@ -210,8 +211,18 @@ export default function AdminNewProductPage() {
       updated_at: new Date().toISOString(),
     };
 
-    saveNewProduct(newProd as any);
-    router.push("/admin/products");
+    try {
+      const result = await saveNewProduct(newProd as any);
+      if (!result.success) {
+        setSubmitError(result.error || "Không thể lưu sản phẩm vào hệ thống!");
+        setIsSubmitting(false);
+        return;
+      }
+      router.push("/admin/products");
+    } catch (err: any) {
+      setSubmitError(err?.message || "Đã xảy ra sự cố khi lưu sản phẩm.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -230,6 +241,20 @@ export default function AdminNewProductPage() {
           </p>
         </div>
       </div>
+
+      {/* Error alert banner */}
+      {submitError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center justify-between">
+          <span>⚠️ {submitError}</span>
+          <button
+            type="button"
+            onClick={() => setSubmitError(null)}
+            className="text-red-500 hover:text-red-800 text-sm font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Form Box */}
@@ -492,29 +517,15 @@ export default function AdminNewProductPage() {
                                 const res = await uploadAsset(file, "product-media");
                                 if (res.success && res.url) {
                                   setVariants((prev) =>
-                                    prev.map((item, i) => (i === idx ? { ...item, imageUrl: res.url || "" } : item))
+                                    prev.map((item, i) =>
+                                      i === idx ? { ...item, imageUrl: res.url || "" } : item
+                                    )
                                   );
                                 } else {
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    if (ev.target?.result) {
-                                      setVariants((prev) =>
-                                        prev.map((item, i) => (i === idx ? { ...item, imageUrl: ev.target!.result as string } : item))
-                                      );
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
+                                  alert(`Lỗi tải ảnh phân loại: ${res.error || "Không thể tải lên"}`);
                                 }
-                              } catch {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  if (ev.target?.result) {
-                                    setVariants((prev) =>
-                                      prev.map((item, i) => (i === idx ? { ...item, imageUrl: ev.target!.result as string } : item))
-                                    );
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                              } catch (err: any) {
+                                alert(`Lỗi tải ảnh phân loại: ${err?.message || "Lỗi kết nối"}`);
                               } finally {
                                 setUploadingVariantIdx(null);
                                 e.target.value = "";
@@ -741,8 +752,22 @@ export default function AdminNewProductPage() {
               </div>
             </div>
 
-            <Button type="submit" variant="primary" fullWidth size="lg">
-              Lưu sản phẩm mới ➔
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              size="lg"
+              disabled={isSubmitting || isUploading}
+              className="gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span>Đang lưu sản phẩm vào hệ thống...</span>
+                </>
+              ) : (
+                <span>Lưu sản phẩm mới ➔</span>
+              )}
             </Button>
           </div>
         </div>

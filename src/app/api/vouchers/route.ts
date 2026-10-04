@@ -34,10 +34,13 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.voucher_id);
 
+    const isFreeship = body.discount_type === "freeship";
+    const discountVal = Number(body.discount_value) || (isFreeship ? 15000 : 10000);
+
     const payload: any = {
       code: body.code.trim().toUpperCase(),
-      discount_type: body.discount_type || "fixed_amount",
-      discount_value: Number(body.discount_value) || 0,
+      discount_type: isFreeship ? "fixed_amount" : (body.discount_type || "fixed_amount"),
+      discount_value: Math.max(1, discountVal),
       min_order_value: Number(body.min_order_value) || 0,
       usage_limit: body.usage_limit ? Number(body.usage_limit) : null,
       times_used: body.times_used || 0,
