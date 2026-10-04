@@ -38,6 +38,7 @@ interface NotificationContextType {
   pushNotification: (item: Omit<NotificationItem, "id" | "created_at" | "read" | "starred">) => void;
   toasts: ToastItem[];
   dismissToast: (id: string) => void;
+  refreshNotifications: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -50,10 +51,9 @@ function generateInitialNotifications(): NotificationItem[] {
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load notifications from storage or initialize empty
+  // Load initial notifications from local storage for fast render
   useEffect(() => {
     const saved = localStorage.getItem("gieomo_admin_notifications");
     if (saved) {
@@ -66,10 +66,56 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setIsLoaded(true);
   }, []);
 
-  // Save to localStorage (limit to 50 most recent to prevent storage bloat)
+  // Fetch live notifications from Supabase API
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/notifications");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.notifications)) {
+          setNotifications(data.notifications);
+          try {
+            localStorage.setItem(
+              "gieomo_admin_notifications",
+              JSON.stringify(data.notifications.slice(0, 50))
+            );
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch notifications from server:", err);
+    }
+  }, []);
+
+  // Sync with server on mount, when orders/messages update, and window focus
+  useEffect(() => {
+    refreshNotifications();
+
+    const handleEvent = () => {
+      refreshNotifications();
+    };
+
+    window.addEventListener("gieomo_orders_updated", handleEvent);
+    window.addEventListener("gieomo_messages_updated", handleEvent);
+    window.addEventListener("focus", handleEvent);
+
+    // Periodic poll every 45s while admin is active
+    const timer = setInterval(refreshNotifications, 45000);
+
+    return () => {
+      window.removeEventListener("gieomo_orders_updated", handleEvent);
+      window.removeEventListener("gieomo_messages_updated", handleEvent);
+      window.removeEventListener("focus", handleEvent);
+      clearInterval(timer);
+    };
+  }, [refreshNotifications]);
+
+  // Save to localStorage when state updates
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 50)));
+    try {
+      localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 50)));
+    } catch {}
   }, [notifications, isLoaded]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
@@ -90,22 +136,42 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications((prev) =>
       prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n))
     );
+    fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "markAsRead", ids }),
+    }).catch(() => {});
   }, []);
 
   const markAsUnread = useCallback((ids: string[]) => {
     setNotifications((prev) =>
       prev.map((n) => (ids.includes(n.id) ? { ...n, read: false } : n))
     );
+    fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "markAsUnread", ids }),
+    }).catch(() => {});
   }, []);
 
   const toggleStar = useCallback((id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, starred: !n.starred } : n))
     );
+    fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "toggleStar", id }),
+    }).catch(() => {});
   }, []);
 
   const deleteNotifications = useCallback((ids: string[]) => {
     setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", ids }),
+    }).catch(() => {});
   }, []);
 
   const contextValue = useMemo(
@@ -119,6 +185,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       pushNotification,
       toasts,
       dismissToast,
+      refreshNotifications,
     }),
     [
       notifications,
@@ -130,6 +197,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       pushNotification,
       toasts,
       dismissToast,
+      refreshNotifications,
     ]
   );
 

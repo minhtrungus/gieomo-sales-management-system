@@ -46,13 +46,21 @@ export default function NotificationsPage() {
     markAsUnread,
     toggleStar,
     deleteNotifications,
+    refreshNotifications,
   } = useNotifications();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshNotifications();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   // Filter notifications by Tab and Search
   const filteredNotifications = useMemo(() => {
@@ -261,6 +269,17 @@ export default function NotificationsPage() {
             </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="px-4 py-2 rounded-2xl bg-[#FFFDF9] hover:bg-[#FFF8EE] text-[#2D6338] border border-[#F0E5D8] text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-2xs hover:shadow-xs disabled:opacity-50"
+          title="Làm mới dữ liệu từ Database"
+        >
+          <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          <span>{isRefreshing ? "Đang đồng bộ..." : "Đồng bộ từ Database"}</span>
+        </button>
       </div>
 
       {/* Main Mailbox Container */}
