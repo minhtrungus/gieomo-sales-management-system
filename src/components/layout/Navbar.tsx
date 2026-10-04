@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/store/cart";
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 import dynamic from "next/dynamic";
 import { ShoppingBag, Search, Menu, X } from "lucide-react";
 
@@ -18,6 +19,7 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const settings = useSiteSettings();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -38,19 +40,14 @@ export function Navbar() {
 
   return (
     <>
-      {/* Brand Slogan Ribbon */}
-      <div className="w-full py-1.5 px-4 text-center text-[11px] sm:text-xs font-bold bg-[#1B2B20] text-[#BFE9C3] shadow-xs">
-        🌱 Mầm Mơ — Little Pieces, Bigger Dreams • Gom từng mảnh nhỏ, dệt thành giấc mơ
-      </div>
-
       <header className="sticky top-0 z-40 w-full border-b border-[#F0E5D8] bg-[#FFF8EE] shadow-2xs">
         <div className="container mx-auto flex h-18 items-center justify-between px-4 sm:px-6 lg:px-8 max-w-7xl">
           {/* Brand Logo with Real Artwork */}
           <Link href="/" prefetch={true} className="flex items-center gap-3 group">
             <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFB98A] shadow-xs group-hover:scale-105 group-hover:rotate-3 transition-transform bg-white shrink-0">
               <Image
-                src="/images/logo_gieo mơ.jpg"
-                alt="Gieo Mơ Logo"
+                src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
+                alt={settings.siteName || "Gieo Mơ"}
                 fill
                 sizes="44px"
                 className="object-cover"
@@ -60,7 +57,7 @@ export function Navbar() {
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span className="font-heading font-extrabold text-xl text-[#342A24] tracking-tight leading-none group-hover:text-[#2D6338] transition-colors">
-                  Gieo Mơ
+                  {settings.siteName || "Gieo Mơ"}
                 </span>
                 <span className="w-2 h-2 rounded-full bg-[#FFB98A] inline-block" />
               </div>

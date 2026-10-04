@@ -360,22 +360,61 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
 /**
  * Delete product from Supabase
  */
-export async function deleteProductServer(identifier: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteProductServer(identifier: string, slug?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createAdminClient();
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
-
-    let query = supabase.from("products").delete();
-    if (isUuid) {
-      query = query.eq("product_id", identifier);
-    } else {
-      query = query.eq("slug", identifier);
+    if (identifier === "all") {
+      await supabase.from("combo_items").delete().neq("combo_item_id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("product_media").delete().neq("media_id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("product_variants").delete().neq("variant_id", "00000000-0000-0000-0000-000000000000");
+      const { error } = await supabase.from("products").delete().neq("product_id", "00000000-0000-0000-0000-000000000000");
+      if (error) {
+        console.error("[deleteProductServer] Error clearing all products:", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
     }
 
-    const { error } = await query;
-    if (error) {
-      console.error("[deleteProductServer] Error deleting product:", error);
-      return { success: false, error: error.message };
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+
+    // Resolve the actual UUID product_id from database if identifier is slug or custom id
+    let targetProductId: string | null = isUuid ? identifier : null;
+    if (!targetProductId) {
+      const candidates = [slug, identifier].filter(Boolean) as string[];
+      for (const cand of candidates) {
+        const { data: p } = await supabase
+          .from("products")
+          .select("product_id")
+          .or(`slug.eq.${cand},product_id.eq.${cand}`)
+          .maybeSingle();
+        if (p?.product_id) {
+          targetProductId = p.product_id;
+          break;
+        }
+      }
+    }
+
+    if (targetProductId) {
+      // Clear dependent combo_items first to prevent FK constraint error
+      await supabase.from("combo_items").delete().eq("product_id", targetProductId);
+      await supabase.from("product_media").delete().eq("product_id", targetProductId);
+      await supabase.from("product_variants").delete().eq("product_id", targetProductId);
+      const { error } = await supabase.from("products").delete().eq("product_id", targetProductId);
+      if (error) {
+        console.error("[deleteProductServer] Error deleting product by UUID:", error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    }
+
+    // Fallback: try deleting by slug directly if no UUID found
+    if (slug || identifier) {
+      const matchSlug = slug || identifier;
+      const { error } = await supabase.from("products").delete().eq("slug", matchSlug);
+      if (error) {
+        console.error("[deleteProductServer] Error deleting product by slug:", error);
+        return { success: false, error: error.message };
+      }
     }
 
     return { success: true };

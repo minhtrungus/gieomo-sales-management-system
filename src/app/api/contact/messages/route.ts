@@ -35,6 +35,12 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      // Local seed or mock message without Supabase UUID
+      return NextResponse.json({ success: true });
+    }
+
     const supabase = createAdminClient();
     const updateData: any = {
       status,
@@ -59,6 +65,40 @@ export async function PATCH(request: Request) {
     console.error("[PATCH /api/contact/messages] Exception:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi cập nhật tin nhắn" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu tham số id tin nhắn cần xóa" },
+        { status: 400 }
+      );
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      return NextResponse.json({ success: true });
+    }
+
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("contact_messages").delete().eq("id", id);
+    if (error) {
+      console.error("[DELETE /api/contact/messages] DB error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[DELETE /api/contact/messages] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi xóa tin nhắn" },
       { status: 500 }
     );
   }

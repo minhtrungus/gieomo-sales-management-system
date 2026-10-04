@@ -39,8 +39,8 @@ export function Footer() {
             <Link href="/" className="flex items-center gap-3 group">
               <div className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-[#BFE9C3] shadow-xs shrink-0 bg-white">
                 <Image
-                  src="/images/logo_gieo mơ.jpg"
-                  alt="Gieo Mơ"
+                  src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
+                  alt={settings.siteName || "Gieo Mơ"}
                   fill
                   sizes="44px"
                   className="object-cover"
@@ -48,7 +48,7 @@ export function Footer() {
               </div>
               <div className="flex flex-col">
                 <span className="font-heading font-extrabold text-2xl text-white tracking-tight">
-                  Gieo Mơ
+                  {settings.siteName || "Gieo Mơ"}
                 </span>
                 <span className="text-[11px] text-[#BFE9C3] font-bold tracking-wide">
                   Tạp hoá gây quỹ thuộc Mầm Mơ

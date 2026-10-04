@@ -810,11 +810,12 @@ export default function AdminMembersPage() {
       return;
     }
     const nextStatus: "active" | "inactive" = m.status === "active" ? "inactive" : "active";
+    const changedMember = { ...m, status: nextStatus };
     const updated = members.map((item) =>
-      item.memberId === m.memberId ? { ...item, status: nextStatus } : item
+      item.memberId === m.memberId ? changedMember : item
     );
     setMembers(updated);
-    saveStoredMembers(updated);
+    saveStoredMembers(updated, changedMember);
   };
 
   const handleSaveMemberInfo = (updatedMember: MemberItem) => {
@@ -823,9 +824,7 @@ export default function AdminMembersPage() {
     );
 
     setMembers(updated);
-    saveStoredMembers(updated);
-
-    // Sync admin session if currently logged in user is updated
+    saveStoredMembers(updated, updatedMember);
     if (typeof window !== "undefined") {
       try {
         const rawSession = localStorage.getItem("gieomo_admin_session");
@@ -862,17 +861,18 @@ export default function AdminMembersPage() {
 
   const handleSavePassword = (newPass: string) => {
     if (!passwordMember) return;
+    const changedMember = { ...passwordMember, password: newPass };
     const updated = members.map((m) =>
-      m.memberId === passwordMember.memberId ? { ...m, password: newPass } : m
+      m.memberId === passwordMember.memberId ? changedMember : m
     );
     setMembers(updated);
-    saveStoredMembers(updated);
+    saveStoredMembers(updated, changedMember);
   };
 
   const handleCreateMember = (newMember: MemberItem) => {
     const updated = [newMember, ...members];
     setMembers(updated);
-    saveStoredMembers(updated);
+    saveStoredMembers(updated, newMember);
     setIsModalOpen(false);
   };
 

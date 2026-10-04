@@ -70,3 +70,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu mã giảm giá" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu tham số id voucher cần xóa" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    let query = supabase.from("vouchers").delete();
+    if (isUuid) {
+      query = query.eq("voucher_id", id);
+    } else {
+      query = query.eq("code", id.toUpperCase());
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.error("[DELETE /api/vouchers] Error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[DELETE /api/vouchers] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi xóa mã giảm giá" },
+      { status: 500 }
+    );
+  }
+}

@@ -4,18 +4,19 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, DELIVERY_STATUS_LABELS } from "@/lib/constants";
 import {
   getStoredOrders,
   updateStoredOrderStatus,
   updateStoredPaymentStatus,
+  updateStoredDeliveryStatus,
   updateStoredOrderNotes,
   updateStoredOrderWarehouse,
   getStoredMembers,
   updateOrderShipper,
   type StoredMember,
 } from "@/lib/data/orderStore";
-import type { OrderStatus, PaymentStatus, Order } from "@/types/database";
+import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +28,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   const [orderStatus, setOrderStatus] = useState<OrderStatus>(order ? order.order_status : "pending");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order ? order.payment_status : "pending");
+  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>(order?.delivery_status || "not_ready");
   const [internalNote, setInternalNote] = useState(order?.internal_note || "");
   const [warehouseId, setWarehouseId] = useState<string>(
     order?.warehouse_id || (order?.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
@@ -44,6 +46,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       setOrder(found);
       setOrderStatus(found.order_status);
       setPaymentStatus(found.payment_status);
+      setDeliveryStatus(found.delivery_status || "not_ready");
       setInternalNote(found.internal_note || "");
       setAssignedShipperId(found.assigned_shipper_id || "");
       setWarehouseId(
@@ -57,6 +60,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     if (!order) return;
     updateStoredOrderStatus(order.order_id, orderStatus);
     updateStoredPaymentStatus(order.order_id, paymentStatus);
+    updateStoredDeliveryStatus(order.order_id, deliveryStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
     updateStoredOrderWarehouse(order.order_id, warehouseId);
 
@@ -404,6 +408,26 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <option value="paid">Đã thanh toán (Khớp VietQR)</option>
                 <option value="refunded">Đã hoàn tiền</option>
                 <option value="failed">Thất bại</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-700 uppercase">Trạng thái giao hàng (Fulfillment):</label>
+              <select
+                value={deliveryStatus}
+                onChange={(e) => setDeliveryStatus(e.target.value as DeliveryStatus)}
+                className="w-full p-2.5 rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
+              >
+                <option value="not_ready">Chưa sẵn sàng</option>
+                <option value="packed">Đã đóng gói xong</option>
+                <option value="handed_to_carrier">Đã bàn giao shipper/đơn vị vận chuyển</option>
+                <option value="in_transit">Đang vận chuyển</option>
+                <option value="out_for_delivery">Đang giao đến người nhận</option>
+                <option value="delivered">Đã giao thành công</option>
+                <option value="failed_delivery">Giao không thành công</option>
+                <option value="returned">Đã hoàn trả về kho</option>
+                <option value="ready_for_pickup">Sẵn sàng nhận tại điểm hẹn</option>
+                <option value="picked_up">Người mua đã đến nhận hàng</option>
               </select>
             </div>
 

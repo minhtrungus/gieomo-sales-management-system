@@ -447,14 +447,32 @@ export default function AdminInventoryPage() {
       .flatMap((p) =>
         (p.variants || []).map((v) => {
           const stocks: Record<string, number> = {};
-          const wh1 = Number(v.stock_warehouse_1) || 0;
-          const wh2 = Number(v.stock_warehouse_2) || 0;
+          let sumStockFromWh = 0;
+
+          // Compute stock for each warehouse
           for (const wh of warehouses) {
-            stocks[wh.warehouse_id] =
-              v.warehouse_stocks?.[wh.warehouse_id] ??
-              (wh.warehouse_id === "wh-1" ? wh1 : wh.warehouse_id === "wh-2" ? wh2 : 0);
+            let sVal = v.warehouse_stocks?.[wh.warehouse_id];
+            if (sVal === undefined) {
+              if (wh.warehouse_id === "wh-1") sVal = Number(v.stock_warehouse_1) || 0;
+              else if (wh.warehouse_id === "wh-2") sVal = Number(v.stock_warehouse_2) || 0;
+              else if (wh.is_default) sVal = Number(v.stock) || 0;
+              else sVal = 0;
+            }
+            stocks[wh.warehouse_id] = Number(sVal) || 0;
+            sumStockFromWh += Number(sVal) || 0;
           }
-          const totalStock = Object.values(stocks).reduce((sum, s) => sum + s, 0);
+
+          // Single source of truth:
+          // If total sum of warehouse stocks is 0 but variant has stock > 0, assign to default warehouse
+          if (sumStockFromWh === 0 && (Number(v.stock) || 0) > 0 && warehouses.length > 0) {
+            const defWh = warehouses.find((w) => w.is_default) || warehouses[0];
+            if (defWh) {
+              stocks[defWh.warehouse_id] = Number(v.stock);
+              sumStockFromWh = Number(v.stock);
+            }
+          }
+
+          const totalStock = sumStockFromWh > 0 ? sumStockFromWh : (Number(v.stock) || 0);
 
           return {
             productId: p.product_id,

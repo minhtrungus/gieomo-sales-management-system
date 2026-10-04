@@ -24,6 +24,7 @@ import {
 import {
   getStoredContactMessages,
   updateContactMessageStatus,
+  deleteStoredContactMessage,
   getStoredReviews,
   deleteStoredReview,
   getStoredProducts,
@@ -41,6 +42,7 @@ export default function AdminMessagesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "unread" | "read" | "replied">("all");
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<ContactMessage | null>(null);
 
   // Product Reviews State
   const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -81,6 +83,16 @@ export default function AdminMessagesPage() {
     if (selectedMessage && selectedMessage.id === id) {
       setSelectedMessage((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
+  };
+
+  const handleConfirmDeleteMessage = () => {
+    if (!messageToDelete) return;
+    deleteStoredContactMessage(messageToDelete.id);
+    setMessages(getStoredContactMessages());
+    if (selectedMessage?.id === messageToDelete.id) {
+      setSelectedMessage(null);
+    }
+    setMessageToDelete(null);
   };
 
   const filteredMessages = useMemo(() => {
@@ -397,6 +409,16 @@ export default function AdminMessagesPage() {
                         <span>Gọi điện</span>
                       </a>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => setMessageToDelete(selectedMessage)}
+                      className="py-2.5 px-3.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-red-200"
+                      title="Xóa tin nhắn này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa</span>
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -638,6 +660,50 @@ export default function AdminMessagesPage() {
               <button
                 type="button"
                 onClick={handleConfirmDeleteReview}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Contact Message Confirmation Modal */}
+      {messageToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2.5 rounded-2xl bg-red-100">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                  Xác nhận xóa lời nhắn?
+                </h3>
+                <span className="text-xs text-[#7E7068]">Hành động này sẽ gỡ bỏ tin nhắn này khỏi hệ thống</span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#342A24]">{messageToDelete.name}</span>
+                <span className="text-gray-500 font-mono text-[11px]">{messageToDelete.email}</span>
+              </div>
+              <p className="text-gray-600 italic line-clamp-3">&quot;{messageToDelete.message}&quot;</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setMessageToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteMessage}
                 className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
               >
                 Xác nhận xóa

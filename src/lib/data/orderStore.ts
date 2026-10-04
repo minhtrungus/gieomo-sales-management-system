@@ -335,6 +335,42 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
   }
 }
 
+export function updateStoredDeliveryStatus(orderCodeOrId: string, deliveryStatus: DeliveryStatus): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const updated = orders.map((o) => {
+      if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
+        return {
+          ...o,
+          delivery_status: deliveryStatus,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return o;
+    });
+
+    cachedOrders = updated;
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    // Sync delivery status to Supabase
+    fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: orderCodeOrId,
+        deliveryStatus,
+      }),
+    }).catch((err) => {
+      console.warn("[updateStoredDeliveryStatus] Failed to sync delivery status to Supabase:", err);
+    });
+
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error updating delivery status", e);
+  }
+}
+
 export function updateStoredOrderNotes(orderId: string, notes: { customer_note?: string; internal_note?: string }): void {
   if (typeof window === "undefined") return;
   try {
@@ -545,9 +581,20 @@ export function deleteStoredPickupPoint(pointId: string): void {
   if (typeof window === "undefined") return;
   try {
     const list = getStoredPickupPoints();
-    const updated = list.filter((p) => p.pickup_point_id !== pointId);
+    const target = list.find((p) => p.pickup_point_id === pointId || p.name === pointId);
+    const updated = list.filter((p) => p.pickup_point_id !== pointId && p.name !== pointId);
     localStorage.setItem("gieomo_pickup_points", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_pickup_points_updated"));
+
+    // Sync DELETE to Supabase
+    const params = new URLSearchParams();
+    if (target?.pickup_point_id) params.set("id", target.pickup_point_id);
+    else params.set("id", pointId);
+    if (target?.name) params.set("name", target.name);
+
+    fetch(`/api/pickup-points?${params.toString()}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete pickup point on server:", err));
   } catch (e) {
     console.error("Error deleting pickup point", e);
   }
@@ -635,6 +682,22 @@ export function updateContactMessageStatus(id: string, status: "unread" | "read"
     }).catch((err) => console.warn("Could not update contact message status on server:", err));
   } catch (e) {
     console.error("Error updating contact message status", e);
+  }
+}
+
+export function deleteStoredContactMessage(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getStoredContactMessages();
+    const updated = list.filter((m) => m.id !== id);
+    localStorage.setItem("gieomo_contact_messages", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_messages_updated"));
+
+    fetch(`/api/contact/messages?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete contact message on server:", err));
+  } catch (e) {
+    console.error("Error deleting contact message", e);
   }
 }
 
@@ -822,7 +885,7 @@ export function getStoredMembers(): StoredMember[] {
   }
 }
 
-export function saveStoredMembers(members: StoredMember[]): void {
+export function saveStoredMembers(members: StoredMember[], changedMember?: StoredMember): void {
   if (typeof window === "undefined") return;
   try {
     // 1. Filter out revoked account admin@mammo.vn
@@ -843,8 +906,12 @@ export function saveStoredMembers(members: StoredMember[]): void {
     localStorage.setItem("gieomo_members", JSON.stringify(sanitized));
     window.dispatchEvent(new Event("gieomo_members_updated"));
 
-    // 3. Sync to Supabase in background
-    sanitized.forEach((m) => {
+    // 3. Sync to Supabase in background — only the changed member if specified
+    const toSync = changedMember
+      ? sanitized.filter((m) => m.memberId === changedMember.memberId)
+      : sanitized;
+
+    toSync.forEach((m) => {
       if (m.memberId !== "baotri-system") {
         fetch("/api/members", {
           method: "POST",
@@ -1084,19 +1151,9 @@ export function syncVouchersFromServer(): void {
   hasSyncedVouchersWithServer = true;
   safeFetchJson<{ success: boolean; vouchers: Voucher[] }>("/api/vouchers")
     .then((data) => {
-      if (data?.success && Array.isArray(data.vouchers) && data.vouchers.length > 0) {
-        const current = getStoredVouchers();
-        const merged = [...current];
-        for (const v of data.vouchers) {
-          const idx = merged.findIndex((m) => m.voucher_id === v.voucher_id || m.code === v.code);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], ...v };
-          } else {
-            merged.push({ ...v, visibility: v.visibility || "public" });
-          }
-        }
-        cachedVouchers = merged;
-        localStorage.setItem("gieomo_vouchers", JSON.stringify(merged));
+      if (data?.success && Array.isArray(data.vouchers)) {
+        cachedVouchers = data.vouchers;
+        localStorage.setItem("gieomo_vouchers", JSON.stringify(data.vouchers));
         window.dispatchEvent(new Event("gieomo_vouchers_updated"));
       }
     })
@@ -1175,10 +1232,17 @@ export function deleteStoredVoucher(voucherId: string): void {
   if (typeof window === "undefined") return;
   try {
     const list = getStoredVouchers();
+    const target = list.find((v) => v.voucher_id === voucherId);
     const updated = list.filter((v) => v.voucher_id !== voucherId);
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
+
+    // Sync DELETE to Supabase
+    const idToDelete = target?.code || voucherId;
+    fetch(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete voucher on server:", err));
   } catch (e) {
     console.error("Error deleting voucher", e);
   }
@@ -1242,25 +1306,43 @@ export function syncProductsFromServer(): void {
     });
 }
 
+export async function clearAllStoredProducts(): Promise<void> {
+  MOCK_PRODUCTS.length = 0;
+  cachedProducts = [];
+  if (typeof window !== "undefined") {
+    localStorage.setItem("gieomo_products", JSON.stringify([]));
+    localStorage.setItem("gieomo_products_cleared_v3", "true");
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+    try {
+      await fetch("/api/products?id=all", { method: "DELETE" });
+    } catch (e) {
+      console.warn("Could not delete products on server:", e);
+    }
+  }
+}
+
 export function getStoredProducts(): ExtendedProduct[] {
   if (typeof window === "undefined") return MOCK_PRODUCTS;
-  if (!hasSyncedProductsWithServer) {
-    syncProductsFromServer();
+
+  // One-time auto purge of legacy demo products as requested by user
+  if (localStorage.getItem("gieomo_products_cleared_v3") !== "true") {
+    localStorage.setItem("gieomo_products", JSON.stringify([]));
+    localStorage.setItem("gieomo_products_cleared_v3", "true");
+    cachedProducts = [];
+    MOCK_PRODUCTS.length = 0;
+    fetch("/api/products?id=all", { method: "DELETE" }).catch(() => {});
+    return [];
   }
-  if (cachedProducts !== null && cachedProducts.length > 0) return cachedProducts;
+
+  if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
     const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
-    if (!products || products.length === 0) {
-      cachedProducts = MOCK_PRODUCTS;
-      localStorage.setItem("gieomo_products", JSON.stringify(MOCK_PRODUCTS));
-      return MOCK_PRODUCTS;
-    }
     cachedProducts = products;
     return products;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
-    return MOCK_PRODUCTS;
+    return [];
   }
 }
 
@@ -1434,19 +1516,25 @@ export function toggleStoredProductFeatured(productId: string, newFeatured: bool
 }
 
 export function deleteStoredProduct(productId: string): void {
-  const mIdx = MOCK_PRODUCTS.findIndex((p) => p.product_id === productId);
+  const mIdx = MOCK_PRODUCTS.findIndex((p) => p.product_id === productId || p.slug === productId);
   if (mIdx !== -1) MOCK_PRODUCTS.splice(mIdx, 1);
 
   if (typeof window === "undefined") return;
   try {
     const list = getStoredProducts();
-    const updated = list.filter((p) => p.product_id !== productId);
+    const target = list.find((p) => p.product_id === productId || p.slug === productId);
+    const updated = list.filter((p) => p.product_id !== productId && p.slug !== productId);
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_products_updated"));
 
     // Sync deletion to Supabase
-    fetch(`/api/products?id=${encodeURIComponent(productId)}`, {
+    const params = new URLSearchParams();
+    if (target?.product_id) params.set("id", target.product_id);
+    else params.set("id", productId);
+    if (target?.slug) params.set("slug", target.slug);
+
+    fetch(`/api/products?${params.toString()}`, {
       method: "DELETE",
     }).catch((err) => console.warn("Could not delete product on server:", err));
   } catch (e) {
@@ -1458,38 +1546,46 @@ export function deleteStoredProduct(productId: string): void {
 // WAREHOUSES STORE (QUẢN LÝ KHO HÀNG)
 // ==========================================
 
+export const DEFAULT_WAREHOUSES: Warehouse[] = [
+  {
+    warehouse_id: "wh-1",
+    name: "Kho Tân Bình",
+    code: "KHO-TB",
+    is_default: true,
+    address: "Tân Bình, TP. Hồ Chí Minh",
+    manager_name: "Ban Tổ Chức Mầm Mơ",
+    phone: "0901234567",
+  },
+  {
+    warehouse_id: "wh-2",
+    name: "Kho Quận 1",
+    code: "KHO-Q1",
+    is_default: false,
+    address: "Quận 1, TP. Hồ Chí Minh",
+    manager_name: "Đội Vận Chuyển",
+    phone: "0907654321",
+  },
+];
+
 export function getStoredWarehouses(): Warehouse[] {
-  if (typeof window === "undefined") return MOCK_WAREHOUSES;
-  if (cachedWarehouses !== null) return cachedWarehouses;
+  if (typeof window === "undefined") return DEFAULT_WAREHOUSES;
+  if (cachedWarehouses !== null && cachedWarehouses.length > 0) return cachedWarehouses;
   try {
     const raw = localStorage.getItem("gieomo_warehouses");
-
-    // Clear legacy seed warehouses (wh-1, wh-2) so user starts fresh
     if (raw) {
       const parsed: Warehouse[] = JSON.parse(raw);
-      const LEGACY_IDS = ["wh-1", "wh-2"];
-      const isLegacyOnly = parsed.every((w) => LEGACY_IDS.includes(w.warehouse_id));
-      if (isLegacyOnly) {
-        localStorage.removeItem("gieomo_warehouses");
-        cachedWarehouses = [];
-        return [];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cachedWarehouses = parsed;
+        return parsed;
       }
-      // Keep user-created warehouses but strip out any legacy seeds
-      const cleaned = parsed.filter((w) => !LEGACY_IDS.includes(w.warehouse_id));
-      if (cleaned.length !== parsed.length) {
-        localStorage.setItem("gieomo_warehouses", JSON.stringify(cleaned));
-        cachedWarehouses = cleaned;
-        return cleaned;
-      }
-      cachedWarehouses = parsed;
-      return parsed;
     }
-
-    cachedWarehouses = [];
-    return [];
+    // Initialize with standard active warehouses
+    cachedWarehouses = DEFAULT_WAREHOUSES;
+    localStorage.setItem("gieomo_warehouses", JSON.stringify(DEFAULT_WAREHOUSES));
+    return DEFAULT_WAREHOUSES;
   } catch (e) {
     console.error("Error reading gieomo_warehouses from localStorage", e);
-    return [];
+    return DEFAULT_WAREHOUSES;
   }
 }
 
@@ -1970,9 +2066,9 @@ export function deleteStoredCategory(categoryId: string): void {
       window.dispatchEvent(new Event("gieomo_products_updated"));
     }
 
-    // Sync deletion to Supabase in background using category_id and slug
-    const deleteParam = target?.slug ? `${encodeURIComponent(categoryId)}&slug=${encodeURIComponent(target.slug)}` : encodeURIComponent(categoryId);
-    fetch(`/api/categories?id=${deleteParam}`, {
+    // Sync deletion to Supabase in background using category_id (or slug as fallback)
+    const deleteId = target?.slug || categoryId;
+    fetch(`/api/categories?id=${encodeURIComponent(deleteId)}`, {
       method: "DELETE",
     }).catch((err) => console.warn("Could not delete category on server:", err));
   } catch (e) {
@@ -1990,36 +2086,27 @@ export function syncCombosFromServer(): void {
   hasSyncedCombosWithServer = true;
   safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos")
     .then((data) => {
-      if (data?.success && Array.isArray(data.combos) && data.combos.length > 0) {
-        const current = getStoredCombos();
-        const map = new Map<string, ExtendedCombo>();
-        for (const c of current) {
-          map.set(c.slug || c.combo_id, c);
-        }
-        for (const sC of data.combos) {
-          const mapped: ExtendedCombo = {
-            combo_id: sC.combo_id,
-            name: sC.name,
-            slug: sC.slug,
-            price: Number(sC.price) || 0,
-            description: sC.description || "",
-            thumbnail: sC.image_url || "/images/products/set_combo_1.jpg",
-            status: sC.status || "active",
-            featured: Boolean(sC.featured),
-            sort_order: Number(sC.sort_order) || 1,
-            created_at: sC.created_at || new Date().toISOString(),
-            items: (sC.combo_items || []).map((ci: any) => ({
-              product_id: ci.product_id,
-              quantity: ci.quantity || 1,
-              name: ci.product?.name || "Sản phẩm",
-              slug: ci.product?.slug || "",
-            })),
-          };
-          map.set(sC.slug || sC.combo_id, mapped);
-        }
-        const merged = Array.from(map.values());
-        cachedCombos = merged;
-        localStorage.setItem("gieomo_combos", JSON.stringify(merged));
+      if (data?.success && Array.isArray(data.combos)) {
+        const mapped: ExtendedCombo[] = data.combos.map((sC) => ({
+          combo_id: sC.combo_id,
+          name: sC.name,
+          slug: sC.slug,
+          price: Number(sC.price) || 0,
+          description: sC.description || "",
+          thumbnail: sC.image_url || "/images/products/set_combo_1.jpg",
+          status: sC.status || "active",
+          featured: Boolean(sC.featured),
+          sort_order: Number(sC.sort_order) || 1,
+          created_at: sC.created_at || new Date().toISOString(),
+          items: (sC.combo_items || []).map((ci: any) => ({
+            product_id: ci.product_id,
+            quantity: ci.quantity || 1,
+            name: ci.product?.name || "Sản phẩm",
+            slug: ci.product?.slug || "",
+          })),
+        }));
+        cachedCombos = mapped;
+        localStorage.setItem("gieomo_combos", JSON.stringify(mapped));
         window.dispatchEvent(new Event("gieomo_combos_updated"));
       }
     })
@@ -2027,24 +2114,23 @@ export function syncCombosFromServer(): void {
 }
 
 export function getStoredCombos(): ExtendedCombo[] {
-  if (typeof window === "undefined") return MOCK_COMBOS;
+  if (typeof window === "undefined") return [];
   if (!hasSyncedCombosWithServer) {
     syncCombosFromServer();
   }
-  if (cachedCombos !== null && cachedCombos.length > 0) return cachedCombos;
+  if (cachedCombos !== null) return cachedCombos;
   try {
     const raw = localStorage.getItem("gieomo_combos");
-    const combos: ExtendedCombo[] = raw ? JSON.parse(raw) : [];
-    if (!combos || combos.length === 0) {
-      cachedCombos = MOCK_COMBOS;
-      localStorage.setItem("gieomo_combos", JSON.stringify(MOCK_COMBOS));
-      return MOCK_COMBOS;
+    if (!raw) {
+      cachedCombos = [];
+      return [];
     }
+    const combos: ExtendedCombo[] = JSON.parse(raw);
     cachedCombos = combos;
     return combos;
   } catch (e) {
     console.error("Error reading gieomo_combos", e);
-    return MOCK_COMBOS;
+    return [];
   }
 }
 
@@ -2095,12 +2181,18 @@ export function deleteStoredCombo(comboId: string): void {
   if (typeof window === "undefined") return;
   try {
     const combos = getStoredCombos();
-    const updated = combos.filter((c) => c.combo_id !== comboId);
+    const target = combos.find((c) => c.combo_id === comboId || c.slug === comboId);
+    const updated = combos.filter((c) => c.combo_id !== comboId && c.slug !== comboId);
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
 
-    fetch(`/api/combos?id=${encodeURIComponent(comboId)}`, {
+    const params = new URLSearchParams();
+    if (target?.combo_id) params.set("id", target.combo_id);
+    else params.set("id", comboId);
+    if (target?.slug) params.set("slug", target.slug);
+
+    fetch(`/api/combos?${params.toString()}`, {
       method: "DELETE",
     }).catch((err) => console.warn("Could not delete combo on server:", err));
   } catch (e) {
@@ -2313,7 +2405,7 @@ export function updateMemberPassword(emailOrMemberId: string, newPass: string): 
   );
   if (index === -1) return false;
   members[index].password = newPass;
-  saveStoredMembers(members);
+  saveStoredMembers(members, members[index]);
   return true;
 }
 

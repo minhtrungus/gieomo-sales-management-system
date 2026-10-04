@@ -51,26 +51,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  const [isLoaded, setIsLoaded] = useState(false);
+
   // Load notifications from storage or initialize empty
   useEffect(() => {
     const saved = localStorage.getItem("gieomo_admin_notifications");
     if (saved) {
       try {
         setNotifications(JSON.parse(saved));
-        return;
       } catch (e) {
         console.error("Failed to parse saved notifications", e);
       }
     }
-    setNotifications([]);
+    setIsLoaded(true);
   }, []);
 
   // Save to localStorage (limit to 50 most recent to prevent storage bloat)
   useEffect(() => {
-    if (notifications.length > 0) {
-      localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 50)));
-    }
-  }, [notifications]);
+    if (!isLoaded) return;
+    localStorage.setItem("gieomo_admin_notifications", JSON.stringify(notifications.slice(0, 50)));
+  }, [notifications, isLoaded]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 

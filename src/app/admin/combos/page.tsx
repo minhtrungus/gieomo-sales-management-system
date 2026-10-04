@@ -72,20 +72,23 @@ export default function AdminCombosPage() {
   const [thumbnail, setThumbnail] = useState(COMBO_IMAGE_PRESETS[0].url);
   const [status, setStatus] = useState<"active" | "draft" | "archived">("active");
   const [featured, setFeatured] = useState(true);
-  const [comboItems, setComboItems] = useState<ComboItemSelection[]>([
-    { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
-    { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
-    { product_id: availableProducts[4]?.product_id || availableProducts[2]?.product_id || "prod-3", quantity: 1 },
-  ]);
+  const [comboItems, setComboItems] = useState<ComboItemSelection[]>(() => {
+    const prods = getStoredProducts();
+    if (prods.length > 0) {
+      return [{ product_id: prods[0].product_id, quantity: 1 }];
+    }
+    return [];
+  });
 
   // Form states for Edit Combo
   const [editComboItems, setEditComboItems] = useState<ComboItemSelection[]>([]);
 
   // Add item row in create modal
   const handleAddItemToCreate = () => {
+    if (availableProducts.length === 0) return;
     setComboItems([
       ...comboItems,
-      { product_id: availableProducts[0]?.product_id || "prod-custom", quantity: 1 },
+      { product_id: availableProducts[0].product_id, quantity: 1 },
     ]);
   };
 
@@ -700,25 +703,44 @@ export default function AdminCombosPage() {
                   <label className="font-bold text-[#342A24] block">
                     Sản phẩm thành phần trong Combo ({comboItems.length} món):
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleAddItemToCreate}
-                    className="px-2.5 py-1 rounded-lg bg-[#FFE7A8] hover:bg-[#ffd980] text-[#542B07] font-extrabold text-[11px] flex items-center gap-1 transition-colors cursor-pointer border border-[#ebd089]"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Thêm món vào Combo
-                  </button>
+                  {availableProducts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAddItemToCreate}
+                      className="px-2.5 py-1 rounded-lg bg-[#FFE7A8] hover:bg-[#ffd980] text-[#542B07] font-extrabold text-[11px] flex items-center gap-1 transition-colors cursor-pointer border border-[#ebd089]"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm món vào Combo
+                    </button>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  {comboItems.map((item, index) => {
-                    const currentProd = availableProducts.find((p) => p.product_id === item.product_id);
-                    const prodStock = getProductTotalStock(currentProd);
+                {availableProducts.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-950">
+                      <AlertTriangle className="w-4 h-4 text-amber-700" />
+                      <span>Chưa có sản phẩm khả dụng trong kho</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Set Combo cần liên kết với các sản phẩm thực tế để tự động đồng bộ tồn kho. Bạn vui lòng tạo ít nhất 1 sản phẩm trước khi tạo Combo nhé!
+                    </p>
+                    <a
+                      href="/admin/products/new"
+                      className="inline-block px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] transition-colors"
+                    >
+                      + Tạo sản phẩm mới ngay ➔
+                    </a>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {comboItems.map((item, index) => {
+                      const currentProd = availableProducts.find((p) => p.product_id === item.product_id);
+                      const prodStock = getProductTotalStock(currentProd);
 
-                    return (
-                      <div key={index} className="flex items-center gap-2 bg-[#FFF8EE] p-2.5 rounded-2xl border border-[#F0E5D8]">
-                        <span className="w-5 h-5 rounded-full bg-[#BFE9C3] text-[#16381D] font-extrabold flex items-center justify-center text-[10px] shrink-0">
-                          {index + 1}
-                        </span>
+                      return (
+                        <div key={index} className="flex items-center gap-2 bg-[#FFF8EE] p-2.5 rounded-2xl border border-[#F0E5D8]">
+                          <span className="w-5 h-5 rounded-full bg-[#BFE9C3] text-[#16381D] font-extrabold flex items-center justify-center text-[10px] shrink-0">
+                            {index + 1}
+                          </span>
 
                         <select
                           value={item.product_id}
@@ -766,6 +788,7 @@ export default function AdminCombosPage() {
                     );
                   })}
                 </div>
+              )}
 
                 {/* Real-time Value Calculation Card */}
                 <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs space-y-1.5">
@@ -813,7 +836,12 @@ export default function AdminCombosPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+                  disabled={availableProducts.length === 0}
+                  className={`px-5 py-2.5 rounded-full font-extrabold text-xs shadow-xs transition-all ${
+                    availableProducts.length === 0
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-300"
+                      : "bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] border border-[#9ed4a3] cursor-pointer"
+                  }`}
                 >
                   Tạo Set Combo ➔
                 </button>

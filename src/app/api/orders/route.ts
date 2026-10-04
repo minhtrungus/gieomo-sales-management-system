@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { orderCode, orderId, orderStatus, paymentStatus } = await request.json();
+    const { orderCode, orderId, orderStatus, paymentStatus, deliveryStatus, delivery_status, internalNote, assignedShipperId } = await request.json();
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const supabase = createAdminClient();
 
@@ -55,18 +55,36 @@ export async function PATCH(request: Request) {
     if (orderStatus) {
       updateData.order_status = orderStatus;
       if (orderStatus === "completed") updateData.completed_at = new Date().toISOString();
+      if (orderStatus === "confirmed") updateData.confirmed_at = new Date().toISOString();
+      if (orderStatus === "cancelled") updateData.cancelled_at = new Date().toISOString();
     }
     if (paymentStatus) {
       updateData.payment_status = paymentStatus;
     }
+    const resolvedDelivery = deliveryStatus || delivery_status;
+    if (resolvedDelivery) {
+      updateData.delivery_status = resolvedDelivery;
+    }
+    if (internalNote !== undefined) {
+      updateData.internal_note = internalNote;
+    }
+    if (assignedShipperId !== undefined) {
+      updateData.assigned_shipper_id = assignedShipperId || null;
+    }
 
+    const idOrCode = orderCode || orderId;
+    if (!idOrCode) {
+      return NextResponse.json({ success: false, error: "Missing orderCode or orderId" }, { status: 400 });
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrCode);
     let query = supabase.from("orders").update(updateData);
     if (orderCode) {
       query = query.eq("order_code", orderCode);
-    } else if (orderId) {
-      query = query.eq("order_id", orderId);
+    } else if (isUuid) {
+      query = query.eq("order_id", idOrCode);
     } else {
-      return NextResponse.json({ success: false, error: "Missing orderCode or orderId" }, { status: 400 });
+      query = query.eq("order_code", idOrCode);
     }
 
     const { error } = await query;

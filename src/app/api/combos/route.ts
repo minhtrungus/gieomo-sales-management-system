@@ -157,22 +157,25 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
+    const slug = searchParams.get("slug");
 
-    if (!id) {
+    if (!id && !slug) {
       return NextResponse.json(
-        { success: false, error: "Thiếu tham số id combo cần xóa" },
+        { success: false, error: "Thiếu tham số id hoặc slug combo cần xóa" },
         { status: 400 }
       );
     }
 
     const supabase = createAdminClient();
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const isUuid = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
     let query = supabase.from("combos").delete();
     if (isUuid) {
       query = query.eq("combo_id", id);
-    } else {
-      query = query.eq("slug", id);
+    } else if (slug) {
+      query = query.eq("slug", slug);
+    } else if (id) {
+      query = query.or(`combo_id.eq.${id},slug.eq.${id}`);
     }
 
     const { error } = await query;

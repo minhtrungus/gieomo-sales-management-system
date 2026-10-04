@@ -58,6 +58,21 @@ export const PALETTE_CONFIGS: Record<
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    const updateFavicon = (href?: string) => {
+      if (!href || typeof document === "undefined") return;
+      try {
+        let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+        if (!link) {
+          link = document.createElement("link");
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.href = href;
+      } catch {
+        // non-blocking
+      }
+    };
+
     const applyTheme = () => {
       try {
         const settings = getStoredSettings();
@@ -76,6 +91,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         root.setAttribute("data-palette", paletteId);
         if (settings?.coverTheme) {
           root.setAttribute("data-cover-theme", settings.coverTheme);
+        }
+        if (settings?.faviconPreview) {
+          updateFavicon(settings.faviconPreview);
         }
       } catch (err) {
         console.warn("[ThemeProvider] Could not apply dynamic palette:", err);

@@ -91,15 +91,16 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
+    const slug = searchParams.get("slug") || undefined;
 
-    if (!id) {
+    if (!id && !slug) {
       return NextResponse.json(
         { success: false, error: "Thiếu tham số id sản phẩm cần xóa" },
         { status: 400 }
       );
     }
 
-    const res = await deleteProductServer(id);
+    const res = await deleteProductServer(id || slug!, slug);
     return NextResponse.json(res);
   } catch (err: any) {
     console.error("[DELETE /api/products] Error:", err);

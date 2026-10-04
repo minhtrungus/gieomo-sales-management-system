@@ -24,9 +24,12 @@ interface AdminHeaderProps {
   title?: string;
 }
 
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
+
 export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const settings = useSiteSettings();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -270,7 +273,7 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
         <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-[#F0E5D8]">
           <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#BFE9C3] shadow-2xs bg-white shrink-0">
             <Image
-              src="/images/logo_gieo mơ.jpg"
+              src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
               alt="Admin BTC"
               fill
               sizes="32px"

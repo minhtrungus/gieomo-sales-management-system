@@ -25,6 +25,7 @@ import {
 import { useState, useEffect } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
+  const settings = useSiteSettings();
   const { unreadCount } = useNotifications();
   const [session, setSession] = useState<AdminSession | null>(null);
 
@@ -81,7 +83,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <Link href="/admin/dashboard" className="flex items-center gap-2.5">
             <div className="relative w-8 h-8 rounded-full overflow-hidden border border-[#BFE9C3] shadow-xs bg-white shrink-0">
               <Image
-                src="/images/logo_gieo mơ.jpg"
+                src={settings.avatarPreview || "/images/logo_gieo mơ.jpg"}
                 alt="Gieo Mơ Admin"
                 fill
                 sizes="32px"

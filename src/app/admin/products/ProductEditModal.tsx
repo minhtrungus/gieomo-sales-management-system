@@ -178,10 +178,14 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
     // Update variant warehouse stock
     const updatedVariants = variants.map((v, i) => {
       if (i === 0) {
+        const whStocks = { ...(v.warehouse_stocks || {}) };
+        whStocks["wh-1"] = stockWh1;
+        whStocks["wh-2"] = stockWh2;
         return {
           ...v,
           stock_warehouse_1: stockWh1,
           stock_warehouse_2: stockWh2,
+          warehouse_stocks: whStocks,
           stock: stockWh1 + stockWh2,
         };
       }
