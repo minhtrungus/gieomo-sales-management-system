@@ -111,8 +111,8 @@ export function saveNewOrder(newOrder: Order): void {
               prodsChanged = true;
               const qty = matchingItem.quantity || 1;
               const stocks = { ...(v.warehouse_stocks || {}) };
-              let wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-              let wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+              let wh1 = Number(v.stock_warehouse_1) || 0;
+              let wh2 = Number(v.stock_warehouse_2) || 0;
               if (targetWhId === "wh-1") {
                 wh1 = Math.max(0, wh1 - qty);
               } else if (targetWhId === "wh-2") {
@@ -1273,14 +1273,17 @@ export async function saveNewProduct(
   product: ExtendedProduct
 ): Promise<{ success: boolean; product_id?: string; error?: string }> {
   // Ensure variants have warehouse stock values
-  const normalizedVariants = product.variants?.map((v, i) => ({
-    ...v,
-    stock: v.stock || 0,
-    stock_warehouse_1: v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7),
-    stock_warehouse_2:
-      v.stock_warehouse_2 ??
-      ((v.stock || 0) - (v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7))),
-  }));
+  const normalizedVariants = product.variants?.map((v, i) => {
+    const wh1 = Number(v.stock_warehouse_1) || 0;
+    const wh2 = Number(v.stock_warehouse_2) || 0;
+    const total = v.stock !== undefined ? Number(v.stock) : (wh1 + wh2);
+    return {
+      ...v,
+      stock: total,
+      stock_warehouse_1: wh1,
+      stock_warehouse_2: wh2,
+    };
+  });
 
   let productToSave: ExtendedProduct = {
     ...product,
@@ -1589,8 +1592,8 @@ export function updateProductWarehouseStock(
         stocks[warehouseId] = safeStock;
 
         // Legacy compatibility
-        let wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-        let wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+        let wh1 = Number(v.stock_warehouse_1) || 0;
+        let wh2 = Number(v.stock_warehouse_2) || 0;
         if (warehouseId === "wh-1") wh1 = safeStock;
         if (warehouseId === "wh-2") wh2 = safeStock;
 

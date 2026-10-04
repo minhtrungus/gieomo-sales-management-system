@@ -42,12 +42,21 @@ export function ProductDetailClient({
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
 
   useEffect(() => {
-    const list = getStoredProducts();
-    const found = list.find((p) => p.slug === initialProduct.slug || p.product_id === initialProduct.product_id);
-    if (found) {
-      setProduct(found);
-      setSelectedVariant(found.variants?.[0] ?? null);
-    }
+    const updateProduct = () => {
+      const list = getStoredProducts();
+      const found = list.find((p) => p.slug === initialProduct.slug || p.product_id === initialProduct.product_id);
+      if (found) {
+        setProduct(found);
+        setSelectedVariant((prev) => {
+          if (!prev) return found.variants?.[0] ?? null;
+          return found.variants?.find((v) => v.variant_id === prev.variant_id) ?? found.variants?.[0] ?? null;
+        });
+      }
+    };
+
+    updateProduct();
+    window.addEventListener("gieomo_products_updated", updateProduct);
+    return () => window.removeEventListener("gieomo_products_updated", updateProduct);
   }, [initialProduct.slug, initialProduct.product_id]);
 
   const [quantity, setQuantity] = useState(1);

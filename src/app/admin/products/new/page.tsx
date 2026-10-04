@@ -57,9 +57,9 @@ export default function AdminNewProductPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Variants list with editable initial stock
+  // Variants list with initial stock 0 (must be stocked via warehouse inflow receipt)
   const [variants, setVariants] = useState([
-    { name: "Mặc định", sku: "", stock: 20, imageUrl: "" },
+    { name: "Mặc định", sku: "", stock: 0, imageUrl: "" },
   ]);
 
   const handleNameChange = (val: string) => {
@@ -189,17 +189,14 @@ export default function AdminNewProductPage() {
         const cleanSku =
           v.sku?.trim() ||
           `GM-${(cleanSlug || "PROD").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)}-0${i + 1}`;
-        const initialStock = Math.max(0, Number(v.stock) || 0);
-        const wh1 = Math.ceil(initialStock * 0.7);
-        const wh2 = Math.max(0, initialStock - wh1);
         return {
           variant_id: `var-${Date.now()}-${i}`,
           product_id: prodId,
           name: v.name?.trim() || "Mặc định",
           sku: cleanSku,
-          stock: initialStock,
-          stock_warehouse_1: wh1,
-          stock_warehouse_2: wh2,
+          stock: 0,
+          stock_warehouse_1: 0,
+          stock_warehouse_2: 0,
           price: null,
           compare_at_price: null,
           cost_price: null,
@@ -417,13 +414,13 @@ export default function AdminNewProductPage() {
             <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/70 text-xs text-emerald-950">
               <Info className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <span className="font-bold text-emerald-900">Liên kết Tồn kho & Kiểm kho tự động:</span>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  Bạn có thể nhập trực tiếp <strong>Số lượng tồn kho ban đầu</strong> cho từng phân loại bên dưới. Hệ thống sẽ tự động đồng bộ sang mục{" "}
-                  <Link href="/admin/inventory" className="font-bold text-emerald-900 underline hover:text-emerald-950">
-                    Quản lý kho
+                <span className="font-bold text-[#342A24]">Quy trình khai báo nhập kho chuẩn:</span>
+                <p className="text-[11px] text-[#7E7068] leading-relaxed">
+                  Sản phẩm mới tạo mặc định có số lượng tồn kho ban đầu là <strong>0</strong> (Chưa nhập kho). Trên website, sản phẩm sẽ tự động hiển thị <em>&quot;Tạm hết hàng&quot;</em>. Để bổ sung số lượng thực tế có hóa đơn/chứng từ, sau khi tạo sản phẩm bạn hãy vào mục{" "}
+                  <Link href="/admin/inventory" className="font-bold text-[#2D6338] underline hover:text-[#1B3622]">
+                    Kiểm kho
                   </Link>{" "}
-                  (phân bổ kho sẵn). Nếu để = 0, sản phẩm sẽ tự động báo <em>&quot;Tạm hết hàng&quot;</em> trên website cho đến khi thực hiện phiếu Nhập kho.
+                  để lập <strong>Phiếu nhập kho</strong> chính thức.
                 </p>
               </div>
             </div>
@@ -471,23 +468,14 @@ export default function AdminNewProductPage() {
                     />
                   </div>
 
-                  {/* Initial stock (Editable) */}
+                  {/* Initial stock (Read-only 0) */}
                   <div className="w-28">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1" title="Số lượng tồn kho ban đầu">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1" title="Tồn kho ban đầu luôn là 0 cho đến khi lập phiếu nhập kho">
                       Tồn ban đầu
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={v.stock}
-                      onChange={(e) => {
-                        const val = Math.max(0, parseInt(e.target.value, 10) || 0);
-                        setVariants((prev) =>
-                          prev.map((item, i) => (i === idx ? { ...item, stock: val } : item))
-                        );
-                      }}
-                      className="w-full p-2 text-center rounded-xl bg-white border border-gray-300 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
-                    />
+                    <div className="w-full p-2 text-center rounded-xl bg-gray-100 border border-gray-200 text-xs font-bold text-gray-500">
+                      0
+                    </div>
                   </div>
 
                   {/* Variant Photo */}

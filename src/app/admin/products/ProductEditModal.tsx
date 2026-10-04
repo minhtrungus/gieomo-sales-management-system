@@ -21,9 +21,8 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
   const [status, setStatus] = useState<"active" | "draft" | "archived">(product.status || "active");
   const [featured, setFeatured] = useState<boolean>(product.featured ?? false);
 
-  // Warehouse stock for variant 0
-  const initialWh1 = product.variants?.[0]?.stock_warehouse_1 ?? (product.variants?.[0]?.stock ? Math.ceil((product.variants[0].stock || 0) * 0.7) : 0);
-  const initialWh2 = product.variants?.[0]?.stock_warehouse_2 ?? (product.variants?.[0]?.stock ? Math.max(0, (product.variants[0].stock || 0) - initialWh1) : 0);
+  const initialWh1 = Number(product.variants?.[0]?.stock_warehouse_1) || 0;
+  const initialWh2 = Number(product.variants?.[0]?.stock_warehouse_2) || 0;
   const [stockWh1, setStockWh1] = useState(initialWh1);
   const [stockWh2, setStockWh2] = useState(initialWh2);
 

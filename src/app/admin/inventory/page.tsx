@@ -56,13 +56,13 @@ export default function AdminInventoryPage() {
       const mapped: ExtendedProduct[] = storedProds.map((p) => ({
         ...p,
         variants: p.variants?.map((v) => {
-          const wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-          const wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+          const wh1 = Number(v.stock_warehouse_1) || 0;
+          const wh2 = Number(v.stock_warehouse_2) || 0;
           return {
             ...v,
             stock_warehouse_1: wh1,
             stock_warehouse_2: wh2,
-            stock: wh1 + wh2,
+            stock: v.stock !== undefined ? Number(v.stock) : (wh1 + wh2),
           };
         }),
       }));
@@ -234,8 +234,8 @@ export default function AdminInventoryPage() {
         const updatedVariants = p.variants?.map((v) => {
           if (v.variant_id !== variantId) return v;
           const stocks = { ...(v.warehouse_stocks || {}) };
-          let wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-          let wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+          let wh1 = Number(v.stock_warehouse_1) || 0;
+          let wh2 = Number(v.stock_warehouse_2) || 0;
 
           const curVal = stocks[targetWh] ?? (targetWh === "wh-1" ? wh1 : targetWh === "wh-2" ? wh2 : 0);
           const newVal = Math.max(0, curVal + delta);
@@ -447,8 +447,8 @@ export default function AdminInventoryPage() {
       .flatMap((p) =>
         (p.variants || []).map((v) => {
           const stocks: Record<string, number> = {};
-          const wh1 = v.stock_warehouse_1 ?? Math.ceil((v.stock || 0) * 0.7);
-          const wh2 = v.stock_warehouse_2 ?? ((v.stock || 0) - wh1);
+          const wh1 = Number(v.stock_warehouse_1) || 0;
+          const wh2 = Number(v.stock_warehouse_2) || 0;
           for (const wh of warehouses) {
             stocks[wh.warehouse_id] =
               v.warehouse_stocks?.[wh.warehouse_id] ??
