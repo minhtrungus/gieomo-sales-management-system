@@ -30,6 +30,7 @@ let hasSyncedVouchersWithServer = false;
 let hasSyncedPickupPointsWithServer = false;
 let hasSyncedContactMessagesWithServer = false;
 let hasSyncedOrdersWithServer = false;
+let hasSyncedInventoryWithServer = false;
 
 export function syncOrdersFromServer(): void {
   if (typeof window === "undefined" || hasSyncedOrdersWithServer) return;
@@ -1572,27 +1573,55 @@ export function deleteStoredProduct(productId: string): void {
 
 export const DEFAULT_WAREHOUSES: Warehouse[] = [
   {
-    warehouse_id: "wh-1",
-    name: "Kho Tân Bình",
-    code: "KHO-TB",
+    warehouse_id: "wh-ufm",
+    name: "KHO UFM",
+    code: "KHO-LT",
     is_default: true,
-    address: "Tân Bình, TP. Hồ Chí Minh",
-    manager_name: "Ban Tổ Chức Mầm Mơ",
-    phone: "0901234567",
+    address: "Trường Đại học Tài chính - Marketing (UFM)",
+    manager_name: "Trúc Hân",
+    phone: "0888670637",
   },
   {
-    warehouse_id: "wh-2",
-    name: "Kho Quận 1",
-    code: "KHO-Q1",
+    warehouse_id: "wh-lang",
+    name: "KHO LÀNG",
+    code: "KHO-LANG",
     is_default: false,
-    address: "Quận 1, TP. Hồ Chí Minh",
-    manager_name: "Đội Vận Chuyển",
+    address: "Làng Đại học, TP. Thủ Đức",
+    manager_name: "Thuỳ An",
     phone: "0907654321",
   },
 ];
 
+export function syncInventoryFromServer(): void {
+  if (typeof window === "undefined" || hasSyncedInventoryWithServer) return;
+  hasSyncedInventoryWithServer = true;
+  fetch("/api/inventory")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success) {
+        if (Array.isArray(data.warehouses) && data.warehouses.length > 0) {
+          cachedWarehouses = data.warehouses;
+          localStorage.setItem("gieomo_warehouses", JSON.stringify(data.warehouses));
+          window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+        }
+        if (Array.isArray(data.inflowLogs)) {
+          localStorage.setItem("gieomo_inventory_inflow_logs", JSON.stringify(data.inflowLogs));
+          window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+        }
+        if (Array.isArray(data.transferLogs)) {
+          localStorage.setItem("gieomo_inventory_transfer_logs", JSON.stringify(data.transferLogs));
+          window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+        }
+      }
+    })
+    .catch((err) => console.warn("Could not sync inventory from server:", err));
+}
+
 export function getStoredWarehouses(): Warehouse[] {
   if (typeof window === "undefined") return DEFAULT_WAREHOUSES;
+  if (!hasSyncedInventoryWithServer) {
+    syncInventoryFromServer();
+  }
   if (cachedWarehouses !== null && cachedWarehouses.length > 0) return cachedWarehouses;
   try {
     const raw = localStorage.getItem("gieomo_warehouses");
@@ -1651,6 +1680,13 @@ export function saveNewWarehouse(warehouse: Warehouse): void {
     }
 
     window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
+    }).catch((err) => console.warn("Could not save warehouse to server:", err));
   } catch (e) {
     console.error("Error saving new warehouse", e);
   }
@@ -1667,6 +1703,13 @@ export function updateStoredWarehouse(warehouse: Warehouse): void {
     cachedWarehouses = updated;
     localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
+    }).catch((err) => console.warn("Could not update warehouse on server:", err));
   } catch (e) {
     console.error("Error updating warehouse", e);
   }
@@ -1683,6 +1726,13 @@ export function deleteStoredWarehouse(warehouseId: string): void {
     cachedWarehouses = updated;
     localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+
+    // Sync to Supabase in background
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
+    }).catch((err) => console.warn("Could not delete warehouse on server:", err));
   } catch (e) {
     console.error("Error deleting warehouse", e);
   }
@@ -1702,6 +1752,8 @@ export function updateProductWarehouseStock(
     const products = getStoredProducts();
     const safeStock = Math.max(0, Math.floor(newStock));
 
+    let modifiedProduct: ExtendedProduct | null = null;
+
     const updated = products.map((p) => {
       if (p.product_id !== productId) return p;
 
@@ -1714,18 +1766,18 @@ export function updateProductWarehouseStock(
         // Legacy compatibility
         let wh1 = Number(v.stock_warehouse_1) || 0;
         let wh2 = Number(v.stock_warehouse_2) || 0;
-        if (warehouseId === "wh-1") wh1 = safeStock;
-        if (warehouseId === "wh-2") wh2 = safeStock;
+        if (warehouseId === "wh-1" || warehouseId === "wh-ufm") wh1 = safeStock;
+        if (warehouseId === "wh-2" || warehouseId === "wh-lang") wh2 = safeStock;
 
         // Calculate total stock as sum of all known warehouse stocks
         const allWhs = getStoredWarehouses();
         let total = 0;
         for (const wh of allWhs) {
           if (stocks[wh.warehouse_id] !== undefined) {
-            total += stocks[wh.warehouse_id];
-          } else if (wh.warehouse_id === "wh-1") {
+            total += Number(stocks[wh.warehouse_id]) || 0;
+          } else if (wh.warehouse_id === "wh-1" || wh.warehouse_id === "wh-ufm") {
             total += wh1;
-          } else if (wh.warehouse_id === "wh-2") {
+          } else if (wh.warehouse_id === "wh-2" || wh.warehouse_id === "wh-lang") {
             total += wh2;
           }
         }
@@ -1741,16 +1793,24 @@ export function updateProductWarehouseStock(
 
       const totalProdStock = (updatedVariants || []).reduce((sum, v) => sum + (v.stock || 0), 0);
 
-      return {
+      const mod: ExtendedProduct = {
         ...p,
         stock: totalProdStock,
         variants: updatedVariants,
       };
+
+      modifiedProduct = mod;
+      return mod;
     });
 
     cachedProducts = updated;
     localStorage.setItem("gieomo_products", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_products_updated"));
+
+    // Sync product to Supabase DB
+    if (modifiedProduct) {
+      updateStoredProduct(modifiedProduct);
+    }
   } catch (e) {
     console.error("Error updating product warehouse stock", e);
   }
@@ -1791,6 +1851,9 @@ export interface TransferLog {
 
 export function getStoredInflowLogs(): InflowLog[] {
   if (typeof window === "undefined") return [];
+  if (!hasSyncedInventoryWithServer) {
+    syncInventoryFromServer();
+  }
   try {
     const raw = localStorage.getItem("gieomo_inventory_inflow_logs");
     return raw ? JSON.parse(raw) : [];
@@ -1803,10 +1866,20 @@ export function saveStoredInflowLogs(logs: InflowLog[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("gieomo_inventory_inflow_logs", JSON.stringify(logs));
   window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+
+  // Sync to Supabase in background
+  fetch("/api/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "saveInflowLogs", inflowLogs: logs }),
+  }).catch((err) => console.warn("Could not save inflow logs to server:", err));
 }
 
 export function getStoredTransferLogs(): TransferLog[] {
   if (typeof window === "undefined") return [];
+  if (!hasSyncedInventoryWithServer) {
+    syncInventoryFromServer();
+  }
   try {
     const raw = localStorage.getItem("gieomo_inventory_transfer_logs");
     return raw ? JSON.parse(raw) : [];
@@ -1819,6 +1892,13 @@ export function saveStoredTransferLogs(logs: TransferLog[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("gieomo_inventory_transfer_logs", JSON.stringify(logs));
   window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+
+  // Sync to Supabase in background
+  fetch("/api/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "saveTransferLogs", transferLogs: logs }),
+  }).catch((err) => console.warn("Could not save transfer logs to server:", err));
 }
 
 export function clearInventoryLogs(): void {

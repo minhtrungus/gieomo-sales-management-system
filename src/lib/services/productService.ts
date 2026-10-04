@@ -79,6 +79,8 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
           stock_warehouse_1: wh1,
           stock_warehouse_2: wh2,
           warehouse_stocks: {
+            "wh-ufm": wh1,
+            "wh-lang": wh2,
             "wh-1": wh1,
             "wh-2": wh2,
           },

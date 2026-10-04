@@ -6,6 +6,7 @@ export interface ExtendedProduct extends Product {
   category?: ProductCategory;
   variants?: ProductVariant[];
   images?: string[];
+  stock?: number;
   badge?: "new" | "best_seller" | "limited" | "out_of_stock";
   badge_label?: string;
   specs?: Record<string, string>;

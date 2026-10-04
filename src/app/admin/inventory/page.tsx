@@ -52,23 +52,115 @@ export default function AdminInventoryPage() {
   // Load from persistent stores
   useEffect(() => {
     const loadData = () => {
+      const whs = getStoredWarehouses();
+      setWarehouses(whs);
+      const defWh = whs.find((w) => w.is_default) || whs[0];
+
+      // Self-heal Inflow Logs: If receipt has warehouseName "Kho hàng" or empty warehouseId
+      const currentInflowLogs = getStoredInflowLogs();
+      let inflowNeedsUpdate = false;
+      const healedInflowLogs = currentInflowLogs.map((log) => {
+        if (!log.warehouseId || log.warehouseName === "Kho hàng") {
+          inflowNeedsUpdate = true;
+          return {
+            ...log,
+            warehouseId: defWh ? defWh.warehouse_id : "wh-ufm",
+            warehouseName: defWh ? defWh.name : "KHO UFM",
+          };
+        }
+        return log;
+      });
+      if (inflowNeedsUpdate) {
+        saveStoredInflowLogs(healedInflowLogs);
+        setInflowLogs(healedInflowLogs);
+      } else {
+        setInflowLogs(currentInflowLogs);
+      }
+      setTransferLogs(getStoredTransferLogs());
+
       const storedProds = getStoredProducts();
-      const mapped: ExtendedProduct[] = storedProds.map((p) => ({
-        ...p,
-        variants: p.variants?.map((v) => {
-          const wh1 = Number(v.stock_warehouse_1) || 0;
-          const wh2 = Number(v.stock_warehouse_2) || 0;
+      let prodsNeedUpdate = false;
+
+      const mapped: ExtendedProduct[] = storedProds.map((p) => {
+        let pChanged = false;
+        const variants = p.variants?.map((v) => {
+          const stocks = { ...(v.warehouse_stocks || {}) };
+
+          // Check if there was an empty key "" in warehouse_stocks (from earlier bug)
+          if (stocks[""] !== undefined && Number(stocks[""]) > 0 && defWh) {
+            const addVal = Number(stocks[""]);
+            stocks[defWh.warehouse_id] = (Number(stocks[defWh.warehouse_id]) || 0) + addVal;
+            delete stocks[""];
+            pChanged = true;
+          }
+
+          let totalStock = 0;
+          for (const wh of whs) {
+            totalStock += Number(stocks[wh.warehouse_id]) || 0;
+          }
+
+          // Also check legacy stock_warehouse_1 / stock_warehouse_2
+          if (totalStock === 0) {
+            const wh1 = Number(stocks["wh-1"] ?? stocks["wh-ufm"] ?? v.stock_warehouse_1 ?? 0);
+            const wh2 = Number(stocks["wh-2"] ?? stocks["wh-lang"] ?? v.stock_warehouse_2 ?? 0);
+            if (wh1 > 0 || wh2 > 0) {
+              if (whs[0]) stocks[whs[0].warehouse_id] = wh1;
+              if (whs[1]) stocks[whs[1].warehouse_id] = wh2;
+              totalStock = wh1 + wh2;
+              pChanged = true;
+            }
+          }
+
+          // If variant stock > 0 but total warehouse stock is 0, assign to default warehouse
+          if (totalStock === 0 && Number(v.stock) > 0 && defWh) {
+            stocks[defWh.warehouse_id] = Number(v.stock);
+            totalStock = Number(v.stock);
+            pChanged = true;
+          }
+
+          // If variant stock is 0 and totalStock is 0, but healedInflowLogs has quantity for this variant!
+          if (totalStock === 0 && defWh) {
+            const variantInflows = healedInflowLogs.filter(
+              (l) => l.productName === p.name && (l.variantName === v.name || v.name === "Mặc định")
+            );
+            const sumInflow = variantInflows.reduce((sum, l) => sum + (Number(l.quantityAdded) || 0), 0);
+            if (sumInflow > 0) {
+              stocks[defWh.warehouse_id] = sumInflow;
+              totalStock = sumInflow;
+              pChanged = true;
+            }
+          }
+
+          const wh1 = Number(stocks["wh-1"] ?? stocks["wh-ufm"] ?? (whs[0] ? stocks[whs[0].warehouse_id] : 0) ?? 0);
+          const wh2 = Number(stocks["wh-2"] ?? stocks["wh-lang"] ?? (whs[1] ? stocks[whs[1].warehouse_id] : 0) ?? 0);
+
           return {
             ...v,
             stock_warehouse_1: wh1,
             stock_warehouse_2: wh2,
-            stock: v.stock !== undefined ? Number(v.stock) : (wh1 + wh2),
+            warehouse_stocks: stocks,
+            stock: totalStock,
           };
-        }),
-      }));
+        });
+
+        if (pChanged) {
+          prodsNeedUpdate = true;
+        }
+
+        const totalPStock = (variants || []).reduce((s, vr) => s + (Number(vr.stock) || 0), 0);
+
+        return {
+          ...p,
+          variants,
+          stock: totalPStock,
+        };
+      });
+
+      if (prodsNeedUpdate) {
+        mapped.forEach((mp) => updateStoredProduct(mp));
+      }
+
       setProducts(mapped);
-      const whs = getStoredWarehouses();
-      setWarehouses(whs);
 
       if (mapped.length > 0) {
         setSelectedProductId((prev) => prev || mapped[0]?.product_id || "");
@@ -76,18 +168,24 @@ export default function AdminInventoryPage() {
         setTransferProductId((prev) => prev || mapped[0]?.product_id || "");
         setTransferVariantId((prev) => prev || mapped[0]?.variants?.[0]?.variant_id || "");
       }
-      if (whs.length > 1) {
+      if (whs.length > 0) {
+        const defaultWhId = whs.find((w) => w.is_default)?.warehouse_id || whs[0].warehouse_id;
+        setImportWarehouseId((prev) => prev || defaultWhId);
         setFromWarehouse((prev) => prev || whs[0].warehouse_id);
-        setToWarehouse((prev) => (prev && prev !== whs[0].warehouse_id ? prev : whs[1].warehouse_id));
+        if (whs.length > 1) {
+          setToWarehouse((prev) => (prev && prev !== whs[0].warehouse_id ? prev : whs[1].warehouse_id));
+        }
       }
-      setInflowLogs(getStoredInflowLogs());
-      setTransferLogs(getStoredTransferLogs());
     };
 
     loadData();
 
     const handleProdUpdate = () => loadData();
-    const handleWhUpdate = () => setWarehouses(getStoredWarehouses());
+    const handleWhUpdate = () => {
+      const whs = getStoredWarehouses();
+      setWarehouses(whs);
+      loadData();
+    };
     const handleLogsUpdate = () => {
       setInflowLogs(getStoredInflowLogs());
       setTransferLogs(getStoredTransferLogs());
@@ -228,24 +326,54 @@ export default function AdminInventoryPage() {
     targetWh: string,
     delta: number
   ) => {
+    const safeTargetWh =
+      targetWh ||
+      warehouses.find((w) => w.is_default)?.warehouse_id ||
+      warehouses[0]?.warehouse_id;
+    if (!safeTargetWh) return;
+
     setProducts((prev) => {
       const updatedProducts = prev.map((p) => {
         if (p.product_id !== productId) return p;
         const updatedVariants = p.variants?.map((v) => {
           if (v.variant_id !== variantId) return v;
           const stocks = { ...(v.warehouse_stocks || {}) };
-          let wh1 = Number(v.stock_warehouse_1) || 0;
-          let wh2 = Number(v.stock_warehouse_2) || 0;
 
-          const curVal = stocks[targetWh] ?? (targetWh === "wh-1" ? wh1 : targetWh === "wh-2" ? wh2 : 0);
+          let wh1 = Number(stocks["wh-1"] ?? stocks["wh-ufm"] ?? v.stock_warehouse_1 ?? 0);
+          let wh2 = Number(stocks["wh-2"] ?? stocks["wh-lang"] ?? v.stock_warehouse_2 ?? 0);
+
+          const curVal = Number(
+            stocks[safeTargetWh] ??
+              (safeTargetWh === "wh-1" || safeTargetWh === "wh-ufm"
+                ? wh1
+                : safeTargetWh === "wh-2" || safeTargetWh === "wh-lang"
+                ? wh2
+                : 0)
+          );
           const newVal = Math.max(0, curVal + delta);
-          stocks[targetWh] = newVal;
-          if (targetWh === "wh-1") wh1 = newVal;
-          if (targetWh === "wh-2") wh2 = newVal;
+          stocks[safeTargetWh] = newVal;
+
+          if (safeTargetWh === "wh-1" || safeTargetWh === "wh-ufm") {
+            stocks["wh-1"] = newVal;
+            stocks["wh-ufm"] = newVal;
+            wh1 = newVal;
+          }
+          if (safeTargetWh === "wh-2" || safeTargetWh === "wh-lang") {
+            stocks["wh-2"] = newVal;
+            stocks["wh-lang"] = newVal;
+            wh2 = newVal;
+          }
 
           let totalStock = 0;
           for (const wh of warehouses) {
-            totalStock += stocks[wh.warehouse_id] ?? (wh.warehouse_id === "wh-1" ? wh1 : wh.warehouse_id === "wh-2" ? wh2 : 0);
+            totalStock += Number(
+              stocks[wh.warehouse_id] ??
+                (wh.warehouse_id === "wh-1" || wh.warehouse_id === "wh-ufm"
+                  ? wh1
+                  : wh.warehouse_id === "wh-2" || wh.warehouse_id === "wh-lang"
+                  ? wh2
+                  : 0)
+            );
           }
 
           if (totalStock < 20) {
@@ -263,12 +391,18 @@ export default function AdminInventoryPage() {
           };
         });
 
+        const totalProdStock = (updatedVariants || []).reduce(
+          (sum, vr) => sum + (Number(vr.stock) || 0),
+          0
+        );
+
         const updatedProd: ExtendedProduct = {
           ...p,
           variants: updatedVariants,
+          stock: totalProdStock,
         };
 
-        // Persist to storage
+        // Persist to storage & sync to Supabase
         updateStoredProduct(updatedProd);
 
         return updatedProd;
@@ -329,15 +463,28 @@ export default function AdminInventoryPage() {
 
     if (!prod || !variant) return;
 
-    const targetWhObj = warehouses.find((w) => w.warehouse_id === importWarehouseId);
-    const whName = targetWhObj ? targetWhObj.name : "Kho hàng";
-    const currentWhStock =
-      importWarehouseId === "wh-2" ? variant.stock_warehouse_2 ?? 0 : variant.stock_warehouse_1 ?? 0;
+    const targetWhId =
+      importWarehouseId ||
+      warehouses.find((w) => w.is_default)?.warehouse_id ||
+      warehouses[0]?.warehouse_id;
+    if (!targetWhId) return;
+
+    const targetWhObj = warehouses.find((w) => w.warehouse_id === targetWhId);
+    const whName = targetWhObj ? targetWhObj.name : "KHO UFM";
+    const currentWhStock = Number(
+      variant.warehouse_stocks?.[targetWhId] ??
+        (targetWhId === "wh-1" || targetWhId === "wh-ufm"
+          ? variant.stock_warehouse_1
+          : targetWhId === "wh-2" || targetWhId === "wh-lang"
+          ? variant.stock_warehouse_2
+          : 0) ??
+        0
+    );
     const stockBefore = currentWhStock;
     const stockAfter = stockBefore + importQty;
 
     // Update specific warehouse stock
-    handleStockUpdate(selectedProductId, selectedVariantId, importWarehouseId, importQty);
+    handleStockUpdate(selectedProductId, selectedVariantId, targetWhId, importQty);
 
     // Record Inflow Log
     const today = new Date();
@@ -351,7 +498,7 @@ export default function AdminInventoryPage() {
     const newLog: InflowLog = {
       logId: `log-${Date.now()}`,
       receiptCode: `PNK-${Math.floor(100000 + Math.random() * 900000)}`,
-      warehouseId: importWarehouseId,
+      warehouseId: targetWhId,
       warehouseName: whName,
       productName: prod.name,
       variantName: variant.name,
@@ -377,7 +524,18 @@ export default function AdminInventoryPage() {
     e.preventDefault();
     setTransferError(null);
 
-    if (fromWarehouse === toWarehouse) {
+    const fromWhId = fromWarehouse || warehouses[0]?.warehouse_id;
+    const toWhId =
+      toWarehouse ||
+      warehouses.find((w) => w.warehouse_id !== fromWhId)?.warehouse_id ||
+      warehouses[0]?.warehouse_id;
+
+    if (!fromWhId || !toWhId) {
+      setTransferError("Vui lòng chọn kho xuất và kho nhận!");
+      return;
+    }
+
+    if (fromWhId === toWhId) {
       setTransferError("Kho xuất và kho nhận không được trùng nhau!");
       return;
     }
@@ -395,8 +553,15 @@ export default function AdminInventoryPage() {
       return;
     }
 
-    const sourceStock =
-      fromWarehouse === "wh-1" ? variant.stock_warehouse_1 ?? 0 : variant.stock_warehouse_2 ?? 0;
+    const sourceStock = Number(
+      variant.warehouse_stocks?.[fromWhId] ??
+        (fromWhId === "wh-1" || fromWhId === "wh-ufm"
+          ? variant.stock_warehouse_1
+          : fromWhId === "wh-2" || fromWhId === "wh-lang"
+          ? variant.stock_warehouse_2
+          : 0) ??
+        0
+    );
 
     if (transferQty > sourceStock) {
       setTransferError(
@@ -405,12 +570,79 @@ export default function AdminInventoryPage() {
       return;
     }
 
-    // Execute atomic transfer: Subtract from source, add to destination
-    handleStockUpdate(transferProductId, transferVariantId, fromWarehouse, -transferQty);
-    handleStockUpdate(transferProductId, transferVariantId, toWarehouse, transferQty);
+    // Atomic stock transfer: update source (-qty) and destination (+qty) in one go
+    setProducts((prev) => {
+      const updatedProducts = prev.map((p) => {
+        if (p.product_id !== transferProductId) return p;
+        const updatedVariants = p.variants?.map((v) => {
+          if (v.variant_id !== transferVariantId) return v;
+          const stocks = { ...(v.warehouse_stocks || {}) };
 
-    const fromWhObj = warehouses.find((w) => w.warehouse_id === fromWarehouse);
-    const toWhObj = warehouses.find((w) => w.warehouse_id === toWarehouse);
+          let wh1 = Number(stocks["wh-1"] ?? stocks["wh-ufm"] ?? v.stock_warehouse_1 ?? 0);
+          let wh2 = Number(stocks["wh-2"] ?? stocks["wh-lang"] ?? v.stock_warehouse_2 ?? 0);
+
+          const fromVal = Math.max(0, Number(stocks[fromWhId] ?? 0) - transferQty);
+          const toVal = Number(stocks[toWhId] ?? 0) + transferQty;
+
+          stocks[fromWhId] = fromVal;
+          stocks[toWhId] = toVal;
+
+          if (fromWhId === "wh-1" || fromWhId === "wh-ufm") {
+            stocks["wh-1"] = fromVal;
+            stocks["wh-ufm"] = fromVal;
+            wh1 = fromVal;
+          }
+          if (fromWhId === "wh-2" || fromWhId === "wh-lang") {
+            stocks["wh-2"] = fromVal;
+            stocks["wh-lang"] = fromVal;
+            wh2 = fromVal;
+          }
+          if (toWhId === "wh-1" || toWhId === "wh-ufm") {
+            stocks["wh-1"] = toVal;
+            stocks["wh-ufm"] = toVal;
+            wh1 = toVal;
+          }
+          if (toWhId === "wh-2" || toWhId === "wh-lang") {
+            stocks["wh-2"] = toVal;
+            stocks["wh-lang"] = toVal;
+            wh2 = toVal;
+          }
+
+          let totalStock = 0;
+          for (const wh of warehouses) {
+            totalStock += Number(stocks[wh.warehouse_id] ?? 0);
+          }
+
+          return {
+            ...v,
+            stock_warehouse_1: wh1,
+            stock_warehouse_2: wh2,
+            warehouse_stocks: stocks,
+            stock: totalStock,
+          };
+        });
+
+        const totalProdStock = (updatedVariants || []).reduce(
+          (sum, vr) => sum + (Number(vr.stock) || 0),
+          0
+        );
+
+        const updatedProd: ExtendedProduct = {
+          ...p,
+          variants: updatedVariants,
+          stock: totalProdStock,
+        };
+
+        updateStoredProduct(updatedProd);
+
+        return updatedProd;
+      });
+
+      return updatedProducts;
+    });
+
+    const fromWhObj = warehouses.find((w) => w.warehouse_id === fromWhId);
+    const toWhObj = warehouses.find((w) => w.warehouse_id === toWhId);
 
     const today = new Date();
     const hours = String(today.getHours()).padStart(2, "0");
@@ -425,8 +657,8 @@ export default function AdminInventoryPage() {
       transferCode: `DCK-${Math.floor(100000 + Math.random() * 900000)}`,
       productName: prod.name,
       variantName: variant.name,
-      fromWarehouse: fromWhObj?.name || fromWarehouse,
-      toWarehouse: toWhObj?.name || toWarehouse,
+      fromWarehouse: fromWhObj?.name || fromWhId,
+      toWarehouse: toWhObj?.name || toWhId,
       quantity: transferQty,
       approvedBy: transferApprovedBy,
       reason: transferReason,
@@ -571,6 +803,14 @@ export default function AdminInventoryPage() {
           <button
             onClick={() => {
               setTransferError(null);
+              const from = warehouses[0]?.warehouse_id || "";
+              const to = warehouses[1]?.warehouse_id || warehouses[0]?.warehouse_id || "";
+              setFromWarehouse(from);
+              setToWarehouse(to);
+              if (products.length > 0) {
+                setTransferProductId(products[0].product_id);
+                if (products[0].variants?.[0]) setTransferVariantId(products[0].variants[0].variant_id);
+              }
               setIsTransferOpen(true);
             }}
             className="px-4 py-2.5 rounded-full bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#F0E5D8] hover:border-emerald-600 active:scale-95 cursor-pointer"
@@ -580,7 +820,15 @@ export default function AdminInventoryPage() {
           </button>
 
           <button
-            onClick={() => setIsBulkImportOpen(true)}
+            onClick={() => {
+              const defWh = warehouses.find((w) => w.is_default) || warehouses[0];
+              if (defWh) setImportWarehouseId(defWh.warehouse_id);
+              if (products.length > 0) {
+                setSelectedProductId(products[0].product_id);
+                if (products[0].variants?.[0]) setSelectedVariantId(products[0].variants[0].variant_id);
+              }
+              setIsBulkImportOpen(true);
+            }}
             className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#9ed4a3] active:scale-95 cursor-pointer"
           >
             <PackagePlus className="w-4 h-4" />
@@ -1600,11 +1848,16 @@ export default function AdminInventoryPage() {
                     onChange={(e) => setTransferVariantId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
                   >
-                    {transferProductVariants.map((v) => (
-                      <option key={v.variant_id} value={v.variant_id}>
-                        {v.name} (Q3: {v.stock_warehouse_1 ?? 0} | Thủ Đức: {v.stock_warehouse_2 ?? 0})
-                      </option>
-                    ))}
+                    {transferProductVariants.map((v) => {
+                      const stockDetails = warehouses
+                        .map((wh) => `${wh.name}: ${v.warehouse_stocks?.[wh.warehouse_id] ?? 0}`)
+                        .join(" | ");
+                      return (
+                        <option key={v.variant_id} value={v.variant_id}>
+                          {v.name} ({stockDetails || `Tồn: ${v.stock}`})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1737,7 +1990,7 @@ export default function AdminInventoryPage() {
               <div className="space-y-1">
                 <label className="font-bold text-[#342A24] block">Kho hàng nhập về *</label>
                 <select
-                  value={importWarehouseId}
+                  value={importWarehouseId || (warehouses.find((w) => w.is_default)?.warehouse_id || warehouses[0]?.warehouse_id || "")}
                   onChange={(e) => setImportWarehouseId(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
                 >
