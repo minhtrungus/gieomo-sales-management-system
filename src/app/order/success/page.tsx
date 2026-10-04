@@ -37,7 +37,6 @@ function OrderSuccessContent() {
 
   // Social Share Card states
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [hidePriceOnCard, setHidePriceOnCard] = useState(false);
   const shareQuote = "Tôi vừa cùng Mầm Mơ gieo một giấc mơ cho trẻ em khó khăn 🌱";
 
   useEffect(() => {
@@ -398,16 +397,6 @@ function OrderSuccessContent() {
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 24px sans-serif";
     ctx.fillText(dateStr, 380, 1140);
-
-    // Price if not hidden
-    if (!hidePriceOnCard) {
-      ctx.fillStyle = "#5C4D44";
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText("🌱 ĐÓNG GÓP QUỸ:", 160, 1210);
-      ctx.fillStyle = "#16381D";
-      ctx.font = "bold 28px sans-serif";
-      ctx.fillText(`${finalAmount.toLocaleString("vi-VN")}đ`, 380, 1210);
-    }
 
     // PHÂN KHU 4: THÚC ĐẨY BÁN HÀNG & CTA LAN TỎA
     // Trust Badge (Bảo chứng niềm tin)
@@ -846,15 +835,6 @@ function OrderSuccessContent() {
                 <p className="text-xs text-gray-500 italic mt-0.5">&ldquo;{shareQuote}&rdquo;</p>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer self-start sm:self-auto">
-              <input
-                type="checkbox"
-                checked={hidePriceOnCard}
-                onChange={(e) => setHidePriceOnCard(e.target.checked)}
-                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-              />
-              <span>Ẩn giá tiền trên thẻ</span>
-            </label>
           </div>
 
           {/* Card Preview Banner Mockup (Story 9:16 Style) */}
@@ -919,12 +899,6 @@ function OrderSuccessContent() {
                     })()}
                   </span>
                 </div>
-                {!hidePriceOnCard && (
-                  <div>
-                    <span className="text-gray-500">🌱 Đóng góp: </span>
-                    <span className="font-extrabold text-[#16381D]">{finalAmount.toLocaleString("vi-VN")}đ</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1085,12 +1059,6 @@ function OrderSuccessContent() {
                       })()}
                     </span>
                   </div>
-                  {!hidePriceOnCard && (
-                    <div>
-                      <span className="text-gray-500">🌱 Đóng góp: </span>
-                      <span className="font-extrabold text-[#16381D]">{finalAmount.toLocaleString("vi-VN")}đ</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1122,21 +1090,11 @@ function OrderSuccessContent() {
               </p>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hidePriceOnCard}
-                  onChange={(e) => setHidePriceOnCard(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-                />
-                <span>Ẩn giá tiền trên thẻ</span>
-              </label>
-
+            <div className="flex items-center justify-end pt-1">
               <button
                 type="button"
                 onClick={handleDownloadShareCard}
-                className="px-4 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer border border-[#9ed4a3]"
+                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer border border-[#9ed4a3]"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Tải ảnh PNG</span>
