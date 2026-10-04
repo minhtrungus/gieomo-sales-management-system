@@ -615,89 +615,70 @@ function CheckoutContent() {
               )}
 
               {deliveryType === "member_delivery" && (
-                <div className="p-4 rounded-2xl bg-[#EAF7ED] border border-[#BFE9C3] text-xs space-y-2 animate-in fade-in">
-                  <div className="flex items-center gap-2 font-bold text-[#16381D]">
-                    <span>🌱</span>
-                    <span>Hình thức: Nhận hàng thông qua thành viên của Gieo Mơ</span>
-                  </div>
-                  <p className="text-[#386341] leading-relaxed">
-                    Bạn quen thành viên trong Gieo Mơ? Hãy chọn hoặc nhập <strong>tên/mã của bạn ấy</strong> ở ô bên dưới để đơn hàng được trao tận tay bạn nhé!
-                  </p>
+                <div className="p-3 rounded-2xl bg-[#EAF7ED] border border-[#BFE9C3] text-xs text-[#2D6338] flex items-center gap-2 animate-in fade-in">
+                  <span>📦</span>
+                  <span>Thành viên bạn quen sẽ nhận và giao hàng trực tiếp tận tay bạn (Freeship).</span>
                 </div>
               )}
             </div>
 
             {/* Introducer / Member referral input box */}
-            <div className={`bg-white rounded-3xl p-6 border shadow-xs space-y-4 transition-all ${
+            <div className={`bg-white rounded-3xl p-6 border shadow-xs space-y-3.5 transition-all ${
               deliveryType === "member_delivery" ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-emerald-100"
             }`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-heading font-bold text-base text-emerald-950 flex items-center gap-2">
+                  <h2 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
                     <span>🌱</span>
-                    Mã người quen / Tên Mầm-er bạn quen{deliveryType === "member_delivery" && <span className="text-red-600 font-bold">*</span>}
+                    <span>{deliveryType === "member_delivery" ? "Thành viên giao hàng cho bạn *" : "Người quen trong Mầm Mơ (nếu có)"}</span>
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Hỗ trợ ghi nhận đúng đóng góp cho thành viên và giúp bạn không bao giờ chọn nhầm.
-                  </p>
                 </div>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-cream text-emerald-800">
-                  {deliveryType === "member_delivery" ? "Bắt buộc xác nhận" : "Không bắt buộc"}
+                  {deliveryType === "member_delivery" ? "Bắt buộc chọn" : "Tùy chọn"}
                 </span>
               </div>
 
               {selectedMember ? (
                 /* Confirmed Member Card */
-                <div className="p-4 rounded-2xl bg-[#EAF7ED] border-2 border-emerald-500 shadow-xs space-y-3 animate-in fade-in">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">
+                <div className="p-3.5 rounded-2xl bg-[#EAF7ED] border border-emerald-400 shadow-2xs space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white font-extrabold flex items-center justify-center text-sm">
                         {selectedMember.fullName.slice(0, 1)}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-heading font-extrabold text-sm text-emerald-950">
-                            {selectedMember.fullName}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] border border-emerald-300">
-                            Mã: {selectedMember.referralCode}
-                          </span>
-                        </div>
-                        <p className="text-xs text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
-                          <span>✓</span> Đã xác nhận thành viên chính thức Mầm Mơ
-                        </p>
+                        <span className="font-heading font-bold text-xs text-emerald-950 block">
+                          {selectedMember.fullName}
+                        </span>
+                        <span className="text-[10px] font-mono text-emerald-700 font-bold">
+                          Mã: {selectedMember.referralCode}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedMember(null);
                           setShowMemberSuggestions(true);
                         }}
-                        className="text-xs font-bold text-emerald-900 hover:underline px-2.5 py-1.5 rounded-xl bg-white border border-emerald-300 cursor-pointer shadow-2xs"
+                        className="text-xs font-bold text-emerald-900 hover:underline px-2 py-1 rounded-lg bg-white border border-emerald-300 cursor-pointer"
                       >
-                        Đổi người khác
+                        Đổi
                       </button>
                       <button
                         type="button"
                         onClick={handleClearMember}
-                        className="text-xs font-medium text-gray-500 hover:text-red-600 px-2 py-1.5 cursor-pointer"
+                        className="text-xs font-medium text-gray-500 hover:text-red-600 px-1 py-1 cursor-pointer"
                       >
-                        Xóa
+                        ✕
                       </button>
                     </div>
                   </div>
-
-                  {deliveryType === "member_delivery" && (
-                    <div className="text-[11.5px] text-[#2D6338] bg-white/80 p-2.5 rounded-xl border border-emerald-200">
-                      📦 <strong>{selectedMember.fullName}</strong> ({selectedMember.phone}) sẽ trực tiếp nhận hàng và giao tận tay bạn.
-                    </div>
-                  )}
                 </div>
               ) : (
                 /* Search / Suggestion Input */
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   <div className="relative">
                     <input
                       type="text"
@@ -709,8 +690,8 @@ function CheckoutContent() {
                         setFormData((prev) => ({ ...prev, introducer_info: e.target.value }));
                       }}
                       onFocus={() => setShowMemberSuggestions(true)}
-                      placeholder="Gõ tên hoặc mã (Ví dụ: Mai Lan, MAM-LAN, Quang...)"
-                      className="w-full px-4 py-3 rounded-2xl border border-emerald-200 text-xs font-semibold outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 bg-white"
+                      placeholder="Gõ tên hoặc mã thành viên (VD: Lan, Quang, Trúc Hân...)"
+                      className="w-full px-4 py-2.5 rounded-2xl border border-emerald-200 text-xs font-semibold outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 bg-white"
                     />
                     {memberSearchQuery && (
                       <button
@@ -719,7 +700,7 @@ function CheckoutContent() {
                           setMemberSearchQuery("");
                           setShowMemberSuggestions(false);
                         }}
-                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
                       >
                         ✕
                       </button>
@@ -727,55 +708,44 @@ function CheckoutContent() {
                   </div>
 
                   {showMemberSuggestions && (
-                    <div className="p-2 bg-cream/70 rounded-2xl border border-emerald-200 max-h-56 overflow-y-auto space-y-1 animate-in fade-in">
-                      <div className="px-2 py-1 text-[10.5px] font-bold text-gray-500 uppercase">
-                        {filteredMembers.length > 0 ? "Thành viên Mầm Mơ (nhấn để xác nhận):" : "Chưa có trong danh sách chính thức:"}
-                      </div>
+                    <div className="p-2 bg-cream/70 rounded-2xl border border-emerald-200 max-h-48 overflow-y-auto space-y-1 animate-in fade-in">
                       {filteredMembers.map((m) => (
                         <button
                           key={m.memberId}
                           type="button"
                           onClick={() => handleSelectMember(m)}
-                          className="w-full p-2.5 rounded-xl text-left hover:bg-white flex items-center justify-between border border-transparent hover:border-emerald-300 transition-all cursor-pointer group"
+                          className="w-full p-2 rounded-xl text-left hover:bg-white flex items-center justify-between border border-transparent hover:border-emerald-300 transition-all cursor-pointer group"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-soft-green text-emerald-950 font-extrabold flex items-center justify-center text-xs group-hover:scale-105 transition-transform">
-                              {m.fullName.slice(0, 1)}
-                            </div>
-                            <div>
-                              <span className="font-bold text-xs text-gray-900 block">{m.fullName}</span>
-                              <span className="text-[10.5px] text-gray-500 font-mono">Mã: {m.referralCode}</span>
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-gray-900">{m.fullName}</span>
+                            <span className="text-[10px] text-gray-500 font-mono">({m.referralCode})</span>
                           </div>
-                          <span className="px-2.5 py-1 rounded-xl bg-soft-green text-emerald-950 text-[11px] font-bold border border-emerald-200">
-                            Chọn người này ✓
+                          <span className="px-2 py-0.5 rounded-lg bg-soft-green text-emerald-950 text-[10px] font-bold">
+                            Chọn ✓
                           </span>
                         </button>
                       ))}
 
                       {filteredMembers.length === 0 && memberSearchQuery && (
-                        <div className="p-3 text-center text-xs text-gray-600 bg-white rounded-xl">
-                          <span>Chưa tìm thấy thành viên có tên hoặc mã này. Bạn có thể lưu tên này để BTC kiểm tra đối chiếu sau.</span>
+                        <div className="p-2 text-center text-xs text-gray-500 bg-white rounded-xl">
+                          Chưa có trong danh sách BTC, tên này sẽ được lưu để đối soát sau.
                         </div>
                       )}
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center justify-between pt-0.5">
                     <button
                       type="button"
                       onClick={handleClearMember}
-                      className={`text-xs px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                      className={`text-[11px] px-2.5 py-1 rounded-xl border transition-colors cursor-pointer ${
                         noIntroducer
                           ? "bg-gray-100 text-gray-900 border-gray-300 font-bold"
                           : "text-gray-500 hover:text-gray-800 border-gray-200 hover:bg-gray-50"
                       }`}
                     >
-                      {noIntroducer ? "✓ Đã chọn: Tôi không quen ai / Mua tự do" : "Tôi không quen ai / Không có người giới thiệu"}
+                      {noIntroducer ? "✓ Tôi không quen ai trong BTC" : "Tôi không quen ai trong BTC"}
                     </button>
-                    <span className="text-[11px] text-gray-400">
-                      Gợi ý: Lan, Quang, Trúc Hân...
-                    </span>
                   </div>
                 </div>
               )}
@@ -786,46 +756,42 @@ function CheckoutContent() {
             </div>
 
             {/* Payment Method Box */}
-            <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs space-y-4">
-              <h2 className="font-heading font-bold text-lg text-emerald-950 flex items-center gap-2">
+            <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs space-y-3">
+              <h2 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
                 <span>3.</span> Phương thức thanh toán
               </h2>
 
-              <div className="space-y-3">
-                <div
-                  className="flex items-start gap-3 p-4 rounded-2xl border bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="banking"
-                    checked={true}
-                    readOnly
-                    className="mt-1 text-emerald-600"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-emerald-950">
-                      Chuyển khoản Ngân hàng (VietQR - Nhanh chóng)
-                    </span>
-                    <span className="block text-xs text-gray-600 mt-0.5 leading-relaxed">
-                      Quét mã QR tự động điền số tiền và nội dung chuyển khoản sau khi bấm &quot;Xác nhận đặt hàng&quot;.
-                    </span>
-                  </div>
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl border bg-soft-green/30 border-emerald-500">
+                <input
+                  type="radio"
+                  name="payment"
+                  value="banking"
+                  checked={true}
+                  readOnly
+                  className="text-emerald-600"
+                />
+                <div>
+                  <span className="block text-xs font-bold text-emerald-950">
+                    Chuyển khoản VietQR (Napas247)
+                  </span>
+                  <span className="block text-[11px] text-gray-500 mt-0.5">
+                    Mã QR tự động điền STK, số tiền và nội dung chuyển khoản sau khi bấm đặt hàng.
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Note Input */}
-            <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-2">
-                Ghi chú (nếu có):
+            <div className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-xs">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-1.5">
+                Ghi chú đơn hàng (nếu có):
               </label>
               <textarea
                 value={formData.note}
                 onChange={(e) => handleInputChange("note", e.target.value)}
-                placeholder="Bạn cần Gieo Mơ lưu ý điều khi khi giao hàng, hoặc muốn nhắn nhủ gì cho tụi mình, hãy điền vào đây nhé"
-                rows={3}
-                className="w-full p-3 rounded-2xl border border-gray-200 text-sm outline-none focus:border-soft-green"
+                placeholder="Lời nhắn gửi cho Gieo Mơ hoặc lưu ý giao hàng..."
+                rows={2}
+                className="w-full p-3 rounded-2xl border border-gray-200 text-xs outline-none focus:border-soft-green"
               />
             </div>
           </div>
@@ -978,7 +944,7 @@ function CheckoutContent() {
               </Button>
 
               <p className="text-[11px] text-gray-500 text-center leading-relaxed">
-                🔒 Bằng việc nhấn Đặt hàng, bạn đồng ý trao gửi niềm tin cùng dự án gây quỹ Gieo Mơ.
+                🔒 Thông tin được bảo mật và đối soát tự động qua VietQR Napas247.
               </p>
             </div>
           </div>

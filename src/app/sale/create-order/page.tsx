@@ -410,28 +410,55 @@ function SaleCreateOrderForm() {
                 >
                   {/* Product selector */}
                   <div className="flex-1">
-                    <label className="text-[11px] font-bold text-gray-500 mb-1 block">
-                      Sản phẩm
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-gray-500 block">
+                        Sản phẩm
+                      </label>
+                      {(() => {
+                        const v = prod?.variants?.find((vr) => vr.variant_id === item.variantId) || prod?.variants?.[0];
+                        const stock = v?.stock ?? prod?.variants?.reduce((sum, vr) => sum + (vr.stock || 0), 0) ?? 0;
+                        if (stock <= 0) {
+                          return <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-extrabold text-[10px]">⚠️ Hết hàng (0)</span>;
+                        }
+                        if (stock <= 5) {
+                          return <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">⚠️ Sắp hết (Còn {stock})</span>;
+                        }
+                        return <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-medium text-[10px]">Kho: {stock}</span>;
+                      })()}
+                    </div>
                     <select
                       className="w-full h-10 px-3 rounded-xl border border-gray-300 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
                       value={item.productId}
                       onChange={(e) => handleProductChange(idx, e.target.value)}
                     >
-                      {availableProducts.map((p) => (
-                        <option key={p.product_id} value={p.product_id}>
-                          {p.name} — {p.price.toLocaleString("vi-VN")}đ
-                        </option>
-                      ))}
+                      {availableProducts.map((p) => {
+                        const totalStock = p.variants?.reduce((sum, vr) => sum + (vr.stock || 0), 0) ?? 0;
+                        return (
+                          <option key={p.product_id} value={p.product_id}>
+                            {p.name} — {p.price.toLocaleString("vi-VN")}đ {totalStock <= 0 ? "(Hết hàng)" : `(Kho: ${totalStock})`}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
                   {/* Variant selector */}
                   {hasVariants && (
                     <div className="w-full md:w-44">
-                      <label className="text-[11px] font-bold text-gray-500 mb-1 block">
-                        Phân loại
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-gray-500 block">
+                          Phân loại
+                        </label>
+                        {(() => {
+                          const v = prod?.variants?.find((vr) => vr.variant_id === item.variantId);
+                          const vStock = v?.stock ?? 0;
+                          return (
+                            <span className={`text-[10px] font-bold ${vStock <= 0 ? "text-red-600" : vStock <= 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                              Tồn: {vStock}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       <select
                         className="w-full h-10 px-3 rounded-xl border border-gray-300 bg-white text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
                         value={item.variantId || ""}
@@ -439,7 +466,7 @@ function SaleCreateOrderForm() {
                       >
                         {prod?.variants?.map((v) => (
                           <option key={v.variant_id} value={v.variant_id}>
-                            {v.name} ({(v.price ?? prod.price).toLocaleString("vi-VN")}đ)
+                            {v.name} (Tồn: {v.stock ?? 0})
                           </option>
                         ))}
                       </select>
@@ -484,6 +511,37 @@ function SaleCreateOrderForm() {
               );
             })}
           </div>
+
+          {/* Overstock Warning Banner */}
+          {(() => {
+            const overstockItems = orderItems.filter((it) => {
+              const p = availableProducts.find((prod) => prod.product_id === it.productId);
+              const v = p?.variants?.find((vr) => vr.variant_id === it.variantId) || p?.variants?.[0];
+              const stock = v?.stock ?? p?.variants?.reduce((sum, vr) => sum + (vr.stock || 0), 0) ?? 0;
+              return it.quantity > stock || stock <= 0;
+            });
+
+            if (overstockItems.length === 0) return null;
+
+            return (
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-950">
+                  <span>⚠️</span>
+                  <span>Cảnh báo tồn kho:</span>
+                </div>
+                {overstockItems.map((it, i) => {
+                  const p = availableProducts.find((prod) => prod.product_id === it.productId);
+                  const v = p?.variants?.find((vr) => vr.variant_id === it.variantId) || p?.variants?.[0];
+                  const stock = v?.stock ?? 0;
+                  return (
+                    <p key={i} className="text-[11.5px] text-amber-800">
+                      • <strong>{p?.name} ({v?.name || "Mặc định"})</strong>: Chỉ còn <strong>{stock}</strong> trong kho, nhưng đang chọn <strong>{it.quantity}</strong>.
+                    </p>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Delivery & Payment */}

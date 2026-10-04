@@ -13,7 +13,8 @@ import {
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check } from "lucide-react";
+import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check, Upload, Loader2 } from "lucide-react";
+import { uploadAsset } from "@/lib/services/uploadService";
 
 interface ComboItemSelection {
   product_id: string;
@@ -33,6 +34,80 @@ function getProductTotalStock(prod?: ExtendedProduct | null): number {
     return prod.variants.reduce((acc: number, v: { stock?: number }) => acc + (v.stock || 0), 0);
   }
   return 0;
+}
+
+function normalizeText(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .trim();
+}
+
+function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: ExtendedProduct[]) {
+  if (combo.items && combo.items.length > 0) {
+    return combo.items.map((it: any) => {
+      const pId = it.product_id || it.product?.product_id;
+      const pSlug = it.slug || it.product?.slug;
+      const pName = it.name || it.product?.name;
+      const found = availableProducts.find(
+        (p) =>
+          (pId && p.product_id === pId) ||
+          (pSlug && p.slug === pSlug) ||
+          (pName && normalizeText(p.name) === normalizeText(pName))
+      );
+      const qty = Math.max(1, Number(it.quantity) || 1);
+      const unitPrice = found?.price ?? it.product?.price ?? it.price ?? 40000;
+      return {
+        product_id: found?.product_id || pId,
+        name: found?.name || pName || "Sản phẩm",
+        quantity: qty,
+        price: unitPrice,
+        product: found || it.product,
+      };
+    });
+  }
+
+  const desc = combo.description || "";
+  const cleanedDesc = desc.replace(/^(gồm|bao gồm|set quà gồm)\s*/i, "").trim();
+  if (!cleanedDesc) return [];
+
+  const parts = cleanedDesc.split(/[+,]/);
+  const items: any[] = [];
+  for (const part of parts) {
+    const raw = part.trim();
+    if (!raw) continue;
+    const match = raw.match(/^(\d+)?\s*(.+)$/);
+    const qty = match && match[1] ? Math.max(1, parseInt(match[1])) : 1;
+    const itemName = match && match[2] ? match[2].trim() : raw;
+    const norm = normalizeText(itemName);
+
+    const foundProd = availableProducts.find((p) => {
+      const pNorm = normalizeText(p.name);
+      return norm.includes(pNorm) || pNorm.includes(norm);
+    });
+
+    let price = foundProd?.price;
+    if (!price) {
+      if (norm.includes("pouch") || norm.includes("tui")) price = 85000;
+      else if (norm.includes("kep") || norm.includes("nut ao")) price = 45000;
+      else if (norm.includes("keychain") || norm.includes("moc khoa")) price = 35000;
+      else if (norm.includes("vo") || norm.includes("so")) price = 30000;
+      else if (norm.includes("sticker")) price = 35000;
+      else if (norm.includes("kim chi")) price = 65000;
+      else price = 40000;
+    }
+
+    items.push({
+      product_id: foundProd?.product_id,
+      name: foundProd?.name || itemName,
+      quantity: qty,
+      price,
+      product: foundProd,
+    });
+  }
+  return items;
 }
 
 export default function AdminCombosPage() {
@@ -83,6 +158,31 @@ export default function AdminCombosPage() {
   // Form states for Edit Combo
   const [editComboItems, setEditComboItems] = useState<ComboItemSelection[]>([]);
 
+  // Image upload states
+  const [uploadingCreateThumb, setUploadingCreateThumb] = useState(false);
+  const [uploadingEditThumb, setUploadingEditThumb] = useState(false);
+
+  const handleUploadComboImage = async (
+    file: File,
+    onSuccess: (url: string) => void,
+    setLoading: (v: boolean) => void
+  ) => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const res = await uploadAsset(file, "product-media");
+      if (res.success && res.url) {
+        onSuccess(res.url);
+      } else {
+        alert(`Lỗi tải ảnh: ${res.error || "Không thể tải lên"}`);
+      }
+    } catch (err: any) {
+      alert(`Lỗi kết nối khi tải ảnh: ${err?.message || "Lỗi không xác định"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Add item row in create modal
   const handleAddItemToCreate = () => {
     if (availableProducts.length === 0) return;
@@ -119,10 +219,11 @@ export default function AdminCombosPage() {
       featured: cb.featured ?? true,
       thumbnail: cb.thumbnail || cb.images?.[0] || COMBO_IMAGE_PRESETS[0].url,
     });
-    if (cb.items && cb.items.length > 0) {
+    const resolved = resolveAdminComboItems(cb, availableProducts);
+    if (resolved.length > 0) {
       setEditComboItems(
-        cb.items.map((it: any) => ({
-          product_id: it.product.product_id,
+        resolved.map((it: any) => ({
+          product_id: it.product_id || availableProducts[0]?.product_id || "prod-1",
           quantity: it.quantity,
         }))
       );
@@ -178,9 +279,10 @@ export default function AdminCombosPage() {
 
   // Virtual stock calculation for table row
   const getComboVirtualStock = (cb: ExtendedCombo) => {
-    if (!cb.items || cb.items.length === 0) return 0;
-    const stocks = cb.items.map((it: any) => {
-      const prod = availableProducts.find((p) => p.product_id === it.product?.product_id);
+    const items = resolveAdminComboItems(cb, availableProducts);
+    if (items.length === 0) return 0;
+    const stocks = items.map((it: any) => {
+      const prod = availableProducts.find((p) => p.product_id === it.product_id);
       const stock = getProductTotalStock(prod ?? it.product);
       return Math.floor(stock / Math.max(1, it.quantity));
     });
@@ -188,11 +290,9 @@ export default function AdminCombosPage() {
   };
 
   const getComboRetailTotal = (cb: ExtendedCombo) => {
-    if (!cb.items || cb.items.length === 0) return cb.price;
-    return cb.items.reduce((sum: number, it: any) => {
-      const prod = availableProducts.find((p) => p.product_id === it.product?.product_id);
-      return sum + ((prod?.price ?? it.product?.price ?? 0) * it.quantity);
-    }, 0);
+    const items = resolveAdminComboItems(cb, availableProducts);
+    if (items.length === 0) return cb.price;
+    return items.reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
   };
 
   // Add Combo Submit
@@ -226,6 +326,10 @@ export default function AdminCombosPage() {
         } as ExtendedProduct);
       return {
         product: p,
+        product_id: p.product_id,
+        slug: p.slug,
+        name: p.name,
+        price: p.price,
         quantity: item.quantity,
       };
     });
@@ -243,7 +347,7 @@ export default function AdminCombosPage() {
       images: [thumbnail],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      items: mappedItems,
+      items: mappedItems as any,
     };
 
     saveNewCombo(newCb);
@@ -282,6 +386,10 @@ export default function AdminCombosPage() {
         } as ExtendedProduct);
       return {
         product: p,
+        product_id: p.product_id,
+        slug: p.slug,
+        name: p.name,
+        price: p.price,
         quantity: item.quantity,
       };
     });
@@ -411,6 +519,7 @@ export default function AdminCombosPage() {
                 </tr>
               ) : (
                 combos.map((cb) => {
+                  const items = resolveAdminComboItems(cb, availableProducts);
                   const vStock = getComboVirtualStock(cb);
                   const retailTot = getComboRetailTotal(cb);
                   const saveAmt = Math.max(0, retailTot - cb.price);
@@ -487,13 +596,16 @@ export default function AdminCombosPage() {
 
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap items-center gap-1.5 py-1">
-                          {cb.items?.map((it: any, idx: number) => (
+                          {items.map((it: any, idx: number) => (
                             <span key={idx} className="inline-flex items-center gap-1">
-                              <span className="px-2 py-0.5 rounded-lg bg-[#FFF8EE] border border-[#F0E5D8] font-semibold text-[#342A24] text-[11px]">
-                                {it.product?.name || "Sản phẩm"}{" "}
+                              <span className="px-2 py-0.5 rounded-lg bg-[#FFF8EE] border border-[#F0E5D8] font-semibold text-[#342A24] text-[11px] flex items-center gap-1">
+                                <span>{it.name}</span>
                                 <strong className="text-[#2D6338]">×{it.quantity}</strong>
+                                <span className="text-[9.5px] text-[#7E7068] font-normal">
+                                  ({(it.price || 0).toLocaleString("vi-VN")}đ)
+                                </span>
                               </span>
-                              {idx < (cb.items?.length || 0) - 1 && (
+                              {idx < items.length - 1 && (
                                 <span className="w-4 h-4 rounded-full bg-[#FFE7A8] text-[#542B07] font-black flex items-center justify-center text-[10px] shadow-2xs border border-[#ebd089]">
                                   +
                                 </span>
@@ -503,8 +615,15 @@ export default function AdminCombosPage() {
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <MoneyDisplay amount={cb.price} className="font-extrabold text-[#1B3622] text-sm block" />
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-baseline gap-1.5">
+                          <MoneyDisplay amount={cb.price} className="font-extrabold text-[#1B3622] text-sm block" />
+                          {retailTot > cb.price && (
+                            <span className="text-[10.5px] text-[#A89B92] line-through font-medium">
+                              <MoneyDisplay amount={retailTot} />
+                            </span>
+                          )}
+                        </div>
                         {saveAmt > 0 && (
                           <span className="text-[10.5px] text-amber-700 font-bold block">
                             Tiết kiệm {saveAmt.toLocaleString("vi-VN")}đ ({savePct}%)
@@ -632,18 +751,47 @@ export default function AdminCombosPage() {
                   <div className="relative w-14 h-14 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0">
                     <Image src={thumbnail} alt="Preview" fill className="object-cover" />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <select
-                      value={thumbnail}
-                      onChange={(e) => setThumbnail(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"
-                    >
-                      {COMBO_IMAGE_PRESETS.map((p, idx) => (
-                        <option key={idx} value={p.url}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={thumbnail}
+                        onChange={(e) => setThumbnail(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"
+                      >
+                        {COMBO_IMAGE_PRESETS.map((p, idx) => (
+                          <option key={idx} value={p.url}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#1B3622] font-bold text-xs cursor-pointer transition-colors border border-[#A5D6A7] shrink-0">
+                        {uploadingCreateThumb ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1B3622]" />
+                            <span>Tải ảnh...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Tải ảnh lên</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingCreateThumb}
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleUploadComboImage(file, (url) => setThumbnail(url), setUploadingCreateThumb);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
                     <input
                       type="text"
                       placeholder="Hoặc dán URL ảnh tùy chỉnh..."
@@ -923,18 +1071,51 @@ export default function AdminCombosPage() {
                       className="object-cover"
                     />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <select
-                      value={editingCombo.thumbnail || editingCombo.images?.[0] || COMBO_IMAGE_PRESETS[0].url}
-                      onChange={(e) => setEditingCombo({ ...editingCombo, thumbnail: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"
-                    >
-                      {COMBO_IMAGE_PRESETS.map((p, idx) => (
-                        <option key={idx} value={p.url}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={editingCombo.thumbnail || editingCombo.images?.[0] || COMBO_IMAGE_PRESETS[0].url}
+                        onChange={(e) => setEditingCombo({ ...editingCombo, thumbnail: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"
+                      >
+                        {COMBO_IMAGE_PRESETS.map((p, idx) => (
+                          <option key={idx} value={p.url}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#1B3622] font-bold text-xs cursor-pointer transition-colors border border-[#A5D6A7] shrink-0">
+                        {uploadingEditThumb ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1B3622]" />
+                            <span>Tải ảnh...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Tải ảnh mới</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingEditThumb}
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleUploadComboImage(
+                                file,
+                                (url) => setEditingCombo({ ...editingCombo, thumbnail: url, images: [url] }),
+                                setUploadingEditThumb
+                              );
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
                     <input
                       type="text"
                       placeholder="Hoặc dán URL ảnh tùy chỉnh..."

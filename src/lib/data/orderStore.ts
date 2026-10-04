@@ -41,10 +41,34 @@ export function syncOrdersFromServer(): void {
         const current = getStoredOrders();
         const map = new Map<string, Order>();
         for (const o of current) {
-          map.set(o.order_id || o.order_code, o);
+          const key = (o.order_code || o.order_id || "").trim().toUpperCase();
+          if (key) map.set(key, o);
         }
         for (const sOrd of data.orders) {
-          map.set(sOrd.order_id || sOrd.order_code, sOrd);
+          const key = (sOrd.order_code || sOrd.order_id || "").trim().toUpperCase();
+          if (!key) continue;
+          const existing = map.get(key);
+          const normalized: Order = {
+            ...sOrd,
+            buyer_name:
+              (sOrd.buyer_name && sOrd.buyer_name !== "Khách tại quầy" ? sOrd.buyer_name : null) ||
+              existing?.buyer_name ||
+              sOrd.buyer_name ||
+              "Khách hàng",
+            buyer_phone:
+              (sOrd.buyer_phone && sOrd.buyer_phone !== "—" ? sOrd.buyer_phone : null) ||
+              existing?.buyer_phone ||
+              sOrd.buyer_phone ||
+              "",
+            recipient_name: sOrd.recipient_name || existing?.recipient_name || sOrd.buyer_name,
+            recipient_phone: sOrd.recipient_phone || existing?.recipient_phone || sOrd.buyer_phone,
+            address_detail: sOrd.address_detail || existing?.address_detail || "",
+            source_type: sOrd.source_type || existing?.source_type || "landing_page",
+            introducer_info: sOrd.introducer_info || existing?.introducer_info || null,
+            referral_code: sOrd.referral_code || existing?.referral_code || null,
+            items: (sOrd.items && sOrd.items.length > 0) ? sOrd.items : existing?.items,
+          };
+          map.set(key, existing ? { ...existing, ...normalized } : normalized);
         }
         const merged = Array.from(map.values()).sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -67,9 +91,30 @@ export function getStoredOrders(): Order[] {
   if (cachedOrders !== null) return cachedOrders;
   try {
     const raw = localStorage.getItem("gieomo_orders");
-    const orders: Order[] = raw ? JSON.parse(raw) : [];
-    cachedOrders = orders;
-    return orders;
+    const rawOrders: Order[] = raw ? JSON.parse(raw) : [];
+    // Deduplicate by order_code so duplicate entries are cleanly merged
+    const map = new Map<string, Order>();
+    for (const o of rawOrders) {
+      const code = (o.order_code || o.order_id || "").trim().toUpperCase();
+      if (!code) continue;
+      const existing = map.get(code);
+      if (!existing) {
+        map.set(code, o);
+      } else {
+        const hasRealBuyer = Boolean(o.buyer_name && o.buyer_name !== "Khách tại quầy");
+        const existingHasReal = Boolean(existing.buyer_name && existing.buyer_name !== "Khách tại quầy");
+        if (hasRealBuyer && !existingHasReal) {
+          map.set(code, { ...existing, ...o });
+        } else {
+          map.set(code, { ...o, ...existing });
+        }
+      }
+    }
+    const deduplicated = Array.from(map.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    cachedOrders = deduplicated;
+    return deduplicated;
   } catch (e) {
     console.error("Error reading gieomo_orders from localStorage", e);
     return [];
@@ -215,15 +260,23 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
-    const updated = orders.map((o) =>
-      o.order_id === orderId || o.order_code === orderId
-        ? {
+    const nowIso = new Date().toISOString();
+    const updated = orders.map((o: any) => {
+      if (o.order_id === orderId || o.order_code === orderId) {
+        const timestamps = { ...((o as any).status_timestamps || {}) };
+        timestamps[newStatus] = nowIso;
+        return {
           ...o,
           order_status: newStatus,
-          completed_at: newStatus === "completed" ? new Date().toISOString() : o.completed_at,
-        }
-        : o
-    );
+          status_timestamps: timestamps,
+          confirmed_at: newStatus === "confirmed" ? nowIso : o.confirmed_at,
+          completed_at: newStatus === "completed" ? nowIso : o.completed_at,
+          cancelled_at: newStatus === "cancelled" ? nowIso : o.cancelled_at,
+          updated_at: nowIso,
+        };
+      }
+      return o;
+    });
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
@@ -241,7 +294,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
 
     // Restore stock if order is cancelled
     if (newStatus === "cancelled") {
-      const cancelledOrder = orders.find((o) => o.order_id === orderId || o.order_code === orderId);
+      const cancelledOrder = orders.find((o: any) => o.order_id === orderId || o.order_code === orderId);
       if (cancelledOrder && cancelledOrder.items && cancelledOrder.items.length > 0) {
         try {
           const prods = getStoredProducts();
@@ -251,7 +304,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
             let prodModified = false;
             const updatedVariants = prod.variants?.map((v) => {
               const matchingItem = cancelledOrder.items?.find(
-                (it) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
+                (it: any) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
               );
               if (matchingItem) {
                 prodModified = true;
@@ -340,12 +393,19 @@ export function updateStoredDeliveryStatus(orderCodeOrId: string, deliveryStatus
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
+    const nowIso = new Date().toISOString();
     const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
+        const timestamps = { ...((o as any).status_timestamps || {}) };
+        timestamps[deliveryStatus] = nowIso;
+        if (deliveryStatus === "out_for_delivery") timestamps["shipping"] = nowIso;
+        if (deliveryStatus === "delivered") timestamps["completed"] = nowIso;
         return {
           ...o,
           delivery_status: deliveryStatus,
-          updated_at: new Date().toISOString(),
+          status_timestamps: timestamps,
+          completed_at: deliveryStatus === "delivered" ? nowIso : o.completed_at,
+          updated_at: nowIso,
         };
       }
       return o;
@@ -2231,24 +2291,44 @@ export function syncCombosFromServer(): void {
   safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos")
     .then((data) => {
       if (data?.success && Array.isArray(data.combos)) {
-        const mapped: ExtendedCombo[] = data.combos.map((sC) => ({
-          combo_id: sC.combo_id,
-          name: sC.name,
-          slug: sC.slug,
-          price: Number(sC.price) || 0,
-          description: sC.description || "",
-          thumbnail: sC.image_url || "/images/products/set_combo_1.jpg",
-          status: sC.status || "active",
-          featured: Boolean(sC.featured),
-          sort_order: Number(sC.sort_order) || 1,
-          created_at: sC.created_at || new Date().toISOString(),
-          items: (sC.combo_items || []).map((ci: any) => ({
-            product_id: ci.product_id,
-            quantity: ci.quantity || 1,
-            name: ci.product?.name || "Sản phẩm",
-            slug: ci.product?.slug || "",
-          })),
-        }));
+        const mapped: ExtendedCombo[] = data.combos.map((sC) => {
+          const itemThumb = sC.image_url || sC.thumbnail || "/images/products/set_combo_1.jpg";
+          return {
+            combo_id: sC.combo_id,
+            name: sC.name,
+            slug: sC.slug,
+            price: Number(sC.price) || 0,
+            description: sC.description || "",
+            thumbnail: itemThumb,
+            images: [itemThumb],
+            status: sC.status || "active",
+            featured: Boolean(sC.featured),
+            sort_order: Number(sC.sort_order) || 1,
+            created_at: sC.created_at || new Date().toISOString(),
+            items: (sC.combo_items || []).map((ci: any) => {
+              const p = ci.product || {};
+              return {
+                product_id: ci.product_id,
+                quantity: ci.quantity || 1,
+                name: p.name || "Sản phẩm",
+                slug: p.slug || "",
+                price: Number(p.price) || 0,
+                product: {
+                  product_id: ci.product_id,
+                  name: p.name || "Sản phẩm",
+                  slug: p.slug || "",
+                  price: Number(p.price) || 0,
+                  thumbnail: p.thumbnail || "/images/products/pounch_1.png",
+                  compare_at_price: null,
+                  cost_price: null,
+                  status: "active" as const,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                },
+              };
+            }),
+          };
+        });
         cachedCombos = mapped;
         localStorage.setItem("gieomo_combos", JSON.stringify(mapped));
         window.dispatchEvent(new Event("gieomo_combos_updated"));

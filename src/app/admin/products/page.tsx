@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -14,7 +14,7 @@ import {
   toggleStoredProductFeatured,
 } from "@/lib/data/orderStore";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, AlertTriangle, Eye, Star } from "lucide-react";
+import { Plus, Edit3, Trash2, AlertTriangle, Eye, Star, ShoppingBag } from "lucide-react";
 import { ProductEditModal } from "./ProductEditModal";
 
 export default function AdminProductsPage() {
@@ -49,42 +49,42 @@ export default function AdminProductsPage() {
   }, [products, searchQuery]);
 
   // Toggle active/draft status
-  const handleToggleStatus = (productId: string) => {
+  const handleToggleStatus = useCallback((productId: string) => {
     const target = products.find((p) => p.product_id === productId);
     if (!target) return;
     const newStatus = target.status === "active" ? "draft" : "active";
     toggleStoredProductStatus(productId, newStatus);
     setProducts(getStoredProducts());
-  };
+  }, [products]);
 
   // Toggle featured status for homepage
-  const handleToggleFeatured = (productId: string) => {
+  const handleToggleFeatured = useCallback((productId: string) => {
     const target = products.find((p) => p.product_id === productId);
     if (!target) return;
     const newFeatured = !target.featured;
     toggleStoredProductFeatured(productId, newFeatured);
     setProducts(getStoredProducts());
-  };
+  }, [products]);
 
   // Start editing product - instant single state update
-  const handleStartEdit = (p: ExtendedProduct) => {
+  const handleStartEdit = useCallback((p: ExtendedProduct) => {
     setEditingProduct(p);
-  };
+  }, []);
 
   // Save edited product
-  const handleSaveEdit = async (updated: ExtendedProduct) => {
+  const handleSaveEdit = useCallback(async (updated: ExtendedProduct) => {
     await updateStoredProduct(updated);
     setProducts(getStoredProducts());
     setEditingProduct(null);
-  };
+  }, []);
 
   // Confirm delete product
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = useCallback(() => {
     if (!deletingProduct) return;
     deleteStoredProduct(deletingProduct.product_id);
     setProducts(getStoredProducts());
     setDeletingProduct(null);
-  };
+  }, [deletingProduct]);
 
 
 
@@ -102,6 +102,15 @@ export default function AdminProductsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/admin/orders/create"
+            className="px-4 py-2.5 rounded-full border border-[#1B3622] text-[#1B3622] hover:bg-[#1B3622] hover:text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-xs"
+            title="Nhập đơn đặt hộ"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Nhập đơn đặt hộ</span>
+          </Link>
+
           <Link
             href="/admin/products/new"
             className="px-5 py-2.5 rounded-full bg-[#1B3622] hover:bg-[#132819] text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95"
@@ -200,6 +209,11 @@ export default function AdminProductsPage() {
 
                     <td className="py-2.5 px-2.5 whitespace-nowrap">
                       <MoneyDisplay amount={p.price} className="font-extrabold text-[#1B3622] block text-xs" />
+                      {p.compare_at_price && (
+                        <span className="text-[9.5px] text-[#A89B92] block line-through">
+                          <MoneyDisplay amount={p.compare_at_price} />
+                        </span>
+                      )}
                       {p.cost_price && (
                         <span className="text-[9.5px] text-[#A89B92] block">
                           Vốn: <MoneyDisplay amount={p.cost_price} />
@@ -261,7 +275,16 @@ export default function AdminProductsPage() {
                     </td>
 
                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/admin/orders/create?productId=${p.product_id}`}
+                          className="px-2 py-1 rounded-xl text-[10px] font-bold bg-[#E8F5E9] text-[#1B3622] hover:bg-[#1B3622] hover:text-white transition-all flex items-center gap-1 shadow-2xs border border-[#C8E6C9]"
+                          title="Tạo đơn đặt hộ cho sản phẩm này"
+                        >
+                          <ShoppingBag className="w-3 h-3" />
+                          <span>+ Đơn</span>
+                        </Link>
+
                         <Link
                           href={`/products/${p.slug}`}
                           target="_blank"

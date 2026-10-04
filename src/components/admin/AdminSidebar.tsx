@@ -52,9 +52,6 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/dashboard", label: "Tổng quan (Dashboard)", icon: LayoutDashboard },
     { href: "/admin/notifications", label: "Hộp thư thông báo", icon: Bell, badge: unreadCount },
     { href: "/admin/orders", label: "Tất cả đơn hàng", icon: ShoppingBag },
-    { href: "/admin/orders?tab=my_orders", label: "Đơn cá nhân của tôi", icon: UserCheck, isPersonal: true },
-    { href: "/admin/orders?tab=by_btc", label: "Đơn theo từng BTC", icon: Users, isBtcGroup: true },
-    { href: "/admin/orders/create", label: "Nhập đơn hộ", icon: Package },
     { href: "/admin/products", label: "Sản phẩm", icon: Boxes },
     { href: "/admin/combos", label: "Set Combo", icon: Package },
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
@@ -138,22 +135,12 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   isActive
                     ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
-                    : item.isPersonal
-                    ? "text-[#BFE9C3] hover:bg-[#203728] hover:text-white pl-5"
-                    : item.isBtcGroup
-                    ? "text-[#FFE7A8] hover:bg-[#203728] hover:text-white pl-5"
                     : "text-[#C8BEB2] hover:bg-[#203728] hover:text-white"
                 }`}
               >
                 <Icon
                   className={`w-4 h-4 shrink-0 ${
-                    isActive
-                      ? "text-[#16381D]"
-                      : item.isPersonal
-                      ? "text-[#BFE9C3]"
-                      : item.isBtcGroup
-                      ? "text-[#FFE7A8]"
-                      : "text-[#BFE9C3]"
+                    isActive ? "text-[#16381D]" : "text-[#BFE9C3]"
                   }`}
                 />
                 <span className="truncate">{item.label}</span>

@@ -58,12 +58,23 @@ function TrackContent() {
 
       if (profile) setSavedProfile(profile);
 
-      // Find orders matching this device
-      const localOrders = allOrders.filter(
-        (o) =>
-          myCodes.includes(o.order_code) ||
-          (profile?.phone && (o.buyer_phone === profile.phone || o.recipient_phone === profile.phone))
-      );
+      // Find orders matching this device (deduplicated by order_code)
+      const seenCodes = new Set<string>();
+      const localOrders: Order[] = [];
+      for (const o of allOrders) {
+        const code = (o.order_code || o.order_id || "").trim().toUpperCase();
+        if (seenCodes.has(code)) continue;
+        const matchesCode = myCodes.includes(o.order_code);
+        const matchesPhone = Boolean(
+          profile?.phone &&
+          (o.buyer_phone?.replace(/\s+/g, "") === profile.phone.replace(/\s+/g, "") ||
+           o.recipient_phone?.replace(/\s+/g, "") === profile.phone.replace(/\s+/g, ""))
+        );
+        if (matchesCode || matchesPhone) {
+          seenCodes.add(code);
+          localOrders.push(o);
+        }
+      }
       setDeviceOrders(localOrders);
 
       // If URL has code, search directly
@@ -529,6 +540,33 @@ function TrackContent() {
                 const isPassed = idx <= currentStepIndex;
                 const isCurrent = idx === currentStepIndex;
 
+                const getStepTimestamp = () => {
+                  if (idx > currentStepIndex) return null;
+                  const timestamps = (selectedOrder as any).status_timestamps || {};
+                  if (timestamps[step.key]) return timestamps[step.key];
+                  if (step.key === "pending") return selectedOrder.created_at;
+                  if (step.key === "confirmed") return selectedOrder.confirmed_at || (idx <= currentStepIndex ? selectedOrder.updated_at || selectedOrder.created_at : null);
+                  if (step.key === "processing") return timestamps["processing"] || (idx <= currentStepIndex ? selectedOrder.updated_at || selectedOrder.created_at : null);
+                  if (step.key === "shipping") return timestamps["shipping"] || timestamps["out_for_delivery"] || (idx <= currentStepIndex ? selectedOrder.updated_at || selectedOrder.created_at : null);
+                  if (step.key === "completed") return selectedOrder.completed_at || timestamps["delivered"] || selectedOrder.updated_at;
+                  return null;
+                };
+
+                const rawTime = getStepTimestamp();
+                let timeStr: string | null = null;
+                if (rawTime) {
+                  try {
+                    const d = new Date(rawTime);
+                    if (!isNaN(d.getTime())) {
+                      const t = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+                      const dt = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+                      timeStr = `${t} ${dt}`;
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }
+
                 return (
                   <div key={step.key} className="relative z-10 flex flex-col items-center">
                     <div
@@ -547,6 +585,11 @@ function TrackContent() {
                     >
                       {step.label}
                     </span>
+                    {timeStr && isPassed && (
+                      <span className="text-[9px] font-mono font-medium text-emerald-800 bg-[#EAF7ED] px-1.5 py-0.5 rounded border border-[#BFE9C3] mt-1 whitespace-nowrap shadow-2xs">
+                        {timeStr}
+                      </span>
+                    )}
                   </div>
                 );
               })}

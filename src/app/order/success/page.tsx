@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Suspense, useState, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { getStoredOrders, getStoredSettings, getStoredVouchers, DEFAULT_SETTINGS, type SiteSettings } from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
 import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift } from "lucide-react";
+import { compressImage } from "@/lib/utils/imageCompressor";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
@@ -44,6 +46,29 @@ function OrderSuccessContent() {
     }
   }, [orderCode]);
 
+  const isPaid = (order?.payment_status === "paid") || hasConfirmedPayment || paymentMethod === "cod";
+
+  // Polling for VietQR payment confirmation (every 2.5s)
+  useEffect(() => {
+    if (isPaid || !orderCode || paymentMethod !== "banking") return;
+    const interval = setInterval(() => {
+      fetch(`/api/orders?code=${encodeURIComponent(orderCode)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
+            const latest = data.orders[0];
+            if (latest.payment_status === "paid") {
+              setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
+              setHasConfirmedPayment(true);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isPaid, orderCode, paymentMethod]);
+
   const finalAmount = order ? order.final_amount : urlAmount;
 
   const bankAccount = {
@@ -65,14 +90,23 @@ function OrderSuccessContent() {
     setTimeout(() => setCopiedItem(null), 2000);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setProofImage(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setProofImage(event.target?.result as string);
+      };
+      reader.readAsDataURL(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setProofImage(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleConfirmPaymentSubmit = () => {
@@ -117,23 +151,23 @@ function OrderSuccessContent() {
     // Header Tag
     ctx.fillStyle = "#BFE9C3";
     ctx.beginPath();
-    ctx.roundRect(340, 120, 400, 70, 35);
+    ctx.roundRect(310, 110, 460, 80, 40);
     ctx.fill();
 
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 28px sans-serif";
+    ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌱 TẠP HÓA GIEO MƠ", 540, 165);
+    ctx.fillText("🌱 TẠP HÓA GIEO MƠ", 540, 160);
 
     // Subtitle
     ctx.fillStyle = "#7E7068";
     ctx.font = "italic 24px sans-serif";
-    ctx.fillText("Dự Án Gây Quỹ Thiện Nguyện Của Mầm Mơ", 540, 230);
+    ctx.fillText("Dự Án Gây Quỹ Thiện Nguyện Của Mầm Mơ", 540, 225);
 
-    // Decorative Floral / Sparkle Icon
+    // Decorative Floral / Sewing Sparkle
     ctx.fillStyle = "#2D6338";
-    ctx.font = "50px sans-serif";
-    ctx.fillText("🧵 ✨ 🌿", 540, 305);
+    ctx.font = "46px sans-serif";
+    ctx.fillText("🧵  ✨  🌿  ✨  ✂️", 540, 295);
 
     // Main Quote Box
     ctx.fillStyle = "#16381D";
@@ -248,8 +282,6 @@ function OrderSuccessContent() {
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
-
-  const isPaid = order?.payment_status === "paid" || hasConfirmedPayment;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-center">
@@ -530,61 +562,113 @@ function OrderSuccessContent() {
         </div>
       )}
 
-      {/* SOCIAL SHARE CARD & STORY SECTION */}
-      <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
-          <div>
-            <h3 className="font-heading font-extrabold text-base text-emerald-950 flex items-center gap-2">
-              <span>🌱</span>
-              <span>Thẻ mua hàng gây quỹ &amp; Lan tỏa cùng Mầm Mơ</span>
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5 italic">
+      {/* AWAITING PAYMENT NOTICE */}
+      {!isPaid && paymentMethod === "banking" && (
+        <div className="p-4.5 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-1.5 animate-in fade-in">
+          <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-900">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
+            <span>Đang chờ nhận chuyển khoản qua VietQR (Tự động cập nhật tức thì)</span>
+          </div>
+          <p className="text-[11.5px] text-amber-700">
+            Thẻ chứng nhận gây quỹ &amp; quà tặng sẽ xuất hiện tại đây ngay khi giao dịch được xác nhận.
+          </p>
+        </div>
+      )}
+
+      {/* SOCIAL SHARE CARD & STORY SECTION — ONLY SHOWN ONCE PAID */}
+      {isPaid && (
+        <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-emerald-200 shadow-md text-left space-y-5 animate-in zoom-in-95">
+          {/* Success Banner */}
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+            <span className="text-2xl">🎉</span>
+            <div>
+              <span className="text-xs font-extrabold text-emerald-950 block">
+                Thanh toán thành công! Gieo Mơ chân thành cảm ơn tấm lòng của bạn!
+              </span>
+              <span className="text-[11px] text-emerald-700">
+                Dưới đây là Thẻ chứng nhận mua hàng gây quỹ dành riêng cho bạn:
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-emerald-400 shadow-xs bg-white shrink-0">
+                <Image src="/images/logo.png" alt="Gieo Mơ" fill sizes="40px" className="object-cover" />
+              </div>
+              <div>
+                <h3 className="font-heading font-extrabold text-base text-emerald-950 flex items-center gap-1.5">
+                  <span>Thẻ mua hàng gây quỹ &amp; Lan tỏa cùng Mầm Mơ</span>
+                </h3>
+                <p className="text-xs text-gray-500 italic mt-0.5">&ldquo;{shareQuote}&rdquo;</p>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer self-start sm:self-auto">
+              <input
+                type="checkbox"
+                checked={hidePriceOnCard}
+                onChange={(e) => setHidePriceOnCard(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+              />
+              <span>Ẩn giá tiền trên thẻ</span>
+            </label>
+          </div>
+
+          {/* Card Preview Banner Mockup */}
+          <div className="relative rounded-2xl overflow-hidden border-2 border-dashed border-emerald-300 bg-linear-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#EAF7ED] p-5 text-center space-y-3 shadow-inner">
+            <div className="flex items-center justify-center gap-2">
+              <div className="relative w-8 h-8 rounded-full overflow-hidden border border-emerald-400 bg-white">
+                <Image src="/images/logo.png" alt="Logo" fill sizes="32px" className="object-cover" />
+              </div>
+              <span className="text-xs font-extrabold text-[#1B3622] tracking-wide uppercase">
+                TẠP HÓA GIEO MƠ • MẦM MƠ
+              </span>
+            </div>
+
+            <div className="p-3 bg-white/90 rounded-2xl border border-emerald-100 shadow-xs inline-block max-w-sm mx-auto w-full">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">CHỨNG NHẬN NGƯỜI GIEO MẦM</span>
+              <h4 className="font-heading font-black text-lg text-emerald-950 mt-0.5">
+                {order?.buyer_name || "Bạn đọc hảo tâm"}
+              </h4>
+              <span className="text-xs font-mono font-bold text-emerald-700 block mt-0.5">
+                Mã đơn: #{orderCode}
+              </span>
+            </div>
+
+            <p className="text-xs text-[#2D6338] italic font-medium max-w-md mx-auto">
               &ldquo;{shareQuote}&rdquo;
             </p>
           </div>
-          <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer self-start sm:self-auto">
-            <input
-              type="checkbox"
-              checked={hidePriceOnCard}
-              onChange={(e) => setHidePriceOnCard(e.target.checked)}
-              className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-            />
-            <span>Ẩn giá tiền trên thẻ</span>
-          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="px-4 py-3 rounded-2xl bg-cream hover:bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
+            >
+              <span>👁️ Xem trước thẻ Story</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadShareCard}
+              className="px-4 py-3 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all border border-[#9ed4a3] active:scale-98 shadow-2xs"
+            >
+              <Download className="w-4 h-4" />
+              <span>Tải thẻ Story (PNG)</span>
+            </button>
+
+            <a
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://mammo.vn")}&quote=${encodeURIComponent(shareQuote)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
+            >
+              <span>f Chia sẻ Facebook</span>
+            </a>
+          </div>
         </div>
-
-        <p className="text-xs text-gray-600 leading-relaxed">
-          Hãy cùng chia sẻ tấm thẻ chứng nhận ấm áp này lên Story Instagram hoặc Facebook để lan tỏa thông điệp gây quỹ yêu thương tới bạn bè nhé!
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={() => setIsShareModalOpen(true)}
-            className="px-4 py-3 rounded-2xl bg-cream hover:bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
-          >
-            <span>👁️ Xem trước thẻ Story</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDownloadShareCard}
-            className="px-4 py-3 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all border border-[#9ed4a3] active:scale-98 shadow-2xs"
-          >
-            <Download className="w-4 h-4" />
-            <span>Tải thẻ Story (PNG)</span>
-          </button>
-
-          <a
-            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://mammo.vn")}&quote=${encodeURIComponent(shareQuote)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
-          >
-            <span>f Chia sẻ Facebook</span>
-          </a>
-        </div>
-      </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
@@ -625,33 +709,44 @@ function OrderSuccessContent() {
               id="story-card-mockup"
               className="relative p-6 rounded-3xl bg-linear-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#EAF7ED] border-4 border-dashed border-[#BFE9C3] shadow-md space-y-4 text-center overflow-hidden"
             >
-              <div className="inline-block px-3 py-1 rounded-full bg-soft-green text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
-                🌱 TẠP HÓA GIEO MƠ • MẦM MƠ
+              {/* Header with Official Logo */}
+              <div className="flex items-center justify-center gap-2.5">
+                <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-emerald-400 bg-white shadow-xs">
+                  <Image src="/images/logo.png" alt="Logo" fill sizes="36px" className="object-cover" />
+                </div>
+                <div className="text-left">
+                  <span className="text-[11px] font-extrabold text-emerald-950 tracking-wider uppercase block leading-none">
+                    TẠP HÓA GIEO MƠ
+                  </span>
+                  <span className="text-[9.5px] text-[#7E7068] font-medium leading-none mt-0.5 block">
+                    Dự án gây quỹ Mầm Mơ
+                  </span>
+                </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 shadow-2xs space-y-1">
-                <p className="font-heading font-bold text-xs text-gray-500 uppercase">
+              <div className="p-3.5 rounded-2xl bg-white/95 border border-emerald-100 shadow-2xs space-y-1">
+                <p className="font-heading font-bold text-[10.5px] text-gray-400 uppercase tracking-widest">
                   Chứng nhận người gieo mầm
                 </p>
-                <h4 className="font-heading font-extrabold text-lg text-emerald-950">
+                <h4 className="font-heading font-extrabold text-xl text-emerald-950">
                   {order?.buyer_name || "Bạn đọc hảo tâm"}
                 </h4>
-                <p className="text-[11px] font-mono text-emerald-700 font-bold">
-                  Mã đơn: {orderCode}
+                <p className="text-xs font-mono text-emerald-700 font-bold">
+                  Mã đơn: #{orderCode}
                 </p>
               </div>
 
               {/* Quote */}
               <div className="p-4 rounded-2xl bg-emerald-900 text-white space-y-1.5 shadow-sm">
                 <span className="text-lg">✨</span>
-                <p className="font-heading font-extrabold text-sm sm:text-base leading-snug">
+                <p className="font-heading font-extrabold text-sm leading-snug">
                   &ldquo;{shareQuote}&rdquo;
                 </p>
               </div>
 
               {/* Items summary */}
-              <div className="text-left text-xs bg-white/80 p-3 rounded-2xl border border-gray-200/60 space-y-1">
-                <span className="text-[10.5px] font-bold text-gray-500 block uppercase">Sản phẩm ủng hộ:</span>
+              <div className="text-left text-xs bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 space-y-1">
+                <span className="text-[10px] font-bold text-gray-500 block uppercase tracking-wider">Sản phẩm ủng hộ:</span>
                 <div className="divide-y divide-gray-100 max-h-24 overflow-y-auto">
                   {(order?.items && order.items.length > 0 ? order.items : [{ item_name_snapshot: "Sản phẩm may thủ công Mầm Mơ", quantity: 1 }]).map((it: any, idx: number) => (
                     <div key={idx} className="py-1 flex justify-between items-center text-[11.5px]">

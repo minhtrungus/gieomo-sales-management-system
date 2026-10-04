@@ -281,6 +281,7 @@ export interface Order {
   completed_at?: string | null;
   cancelled_at?: string | null;
   updated_at?: string;
+  status_timestamps?: Record<string, string>;
   // Joined
   customer?: Customer;
   seller?: Member;

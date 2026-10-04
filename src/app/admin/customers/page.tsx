@@ -28,25 +28,40 @@ export default function AdminCustomersPage() {
       const custRaw = typeof window !== "undefined" ? localStorage.getItem("gieomo_customers") : null;
       const localCusts: CustomerRecord[] = custRaw ? JSON.parse(custRaw) : [];
 
-      // Map phone -> customer record
+      // Map phone -> customer record & set of counted order codes
       const map = new Map<string, CustomerRecord>();
+      const orderCodesByPhone = new Map<string, Set<string>>();
 
-      // Merge local saved customers
+      // Seed customer info from localCusts (reset counters to 0 so orders are not double-counted)
       for (const lc of localCusts) {
         const cleanP = lc.phone?.replace(/\s+/g, "");
         if (cleanP) {
           map.set(cleanP, {
             ...lc,
             phone: cleanP,
+            totalOrders: 0,
+            totalSpent: 0,
           });
+          orderCodesByPhone.set(cleanP, new Set<string>());
         }
       }
 
-      // Aggregate dynamically from all stored orders in single linear O(N) pass
+      // Aggregate dynamically from all stored orders by unique order_code
       for (const ord of orders) {
         const rawPhone = ord.buyer_phone || ord.recipient_phone;
-        if (!rawPhone) continue;
+        if (!rawPhone || rawPhone === "—") continue;
         const cleanPhone = rawPhone.replace(/\s+/g, "");
+        if (!cleanPhone) continue;
+
+        const orderCode = (ord.order_code || ord.order_id).trim().toUpperCase();
+        let seen = orderCodesByPhone.get(cleanPhone);
+        if (!seen) {
+          seen = new Set<string>();
+          orderCodesByPhone.set(cleanPhone, seen);
+        }
+        if (seen.has(orderCode)) continue; // skip duplicate order!
+        seen.add(orderCode);
+
         const amount = ord.final_amount || 0;
         const intro = ord.introducer_info || (ord.referral_code ? `Mã: ${ord.referral_code}` : null);
 
@@ -54,7 +69,9 @@ export default function AdminCustomersPage() {
         if (existing) {
           existing.totalOrders += 1;
           existing.totalSpent += amount;
-          if (ord.buyer_name && !existing.fullName) existing.fullName = ord.buyer_name;
+          if (ord.buyer_name && (!existing.fullName || existing.fullName === "Khách hàng" || existing.fullName === "Khách tại quầy")) {
+            existing.fullName = ord.buyer_name;
+          }
           if (ord.buyer_email && !existing.email) existing.email = ord.buyer_email;
           if (ord.address_detail && !existing.address) {
             existing.address = `${ord.address_detail}, ${ord.district || ""}, ${ord.province || ""}`;
@@ -65,7 +82,7 @@ export default function AdminCustomersPage() {
         } else {
           map.set(cleanPhone, {
             customerId: `cust-${cleanPhone}`,
-            fullName: ord.buyer_name || ord.recipient_name || "Khách hàng",
+            fullName: (ord.buyer_name && ord.buyer_name !== "Khách tại quầy") ? ord.buyer_name : (ord.recipient_name || "Khách hàng"),
             phone: cleanPhone,
             email: ord.buyer_email || "",
             address: `${ord.address_detail || ""}, ${ord.district || ""}, ${ord.province || ""}`,

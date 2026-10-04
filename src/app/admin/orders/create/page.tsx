@@ -421,6 +421,37 @@ export default function AdminCreateOrderPage() {
                 );
               })}
             </div>
+
+            {/* Overstock Warning Alert */}
+            {(() => {
+              const overstockItems = orderItems.filter((it) => {
+                const prod = availableProducts.find((p) => p.product_id === it.productId);
+                const v = prod?.variants?.find((vr) => vr.variant_id === it.variantId) || prod?.variants?.[0];
+                const stock = v?.stock ?? prod?.variants?.reduce((sum, vr) => sum + (vr.stock || 0), 0) ?? 0;
+                return it.quantity > stock || stock <= 0;
+              });
+
+              if (overstockItems.length === 0) return null;
+
+              return (
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1 mt-3">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-950">
+                    <span>⚠️</span>
+                    <span>Cảnh báo số lượng tồn kho:</span>
+                  </div>
+                  {overstockItems.map((it, i) => {
+                    const prod = availableProducts.find((p) => p.product_id === it.productId);
+                    const v = prod?.variants?.find((vr) => vr.variant_id === it.variantId) || prod?.variants?.[0];
+                    const stock = v?.stock ?? 0;
+                    return (
+                      <p key={i} className="text-[11.5px] text-amber-800">
+                        • <strong>{prod?.name} ({v?.name || "Mặc định"})</strong>: Chỉ còn <strong>{stock}</strong> sản phẩm trong kho (đang nhập <strong>{it.quantity}</strong>).
+                      </p>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Delivery & Address */}

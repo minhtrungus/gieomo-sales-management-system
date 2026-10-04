@@ -118,18 +118,37 @@ export async function POST(request: Request) {
       
       const itemRows = [];
       for (const it of body.items) {
-        let pId = it.product_id;
-        const isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId);
-        if (!isProdUuid && it.slug) {
+        let pId = it.product_id || it.product?.product_id;
+        let isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId);
+        const slug = it.slug || it.product?.slug;
+        const name = it.name || it.product?.name;
+
+        if (!isProdUuid && slug) {
           const { data: pData } = await supabase
             .from("products")
             .select("product_id")
-            .eq("slug", it.slug)
+            .eq("slug", slug)
             .maybeSingle();
-          if (pData) pId = pData.product_id;
+          if (pData) {
+            pId = pData.product_id;
+            isProdUuid = true;
+          }
         }
 
-        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId)) {
+        if (!isProdUuid && name) {
+          const { data: pNameData } = await supabase
+            .from("products")
+            .select("product_id")
+            .ilike("name", `%${name}%`)
+            .limit(1)
+            .maybeSingle();
+          if (pNameData) {
+            pId = pNameData.product_id;
+            isProdUuid = true;
+          }
+        }
+
+        if (isProdUuid) {
           itemRows.push({
             combo_id: savedComboId,
             product_id: pId,

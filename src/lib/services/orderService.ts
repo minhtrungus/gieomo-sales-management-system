@@ -221,7 +221,13 @@ export async function getOrdersServer(options?: {
         delivery_status,
         payment_method,
         customer_note,
+        source_type,
+        introducer_info,
+        seller_id,
         created_at,
+        confirmed_at,
+        completed_at,
+        cancelled_at,
         customers (
           customer_id,
           full_name,
@@ -232,6 +238,7 @@ export async function getOrdersServer(options?: {
           order_item_id,
           item_name_snapshot,
           variant_name_snapshot,
+          sku_snapshot,
           quantity,
           unit_price,
           subtotal
@@ -255,7 +262,28 @@ export async function getOrdersServer(options?: {
       console.error("[getOrdersServer] DB Error:", error);
       return [];
     }
-    return data || [];
+
+    return (data || []).map((row: any) => ({
+      ...row,
+      buyer_name: row.customers?.full_name || row.receiver_name || "Khách hàng",
+      buyer_phone: row.customers?.phone || row.receiver_phone || "",
+      buyer_email: row.customers?.email || "",
+      recipient_name: row.receiver_name,
+      recipient_phone: row.receiver_phone,
+      address_detail: row.shipping_address_snapshot || "",
+      items: (row.order_items || []).map((it: any) => ({
+        order_item_id: it.order_item_id,
+        order_id: row.order_id,
+        item_name_snapshot: it.item_name_snapshot,
+        product_name: it.item_name_snapshot,
+        variant_name: it.variant_name_snapshot,
+        sku: it.sku_snapshot,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        price: it.unit_price,
+        subtotal: it.subtotal,
+      })),
+    }));
   } catch (err) {
     console.error("[getOrdersServer] Exception:", err);
     return [];

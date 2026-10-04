@@ -18,14 +18,15 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
   // Initialize form state once from product
   const [name, setName] = useState(product.name || "");
   const [price, setPrice] = useState(product.price || 0);
+  const [compareAtPrice, setCompareAtPrice] = useState<number | "">(product.compare_at_price ?? "");
   const [costPrice, setCostPrice] = useState<number | "">(product.cost_price ?? "");
   const [status, setStatus] = useState<"active" | "draft" | "archived">(product.status || "active");
   const [featured, setFeatured] = useState<boolean>(product.featured ?? false);
 
-  const initialWh1 = Number(product.variants?.[0]?.stock_warehouse_1) || 0;
-  const initialWh2 = Number(product.variants?.[0]?.stock_warehouse_2) || 0;
-  const [stockWh1, setStockWh1] = useState(initialWh1);
-  const [stockWh2, setStockWh2] = useState(initialWh2);
+  // Stock is read-only in edit modal — must be managed via inventory receipts
+  const totalStock = product.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? 0;
+  const stockWh1 = Number(product.variants?.[0]?.stock_warehouse_1) || 0;
+  const stockWh2 = Number(product.variants?.[0]?.stock_warehouse_2) || 0;
 
   // Images
   const [thumbnail, setThumbnail] = useState(product.thumbnail || "/images/products/pounch_1.png");
@@ -170,23 +171,12 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
 
     const finalThumb = thumbnail.trim() || images[0] || "/images/products/pounch_1.png";
     const finalImages = Array.from(new Set([finalThumb, ...images])).filter(Boolean);
+    const finalCompareAtPrice = compareAtPrice === "" ? null : Number(compareAtPrice);
 
     // Update variant warehouse stock and ensure valid SKU
+    // Preserve existing stock values — stock changes must go through inventory receipts
     const updatedVariants = variants.map((v, i) => {
       const ensuredSku = v.sku?.trim() || generateSku(name, v.name || "", i);
-      if (i === 0) {
-        const whStocks = { ...(v.warehouse_stocks || {}) };
-        whStocks["wh-1"] = stockWh1;
-        whStocks["wh-2"] = stockWh2;
-        return {
-          ...v,
-          sku: ensuredSku,
-          stock_warehouse_1: stockWh1,
-          stock_warehouse_2: stockWh2,
-          warehouse_stocks: whStocks,
-          stock: stockWh1 + stockWh2,
-        };
-      }
       return {
         ...v,
         sku: ensuredSku,
@@ -197,6 +187,7 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       ...product,
       name: name.trim(),
       price: Number(price) || 0,
+      compare_at_price: finalCompareAtPrice,
       cost_price: costPrice === "" ? null : Number(costPrice),
       status,
       featured,
@@ -257,8 +248,8 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
             />
           </div>
 
-          {/* Giá bán & Giá vốn */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Giá bán, Giá so sánh & Giá vốn — 3 loại giá */}
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="font-bold text-[#342A24] block">Giá bán (VNĐ) *</label>
               <input
@@ -271,12 +262,23 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
             </div>
 
             <div className="space-y-1">
-              <label className="font-bold text-[#342A24] block">Giá vốn (Cost price)</label>
+              <label className="font-bold text-[#342A24] block">Giá gốc (Gạch ngang)</label>
+              <input
+                type="number"
+                value={compareAtPrice}
+                onChange={(e) => setCompareAtPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                placeholder="Hiển thị gạch ngang"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] text-gray-600"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-bold text-[#342A24] block">Giá vốn (Cost)</label>
               <input
                 type="number"
                 value={costPrice}
                 onChange={(e) => setCostPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] text-gray-500"
               />
             </div>
           </div>
@@ -620,45 +622,40 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
           )}
 
           {/* ========================================================
-              PHÂN BỔ TỒN KHO 2 KHO
+              TỒN KHO (CHỈ XEM — KHÔNG CHO SỬA TRỰC TIẾP)
               ======================================================== */}
           <div className="p-3.5 rounded-2xl bg-cream/70 border border-[#F0E5D8] space-y-2">
-            <label className="font-extrabold text-emerald-950 uppercase tracking-wider block">
-              Phân bổ tồn kho giữa 2 kho hàng
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-bold text-emerald-900 block flex items-center gap-1">
-                  <span>📍 Kho 1: Trung Tâm (Quận 3)</span>
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stockWh1}
-                  onChange={(e) => setStockWh1(Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border border-emerald-300 text-xs font-bold text-emerald-950 bg-white"
-                />
+            <div className="flex items-center justify-between">
+              <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
+                📦 Tồn kho hiện tại
+              </label>
+              <a
+                href="/admin/inventory"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors shadow-xs"
+              >
+                📋 Tạo phiếu nhập/xuất kho
+              </a>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-2.5 rounded-xl bg-white border border-emerald-200 text-center">
+                <div className="text-[10px] text-gray-500 font-bold uppercase">📍 Kho 1 (Q.3)</div>
+                <div className="text-lg font-extrabold text-emerald-950 mt-0.5">{stockWh1}</div>
               </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-[#542B07] block flex items-center gap-1">
-                  <span>📍 Kho 2: Cơ Sở 2 (Thủ Đức)</span>
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stockWh2}
-                  onChange={(e) => setStockWh2(Number(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-[#542B07] bg-white"
-                />
+              <div className="p-2.5 rounded-xl bg-white border border-amber-200 text-center">
+                <div className="text-[10px] text-gray-500 font-bold uppercase">📍 Kho 2 (T.Đức)</div>
+                <div className="text-lg font-extrabold text-[#542B07] mt-0.5">{stockWh2}</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-center">
+                <div className="text-[10px] text-gray-500 font-bold uppercase">Tổng cộng</div>
+                <div className="text-lg font-extrabold text-emerald-900 mt-0.5">{totalStock}</div>
               </div>
             </div>
-            <div className="text-[11px] text-gray-500 flex justify-between pt-1">
-              <span>Tổng tồn toàn hệ thống:</span>
-              <strong className="text-emerald-900">
-                {stockWh1 + stockWh2} sản phẩm
-              </strong>
-            </div>
+            <p className="text-[10.5px] text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 border border-amber-200/60 flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>Số lượng tồn kho không thể sửa trực tiếp tại đây. Vui lòng tạo <strong>Phiếu nhập kho</strong> hoặc <strong>Phiếu xuất kho</strong> để đảm bảo chứng từ rõ ràng và tồn kho chính xác.</span>
+            </p>
           </div>
 
           {/* ========================================================
