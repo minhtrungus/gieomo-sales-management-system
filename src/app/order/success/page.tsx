@@ -210,23 +210,33 @@ function OrderSuccessContent() {
     return vouchers.find((v) => finalAmount >= (v.gift_min_order_value || 0)) || null;
   }, [finalAmount]);
 
-  // Generate and download High-Res 9:16 Social Story PNG (1080 x 1920)
-  const handleDownloadShareCard = async () => {
+  // State for card generation
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  // Generate High-Res 9:16 Social Story Canvas (1080 x 1920)
+  const generateShareCanvas = async (): Promise<HTMLCanvasElement | null> => {
+    // Wait for custom fonts to be ready
+    try {
+      if (typeof document !== "undefined" && document.fonts) {
+        await document.fonts.ready;
+      }
+    } catch {
+      // ignore
+    }
+
     const canvas = document.createElement("canvas");
     canvas.width = 1080;
     canvas.height = 1920;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return null;
 
-    const customerName = order?.buyer_name || "Bạn đọc hảo tâm";
+    const customerName = (order?.buyer_name || "Bạn đọc hảo tâm").trim();
     const now = new Date();
     const dateStr = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
     const orderItems = order?.items && order.items.length > 0
       ? order.items
       : [{ item_name_snapshot: "Pouch May Thủ Công Gieo Mơ", quantity: 1 }];
-    const giftPackageName = orderItems
-      .map((it: any) => it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm may thủ công")
-      .join(", ");
 
     // 1. Background Gradient (warm artisanal parchment paper)
     const bgGrad = ctx.createLinearGradient(0, 0, 0, 1920);
@@ -277,7 +287,7 @@ function OrderSuccessContent() {
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("🌿", 880, 180);
-    ctx.font = "bold 13px sans-serif";
+    ctx.font = "bold 13px 'Montserrat', sans-serif";
     ctx.fillText("GIEO MƠ", 880, 212);
     ctx.restore();
 
@@ -289,22 +299,22 @@ function OrderSuccessContent() {
     ctx.fill();
 
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 22px sans-serif";
+    ctx.font = "bold 22px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("🌿 TẠP HÓA GIEO MƠ", 350, 175);
 
     ctx.fillStyle = "#7E7068";
-    ctx.font = "italic 20px sans-serif";
+    ctx.font = "italic 20px 'Montserrat', sans-serif";
     ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ", 350, 225);
 
     // Main Big Headline: CẢM ƠN NGƯỜI GIEO MẦM
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 48px 'Playfair Display', Georgia, serif";
+    ctx.font = "bold 46px 'Playfair Display', Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillText("CẢM ƠN NGƯỜI GIEO MẦM", 540, 315);
 
     ctx.fillStyle = "#65B374";
-    ctx.font = "32px sans-serif";
+    ctx.font = "30px sans-serif";
     ctx.fillText("✨  🌿  🌱  🌿  ✨", 540, 365);
 
     // PHÂN KHU 2: SPOTLIGHT - TÔN VINH KHÁCH HÀNG (Trọng tâm)
@@ -319,30 +329,33 @@ function OrderSuccessContent() {
 
     // Small intro label
     ctx.fillStyle = "#7E7068";
-    ctx.font = "bold 18px sans-serif";
+    ctx.font = "bold 18px 'Montserrat', sans-serif";
     ctx.fillText("GỬI TẶNG BẠN", 540, 470);
 
-    // Customer Name (LỚN NHẤT & Cursive Handwriting)
+    // Customer Name (LỚN NHẤT & Cursive Handwriting with responsive scale)
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 78px 'Caveat', 'Dancing Script', cursive, sans-serif";
+    const nameLen = customerName.length;
+    const nameFontSize = nameLen > 24 ? 60 : nameLen > 16 ? 70 : 82;
+    ctx.font = `bold ${nameFontSize}px 'Caveat', cursive, sans-serif`;
     ctx.fillText(customerName, 540, 565);
 
     // Inspiring message text
     ctx.fillStyle = "#342A24";
-    ctx.font = "italic 26px 'Playfair Display', Georgia, serif";
-    const quoteLine1 = `“ ${customerName} vừa cùng Gieo Mơ gieo một hạt mơ,`;
+    ctx.font = "italic 25px 'Playfair Display', Georgia, serif";
+    const safeShortName = nameLen > 20 ? customerName.slice(0, 18) + "..." : customerName;
+    const quoteLine1 = `“ ${safeShortName} vừa cùng Gieo Mơ gieo một hạt mơ,`;
     const quoteLine2 = "thắp một hy vọng cho trẻ em khó khăn 🌱 ”";
     ctx.fillText(quoteLine1, 540, 660);
     ctx.fillText(quoteLine2, 540, 705);
 
     ctx.fillStyle = "#65B374";
-    ctx.font = "20px sans-serif";
+    ctx.font = "20px 'Montserrat', sans-serif";
     ctx.fillText("Từng món quà nhỏ trao đi là thêm cơ hội đến trường cho các em.", 540, 765);
 
     // PHÂN KHU 3: BẰNG CHỨNG HÀNH ĐỘNG (Tem bưu chính / Vintage Postal Stamp)
     ctx.fillStyle = "#FAF6F0";
     ctx.beginPath();
-    ctx.roundRect(120, 850, 840, 440, 28);
+    ctx.roundRect(120, 850, 840, 360, 28);
     ctx.fill();
     ctx.strokeStyle = "#E8DEC8";
     ctx.lineWidth = 3;
@@ -350,7 +363,7 @@ function OrderSuccessContent() {
 
     // Vintage Postmark circle stamp (Dấu mộc bưu điện)
     ctx.save();
-    ctx.translate(820, 960);
+    ctx.translate(820, 955);
     ctx.rotate(-0.15);
     ctx.strokeStyle = "rgba(45, 99, 56, 0.4)";
     ctx.lineWidth = 3;
@@ -373,16 +386,16 @@ function OrderSuccessContent() {
     // Action Evidence Details
     ctx.textAlign = "left";
     ctx.fillStyle = "#5C4D44";
-    ctx.font = "bold 20px sans-serif";
+    ctx.font = "bold 20px 'Montserrat', sans-serif";
     ctx.fillText("📦 GÓI QUÀ BẠN ĐÃ CHỌN:", 160, 915);
 
     // Products list
-    ctx.font = "24px sans-serif";
+    ctx.font = "24px 'Montserrat', sans-serif";
     ctx.fillStyle = "#231B16";
     let curY = 965;
     orderItems.slice(0, 3).forEach((it: any) => {
       const name = it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Mầm Mơ";
-      const truncated = name.length > 34 ? name.slice(0, 32) + "..." : name;
+      const truncated = name.length > 32 ? name.slice(0, 30) + "..." : name;
       ctx.fillText(`• ${truncated}`, 160, curY);
       ctx.textAlign = "right";
       ctx.fillText(`x${it.quantity}`, 720, curY);
@@ -392,31 +405,31 @@ function OrderSuccessContent() {
 
     // Date of Sowing
     ctx.fillStyle = "#5C4D44";
-    ctx.font = "bold 20px sans-serif";
+    ctx.font = "bold 20px 'Montserrat', sans-serif";
     ctx.fillText("📅 NGÀY GIEO HẠT:", 160, 1140);
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 24px sans-serif";
+    ctx.font = "bold 24px 'Montserrat', sans-serif";
     ctx.fillText(dateStr, 380, 1140);
 
     // PHÂN KHU 4: THÚC ĐẨY BÁN HÀNG & CTA LAN TỎA
     // Trust Badge (Bảo chứng niềm tin)
     ctx.fillStyle = "#EBF7EE";
     ctx.beginPath();
-    ctx.roundRect(120, 1330, 840, 90, 45);
+    ctx.roundRect(120, 1250, 840, 85, 42.5);
     ctx.fill();
     ctx.strokeStyle = "#A5D6A7";
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
     ctx.fillStyle = "#16381D";
-    ctx.font = "bold 24px sans-serif";
+    ctx.font = "bold 24px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ", 540, 1385);
+    ctx.fillText("🌱 100% LỢI NHUẬN ĐƯỢC ĐÓNG GÓP VÀO QUỸ CỦA MẦM MƠ", 540, 1303);
 
     // Spread the word CTA & QR Code Container
     ctx.fillStyle = "#FFFDF9";
     ctx.beginPath();
-    ctx.roundRect(120, 1455, 840, 240, 28);
+    ctx.roundRect(120, 1375, 840, 240, 28);
     ctx.fill();
     ctx.strokeStyle = "#F0E5D8";
     ctx.lineWidth = 2;
@@ -426,12 +439,13 @@ function OrderSuccessContent() {
     ctx.textAlign = "left";
     ctx.fillStyle = "#16381D";
     ctx.font = "bold 28px 'Playfair Display', Georgia, serif";
-    ctx.fillText("Cùng lan tỏa mầm xanh!", 160, 1530);
+    ctx.fillText("Cùng lan tỏa mầm xanh!", 160, 1450);
 
     ctx.fillStyle = "#5C4D44";
-    ctx.font = "22px sans-serif";
-    ctx.fillText(`Quét mã để cùng ${customerName}`, 160, 1580);
-    ctx.fillText("gieo thêm những mầm xanh mới nhé! 🌱", 160, 1618);
+    ctx.font = "22px 'Montserrat', sans-serif";
+    const safeCTAname = nameLen > 18 ? customerName.slice(0, 16) + "..." : customerName;
+    ctx.fillText(`Quét mã để cùng ${safeCTAname}`, 160, 1500);
+    ctx.fillText("gieo thêm những mầm xanh mới nhé! 🌱", 160, 1538);
 
     // Load and draw QR Code
     try {
@@ -441,20 +455,19 @@ function OrderSuccessContent() {
 
       await new Promise<void>((resolve) => {
         qrImg.onload = () => {
-          ctx.drawImage(qrImg, 740, 1475, 190, 190);
+          ctx.drawImage(qrImg, 740, 1395, 200, 200);
           resolve();
         };
         qrImg.onerror = () => {
-          // Fallback box if offline
           ctx.fillStyle = "#2D6338";
-          ctx.fillRect(740, 1475, 190, 190);
+          ctx.fillRect(740, 1395, 200, 200);
           ctx.fillStyle = "#FFFFFF";
           ctx.font = "bold 18px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("gieomo.store", 835, 1575);
+          ctx.fillText("gieomo.store", 840, 1500);
           resolve();
         };
-        setTimeout(resolve, 1500); // 1.5s fallback
+        setTimeout(resolve, 1500);
       });
     } catch {
       // ignore
@@ -462,61 +475,94 @@ function OrderSuccessContent() {
 
     // FOOTER
     ctx.fillStyle = "#7E7068";
-    ctx.font = "bold 22px sans-serif";
+    ctx.font = "bold 22px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("gieomo.store  •  facebook.com/BanHangGieoMo", 540, 1755);
+    ctx.fillText("gieomo.store  •  facebook.com/BanHangGieoMo", 540, 1695);
 
-    // Trigger download
-    const link = document.createElement("a");
-    link.download = `Chung-Nhan-Nguoi-Gieo-Mam-${customerName.replace(/\s+/g, "-")}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
     return canvas;
   };
 
-  // Smart Social Share: Uses native Web Share API on mobile (iOS/Android) to share the actual image file to Facebook/Instagram Story
-  const handleNativeShare = async () => {
+  // Explicit Download: ONLY downloads when user clicks "Tải thẻ Story (PNG)"
+  const handleDownloadShareCard = async () => {
+    setIsGeneratingCard(true);
     try {
-      const customerName = order?.buyer_name || "Bạn đọc hảo tâm";
-      const canvas = document.createElement("canvas");
-      canvas.width = 1080;
-      canvas.height = 1920;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      const canvas = await generateShareCanvas();
+      if (!canvas) return;
+      const customerName = (order?.buyer_name || "Bạn đọc hảo tâm").trim();
+      const link = document.createElement("a");
+      link.download = `Chung-Nhan-Nguoi-Gieo-Mam-${customerName.replace(/\s+/g, "-")}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.warn("Download share card error:", err);
+    } finally {
+      setIsGeneratingCard(false);
+    }
+  };
 
-      // Render the card onto canvas
-      await handleDownloadShareCard();
+  // Smart Social Share: Does NOT auto-download to disk; uses Web Share API on mobile to share directly to Instagram Story / Facebook
+  const handleNativeShare = async () => {
+    setIsSharing(true);
+    try {
+      const customerName = (order?.buyer_name || "Bạn đọc hảo tâm").trim();
+      const canvas = await generateShareCanvas();
+      if (!canvas) {
+        setIsSharing(false);
+        setIsShareModalOpen(true);
+        return;
+      }
 
       canvas.toBlob(async (blob) => {
-        if (!blob) return;
+        if (!blob) {
+          setIsSharing(false);
+          setIsShareModalOpen(true);
+          return;
+        }
+
         const file = new File([blob], `Chung-Nhan-Gieo-Mo-${customerName.replace(/\s+/g, "-")}.png`, {
           type: "image/png",
         });
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // If native Web Share supports file sharing (mobile Instagram, Facebook Stories, Zalo, etc.)
+        if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({
               files: [file],
               title: "Chứng nhận người gieo mầm — Gieo Mơ",
               text: `Tôi vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn 🌱 gieomo.store`,
             });
+            setIsSharing(false);
             return;
           } catch {
-            // User cancelled or share error
+            // User dismissed the share sheet
+            setIsSharing(false);
+            return;
           }
-        } else {
-          // Fallback on desktop: open Facebook web sharer
-          window.open(
-            `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://gieomo.store")}&quote=${encodeURIComponent(
-              `${customerName} vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn!`
-            )}`,
-            "_blank",
-            "noopener,noreferrer"
-          );
         }
+
+        // If native share only supports text/url
+        if (typeof navigator !== "undefined" && navigator.share) {
+          try {
+            await navigator.share({
+              title: "Chứng nhận người gieo mầm — Gieo Mơ",
+              text: `${customerName} vừa cùng Gieo Mơ gieo một hạt mơ cho trẻ em khó khăn 🌱`,
+              url: "https://gieomo.store",
+            });
+            setIsSharing(false);
+            return;
+          } catch {
+            setIsSharing(false);
+            return;
+          }
+        }
+
+        // On desktop browser: open the Story modal preview with sharing guides
+        setIsSharing(false);
+        setIsShareModalOpen(true);
       }, "image/png");
     } catch {
-      handleDownloadShareCard();
+      setIsSharing(false);
+      setIsShareModalOpen(true);
     }
   };
 
@@ -942,19 +988,21 @@ function OrderSuccessContent() {
             <button
               type="button"
               onClick={handleDownloadShareCard}
-              className="px-4 py-3 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all border border-[#9ed4a3] active:scale-98 shadow-2xs"
+              disabled={isGeneratingCard}
+              className="px-4 py-3 rounded-2xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all border border-[#9ed4a3] active:scale-98 shadow-2xs disabled:opacity-60"
             >
               <Download className="w-4 h-4" />
-              <span>Tải thẻ Story (PNG)</span>
+              <span>{isGeneratingCard ? "Đang chuẩn bị ảnh..." : "Tải thẻ Story (PNG)"}</span>
             </button>
 
             <button
               type="button"
               onClick={handleNativeShare}
-              className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs"
+              disabled={isSharing}
+              className="px-4 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 shadow-2xs disabled:opacity-60"
             >
               <Share2 className="w-4 h-4" />
-              <span>Đăng Story / Chia sẻ</span>
+              <span>{isSharing ? "Đang mở chia sẻ..." : "Đăng Story / Chia sẻ"}</span>
             </button>
           </div>
         </div>
@@ -1090,14 +1138,35 @@ function OrderSuccessContent() {
               </p>
             </div>
 
-            <div className="flex items-center justify-end pt-1">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-2 border-t border-gray-100">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://gieomo.store")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-full bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Facebook</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={handleNativeShare}
+                  disabled={isSharing}
+                  className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-full bg-linear-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-90 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-60"
+                >
+                  <span>📸 Instagram Story</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={handleDownloadShareCard}
-                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer border border-[#9ed4a3]"
+                disabled={isGeneratingCard}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs inline-flex items-center justify-center gap-1.5 shadow-xs cursor-pointer border border-[#9ed4a3] disabled:opacity-60"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Tải ảnh PNG</span>
+                <span>{isGeneratingCard ? "Đang xuất ảnh..." : "Tải ảnh PNG"}</span>
               </button>
             </div>
           </div>
