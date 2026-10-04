@@ -418,7 +418,11 @@ export function ProductDetailClient({
         </div>
 
         {/* Product Reviews & Comments */}
-        <ProductReviews productId={product.product_id} productName={product.name} />
+        <ProductReviews
+          productId={product.product_id}
+          productName={product.name}
+          productSlug={product.slug}
+        />
 
         {/* Related Products */}
         <div className="space-y-6">

@@ -2499,17 +2499,69 @@ export function updateMemberPassword(emailOrMemberId: string, newPass: string): 
 const SEED_REVIEWS: ProductReview[] = [];
 
 let cachedReviews: ProductReview[] | null = null;
+let hasSyncedReviewsWithServer = false;
 
-export function getStoredReviews(productId?: string): ProductReview[] {
+export function syncReviewsFromServer(productId?: string, slug?: string): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams();
+  const cleanId = productId && productId !== "undefined" && productId !== "null" ? productId.trim() : null;
+  const cleanSlug = slug && slug !== "undefined" && slug !== "null" ? slug.trim() : null;
+
+  if (cleanId) params.set("productId", cleanId);
+  if (cleanSlug) params.set("slug", cleanSlug);
+
+  fetch(`/api/reviews?${params.toString()}`)
+    .then((res) => res.json())
+    .then((data) => {
+      if (data?.success && Array.isArray(data.reviews)) {
+        hasSyncedReviewsWithServer = true;
+        const serverList: ProductReview[] = data.reviews;
+        const current = getStoredReviews();
+        // Merge server reviews with any local reviews
+        const map = new Map<string, ProductReview>();
+        for (const r of current) map.set(r.review_id, r);
+        for (const r of serverList) map.set(r.review_id, r);
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        cachedReviews = merged;
+        try {
+          localStorage.setItem("gieomo_product_reviews", JSON.stringify(merged));
+        } catch {
+          // ignore quota
+        }
+        window.dispatchEvent(new Event("gieomo_reviews_updated"));
+      }
+    })
+    .catch((err) => {
+      console.warn("Could not sync reviews from server:", err);
+    });
+}
+
+export function getStoredReviews(productId?: string, slug?: string): ProductReview[] {
   if (typeof window === "undefined") return [];
+  if (!hasSyncedReviewsWithServer) {
+    syncReviewsFromServer(productId, slug);
+  }
+
+  const cleanId = productId && productId !== "undefined" && productId !== "null" ? productId.trim() : null;
+  const cleanSlug = slug && slug !== "undefined" && slug !== "null" ? slug.trim() : null;
+
+  const matches = (r: ProductReview) => {
+    if (!cleanId && !cleanSlug) return true;
+    if (cleanId && (r.product_id === cleanId || r.product_slug === cleanId)) return true;
+    if (cleanSlug && (r.product_slug === cleanSlug || r.product_id === cleanSlug)) return true;
+    return false;
+  };
+
   if (cachedReviews !== null) {
-    return productId ? cachedReviews.filter((r) => r.product_id === productId) : cachedReviews;
+    return cachedReviews.filter(matches);
   }
   try {
     const raw = localStorage.getItem("gieomo_product_reviews");
     const list: ProductReview[] = raw ? JSON.parse(raw) : [];
     cachedReviews = list;
-    return productId ? list.filter((r) => r.product_id === productId) : list;
+    return list.filter(matches);
   } catch (e) {
     console.error("Error reading reviews", e);
     return [];
@@ -2522,8 +2574,39 @@ export function saveNewReview(review: ProductReview): void {
     const reviews = getStoredReviews();
     const updated = [review, ...reviews.filter((r) => r.review_id !== review.review_id)];
     cachedReviews = updated;
-    localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    try {
+      localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    } catch {
+      // LocalStorage quota might be exceeded if large strings, ignore
+    }
     window.dispatchEvent(new Event("gieomo_reviews_updated"));
+
+    // Sync to Supabase DB
+    fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(review),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data.review) {
+          // Update review with server data/ID if different
+          if (data.review.review_id !== review.review_id) {
+            const list = getStoredReviews();
+            const remapped = list.map((r) =>
+              r.review_id === review.review_id ? data.review : r
+            );
+            cachedReviews = remapped;
+            try {
+              localStorage.setItem("gieomo_product_reviews", JSON.stringify(remapped));
+            } catch {}
+            window.dispatchEvent(new Event("gieomo_reviews_updated"));
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not save review to server:", err);
+      });
   } catch (e) {
     console.error("Error saving review", e);
   }
@@ -2535,8 +2618,17 @@ export function deleteStoredReview(reviewId: string): void {
     const reviews = getStoredReviews();
     const updated = reviews.filter((r) => r.review_id !== reviewId);
     cachedReviews = updated;
-    localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    try {
+      localStorage.setItem("gieomo_product_reviews", JSON.stringify(updated));
+    } catch {}
     window.dispatchEvent(new Event("gieomo_reviews_updated"));
+
+    // Sync deletion to Supabase
+    fetch(`/api/reviews?id=${encodeURIComponent(reviewId)}`, {
+      method: "DELETE",
+    }).catch((err) => {
+      console.warn("Could not delete review on server:", err);
+    });
   } catch (e) {
     console.error("Error deleting review", e);
   }

@@ -12,26 +12,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Try saving to Supabase if configured
+    // Save to Supabase
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-      if (supabaseUrl && supabaseKey) {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        await supabase.from("contact_messages").insert([
-          {
-            name,
-            email,
-            phone: phone || null,
-            message,
-            status: "unread",
-          },
-        ]);
-      }
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const supabase = createAdminClient();
+      await supabase.from("contact_messages").insert([
+        {
+          name,
+          email,
+          phone: phone || null,
+          message,
+          status: "unread",
+        },
+      ]);
     } catch (dbErr) {
-      console.warn("Could not insert contact message to Supabase (table may not exist or keys unset):", dbErr);
+      console.warn("Could not insert contact message to Supabase:", dbErr);
     }
 
     // Optional: Send email notification to Admin via Resend if RESEND_API_KEY is available

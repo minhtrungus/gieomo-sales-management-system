@@ -53,10 +53,36 @@ export default function AdminMessagesPage() {
   const [reviewToDelete, setReviewToDelete] = useState<ProductReview | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
 
-  const loadData = () => {
+  const loadData = async () => {
+    // 1. Load initial cache
     setMessages(getStoredContactMessages());
     setReviews(getStoredReviews());
     setProducts(getStoredProducts());
+
+    // 2. Fetch fresh contact messages from Supabase
+    try {
+      const msgRes = await fetch("/api/contact/messages");
+      const msgData = await msgRes.json();
+      if (msgData?.success && Array.isArray(msgData.messages)) {
+        setMessages((prev) => {
+          const map = new Map<string, ContactMessage>();
+          for (const m of prev) map.set(m.id, m);
+          for (const m of msgData.messages) map.set(m.id, m);
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        });
+      }
+    } catch {}
+
+    // 3. Fetch fresh reviews from Supabase
+    try {
+      const revRes = await fetch("/api/reviews");
+      const revData = await revRes.json();
+      if (revData?.success && Array.isArray(revData.reviews)) {
+        setReviews(revData.reviews);
+      }
+    } catch {}
   };
 
   useEffect(() => {
@@ -79,20 +105,35 @@ export default function AdminMessagesPage() {
   // Contact Messages Handlers
   const handleStatusChange = (id: string, newStatus: "unread" | "read" | "replied") => {
     updateContactMessageStatus(id, newStatus);
-    setMessages(getStoredContactMessages());
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, status: newStatus } : m))
+    );
     if (selectedMessage && selectedMessage.id === id) {
       setSelectedMessage((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
+
+    // Sync to Supabase
+    fetch("/api/contact/messages", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: newStatus }),
+    }).catch((err) => console.warn("Could not update message status on server:", err));
   };
 
   const handleConfirmDeleteMessage = () => {
     if (!messageToDelete) return;
-    deleteStoredContactMessage(messageToDelete.id);
-    setMessages(getStoredContactMessages());
-    if (selectedMessage?.id === messageToDelete.id) {
+    const targetId = messageToDelete.id;
+    deleteStoredContactMessage(targetId);
+    setMessages((prev) => prev.filter((m) => m.id !== targetId));
+    if (selectedMessage?.id === targetId) {
       setSelectedMessage(null);
     }
     setMessageToDelete(null);
+
+    // Sync deletion to Supabase
+    fetch(`/api/contact/messages?id=${encodeURIComponent(targetId)}`, {
+      method: "DELETE",
+    }).catch((err) => console.warn("Could not delete message on server:", err));
   };
 
   const filteredMessages = useMemo(() => {
@@ -116,13 +157,14 @@ export default function AdminMessagesPage() {
     const map = new Map<string, ExtendedProduct>();
     for (const p of products) {
       map.set(p.product_id, p);
+      if (p.slug) map.set(p.slug, p);
     }
     return map;
   }, [products]);
 
   const filteredReviews = useMemo(() => {
     return reviews.filter((r) => {
-      const prod = productMap.get(r.product_id);
+      const prod = productMap.get(r.product_id) || (r.product_slug ? productMap.get(r.product_slug) : undefined);
       const prodName = prod?.name || "";
       const matchesSearch =
         !reviewSearch.trim() ||
@@ -574,7 +616,7 @@ export default function AdminMessagesPage() {
                               title="Xem sản phẩm ngoài web"
                             >
                               <div className="relative w-6 h-6 rounded-full overflow-hidden shrink-0 border border-gray-200 bg-white">
-                                <Image src={prodThumb} alt="" fill className="object-cover" />
+                                <Image src={prodThumb} alt="" fill className="object-cover" unoptimized />
                               </div>
                               <span className="font-bold text-[#342A24] truncate max-w-[160px]">
                                 {prodName}
@@ -611,7 +653,7 @@ export default function AdminMessagesPage() {
                               className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-200 bg-white shadow-2xs hover:scale-105 transition-transform cursor-pointer"
                               title="Bấm để xem ảnh phóng to"
                             >
-                              <Image src={imgUrl} alt="Review attachment" fill className="object-cover" />
+                              <Image src={imgUrl} alt="Review attachment" fill className="object-cover" unoptimized />
                             </button>
                           ))}
                         </div>

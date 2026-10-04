@@ -47,12 +47,14 @@ export type DiscountType = "percentage" | "fixed_amount" | "freeship";
 export interface ProductReview {
   review_id: string;
   product_id: string;
+  product_slug?: string | null;
   author_name: string;
   phone_masked: string;
   rating: number;
   comment: string;
   images?: string[];
   is_verified_buyer: boolean;
+  status?: "approved" | "hidden" | "pending";
   created_at: string;
 }
 

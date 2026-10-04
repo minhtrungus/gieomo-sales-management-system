@@ -2,19 +2,22 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { Star, CheckCircle, Image as ImageIcon, Trash2, ShieldCheck, Camera, MessageSquare } from "lucide-react";
+import { Star, CheckCircle, Image as ImageIcon, Trash2, ShieldCheck, Camera, MessageSquare, Loader2 } from "lucide-react";
 import {
   getStoredReviews,
   saveNewReview,
   deleteStoredReview,
   isAdminAuthenticated,
   getStoredOrders,
+  syncReviewsFromServer,
 } from "@/lib/data/orderStore";
+import { uploadAssetsParallel } from "@/lib/services/uploadService";
 import type { ProductReview } from "@/types/database";
 
 interface ProductReviewsProps {
   productId: string;
   productName: string;
+  productSlug?: string;
 }
 
 /**
@@ -27,7 +30,7 @@ function maskPhoneNumber(phone?: string | null): string {
   return clean.slice(0, 4) + "***" + clean.slice(-3);
 }
 
-export function ProductReviews({ productId, productName }: ProductReviewsProps) {
+export function ProductReviews({ productId, productName, productSlug }: ProductReviewsProps) {
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -38,6 +41,7 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [images, setImages] = useState<string[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState(false);
 
@@ -45,16 +49,19 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   const loadReviews = () => {
-    setReviews(getStoredReviews(productId));
+    const local = getStoredReviews(productId, productSlug);
+    setReviews(local);
     setIsAdmin(isAdminAuthenticated());
   };
 
   useEffect(() => {
     loadReviews();
+    syncReviewsFromServer(productId, productSlug);
+
     const handleUpdate = () => loadReviews();
     window.addEventListener("gieomo_reviews_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_reviews_updated", handleUpdate);
-  }, [productId]);
+  }, [productId, productSlug]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -67,19 +74,29 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
     return { avg, count: reviews.length, breakdown };
   }, [reviews]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).slice(0, 3).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result) {
-          setImages((prev) => [...prev, ev.target!.result as string].slice(0, 3));
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const fileList = Array.from(files).slice(0, 3 - images.length);
+    if (fileList.length === 0) return;
+
+    setIsUploadingImages(true);
+    setFormError(null);
+    try {
+      const { successfulUrls, errors } = await uploadAssetsParallel(fileList, "product-media");
+      if (successfulUrls.length > 0) {
+        setImages((prev) => [...prev, ...successfulUrls].slice(0, 3));
+      }
+      if (errors.length > 0) {
+        setFormError(`Lỗi tải ảnh đính kèm: ${errors.join("; ")}`);
+      }
+    } catch (err: any) {
+      setFormError("Không thể tải ảnh đính kèm. Vui lòng thử lại.");
+    } finally {
+      setIsUploadingImages(false);
+      e.target.value = "";
+    }
   };
 
   const handleRemoveImage = (index: number) => {
@@ -115,12 +132,14 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
     const newRev: ProductReview = {
       review_id: `rev-${Date.now()}`,
       product_id: productId,
+      product_slug: productSlug || null,
       author_name: authorName.trim(),
       phone_masked: maskPhoneNumber(phone),
       rating,
       comment: comment.trim(),
       images: images.length > 0 ? images : undefined,
       is_verified_buyer: hasBought || true, // default verified for encouraging early social proof
+      status: "approved",
       created_at: new Date().toISOString(),
     };
 
@@ -259,12 +278,19 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
             </label>
             <div className="flex flex-wrap items-center gap-2.5">
               <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-emerald-500 flex flex-col items-center justify-center text-gray-400 hover:text-emerald-700 cursor-pointer transition-colors bg-white">
-                <Camera className="w-5 h-5" />
-                <span className="text-[9px] font-bold mt-0.5">Thêm ảnh</span>
+                {isUploadingImages ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                ) : (
+                  <Camera className="w-5 h-5" />
+                )}
+                <span className="text-[9px] font-bold mt-0.5">
+                  {isUploadingImages ? "Đang tải" : "Thêm ảnh"}
+                </span>
                 <input
                   type="file"
                   accept="image/*"
                   multiple
+                  disabled={isUploadingImages}
                   onChange={handleImageUpload}
                   className="hidden"
                 />
