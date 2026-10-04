@@ -56,7 +56,7 @@ export default function CombosPage() {
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-[#231B16] tracking-tight text-balance">
             Combo Gieo Mơ
           </h1>
-          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-justify hyphens-auto break-words">
+          <p className="text-[#7E7068] text-xs sm:text-sm leading-relaxed text-left text-pretty">
             Gieo Mơ gom góp những điều nhỏ xinh thành một món quà trọn vẹn, đủ chu đáo để đồng hành cùng bạn, đủ tinh tế để dành tặng người thương.
           </p>
         </div>
@@ -113,7 +113,7 @@ export default function CombosPage() {
                     <h3 className="font-heading font-bold text-xl text-[#342A24] text-balance">
                       {combo.name}
                     </h3>
-                    <p className="text-xs text-[#7E7068] leading-relaxed text-justify hyphens-auto break-words">
+                    <p className="text-xs text-[#7E7068] leading-relaxed text-left text-pretty">
                       {combo.description}
                     </p>
 

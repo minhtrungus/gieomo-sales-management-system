@@ -141,10 +141,10 @@ export default function HomePage() {
               <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] text-balance">
                 LITTLE PIECES, BIGGER DREAMS
               </h2>
-              <h2 className="font-heading font-extrabold text-xl text-[#231B16] text-balance">
+              <p className="font-heading font-bold text-lg sm:text-xl text-[#542B07] text-balance">
                 Gom từng mảnh nhỏ, dệt thành giấc mơ
-              </h2>
-              <p className="text-xs sm:text-sm text-[#7E7068] text-left leading-relaxed">
+              </p>
+              <p className="text-xs sm:text-sm text-[#7E7068] text-center text-balance leading-relaxed max-w-xl mx-auto">
                 Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
               </p>
             </div>
@@ -156,9 +156,9 @@ export default function HomePage() {
                   🌱
                 </div>
                 <h3 className="font-heading font-bold text-base text-[#16381D] text-balance">
-                  Gieo Mơ & Sự Phát Triển
+                  Gieo Mơ &amp; Sự Phát Triển
                 </h3>
-                <p className="text-xs text-[#285031] leading-relaxed text-justify hyphens-auto break-words">
+                <p className="text-xs text-[#285031] leading-relaxed text-left text-pretty">
                   Tạp hóa Gieo Mơ là dự án thiện nguyện trực thuộc Mầm Mơ, với mong muốn đồng hành cùng các em nhỏ có hoàn cảnh khó khăn trong hành trình nuôi dưỡng ước mơ và hỗ trợ các em trên hành trình trưởng thành.
                 </p>
               </div>
@@ -171,7 +171,7 @@ export default function HomePage() {
                 <h3 className="font-heading font-bold text-base text-[#153B61] text-balance">
                   Quá trình hình thành sản phẩm
                 </h3>
-                <p className="text-xs text-[#214D78] leading-relaxed text-justify hyphens-auto break-words">
+                <p className="text-xs text-[#214D78] leading-relaxed text-left text-pretty">
                   Sợi chỉ nối những khoảng cách, chiếc nút giữ những mảnh rời lại bên nhau, những mảnh vải khi được kết hợp có thể trở thành một sản phẩm hoàn chỉnh. 
                 </p>
               </div>
@@ -184,7 +184,7 @@ export default function HomePage() {
                 <h3 className="font-heading font-bold text-base text-[#523F07] text-balance">
                   Ý nghĩa sản phẩm
                 </h3>
-                <p className="text-xs text-[#5C480E] leading-relaxed text-justify hyphens-auto break-words">
+                <p className="text-xs text-[#5C480E] leading-relaxed text-left text-pretty">
                   Gieo Mơ mong mỗi món đồ bạn mang về không chỉ là một vật dụng để sử dụng mỗi ngày, mà còn là một lời nhắc rằng, những điều bé nhỏ của bạn cũng đáng được trân trọng. Điều làm nên một phiên bản tốt đẹp hơn của chúng ta không phải là một điều thật lớn, mà là rất nhiều điều nhỏ bé được vun đắp qua từng ngày.
                 </p>
               </div>
@@ -197,7 +197,7 @@ export default function HomePage() {
                 <h3 className="font-heading font-bold text-base text-[#52132A] text-balance">
                   Ý nghĩa với cộng đồng
                 </h3>
-                <p className="text-xs text-[#6B203B] leading-relaxed text-justify hyphens-auto break-words">
+                <p className="text-xs text-[#6B203B] leading-relaxed text-left text-pretty">
                   Từ những món đồ tại Gieo Mơ, những giá trị nhỏ được tiếp nối thành những đóng góp dành cho cộng đồng. Bởi với Gieo Mơ, giá trị của một món đồ không chỉ nằm ở điều bạn nhận về, mà còn ở những điều tốt đẹp mà nó tiếp tục trao đi.
                 </p>
               </div>
@@ -212,9 +212,9 @@ export default function HomePage() {
           <div className="rounded-3xl gradient-main p-8 sm:p-12 text-center space-y-4 border border-[#BFE9C3] shadow-soft max-w-3xl mx-auto">
             <span className="text-4xl">🌱✨🧵</span>
             <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#1B3622] text-balance">
-              Sẵn sàng cùng Mầm gieo một "hạt mơ"?
+              Sẵn sàng cùng Mầm gieo một &quot;hạt mơ&quot;?
             </h2>
-            <p className="text-xs sm:text-sm text-[#2D5636] max-w-md mx-auto leading-relaxed text-justify hyphens-auto break-words">
+            <p className="text-xs sm:text-sm text-[#2D5636] max-w-lg mx-auto leading-relaxed text-center text-balance">
               Hãy chọn cho mình và người mình thương một món quà nhỏ xinh tại Gieo Mơ để “gieo” yêu thương, lan tỏa những điều tốt đẹp.
             </p>
             <div className="pt-2">

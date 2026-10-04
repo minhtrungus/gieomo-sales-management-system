@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
   // Branding Customization State
   const [activePalette, setActivePalette] = useState("soft-green");
   const [coverTheme, setCoverTheme] = useState("emerald");
+  const [announcementText, setAnnouncementText] = useState("");
   const [faviconPreview, setFaviconPreview] = useState<string>("/icon.png");
   const [avatarPreview, setAvatarPreview] = useState<string>("/images/logo_gieo mơ.jpg");
   const [isSaving, setIsSaving] = useState(false);
@@ -81,6 +82,7 @@ export default function AdminSettingsPage() {
     setQrImageUrl(s.qrImageUrl);
     setActivePalette(s.activePalette);
     setCoverTheme(s.coverTheme);
+    if (s.announcementText !== undefined) setAnnouncementText(s.announcementText);
     setFaviconPreview(s.faviconPreview);
     setAvatarPreview(s.avatarPreview);
     if (s.facebookUrl !== undefined) setFacebookUrl(s.facebookUrl);
@@ -114,6 +116,7 @@ export default function AdminSettingsPage() {
           setQrImageUrl(fresh.qrImageUrl);
           setActivePalette(fresh.activePalette);
           setCoverTheme(fresh.coverTheme);
+          if (fresh.announcementText !== undefined) setAnnouncementText(fresh.announcementText);
           setFaviconPreview(fresh.faviconPreview);
           setAvatarPreview(fresh.avatarPreview);
           if (fresh.facebookUrl !== undefined) setFacebookUrl(fresh.facebookUrl);
@@ -135,10 +138,10 @@ export default function AdminSettingsPage() {
   ];
 
   const coverThemes = [
-    { id: "emerald", name: "Xanh Mầm Chồi (Emerald Standard)", bg: "bg-[#1B2B20] text-[#BFE9C3]" },
-    { id: "warm-autumn", name: "Mùa Thu Ấm Áp (Warm Orange Cover)", bg: "bg-[#422206] text-[#FFE7A8]" },
-    { id: "dreamy-blue", name: "Giấc Mơ Mây (Powder Blue Cover)", bg: "bg-[#102A45] text-[#CFE8FF]" },
-    { id: "pink-heart", name: "Trái Tim Thiện Nguyện (Soft Pink)", bg: "bg-[#451025] text-[#FFD1E1]" },
+    { id: "emerald", name: "Xanh Mầm Mơ (Màu chủ đạo)", defaultSlogan: "🌱 Mầm Mơ — Little Pieces, Bigger Dreams • Gom từng mảnh nhỏ, dệt thành giấc mơ", bg: "bg-[#1B2B20] text-[#BFE9C3]" },
+    { id: "warm-autumn", name: "Nâu Ấm Áp (Thế giới may vá)", defaultSlogan: "🧵 Tạp hóa Gieo Mơ — Những món đồ thủ công may vá đong đầy yêu thương", bg: "bg-[#422206] text-[#FFE7A8]" },
+    { id: "dreamy-blue", name: "Xanh Mơ Mộng (Powder Blue)", defaultSlogan: "✨ Tạp hóa Gieo Mơ — Gom từng mảnh nhỏ, dệt thành giấc mơ lớn", bg: "bg-[#102A45] text-[#CFE8FF]" },
+    { id: "pink-heart", name: "Hồng Dịu Dàng (Soft Pink)", defaultSlogan: "🌸 Mầm Mơ Handmade — Cùng Mầm gieo những hạt mơ tươi đẹp", bg: "bg-[#451025] text-[#FFD1E1]" },
   ];
 
   // Handle Favicon File Upload
@@ -206,6 +209,7 @@ export default function AdminSettingsPage() {
       qrImageUrl,
       activePalette,
       coverTheme,
+      announcementText: announcementText.trim(),
       faviconPreview,
       avatarPreview,
       facebookUrl: facebookUrl.trim(),
@@ -501,6 +505,23 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
+          {/* Custom Announcement Text Input */}
+          <div className="space-y-1.5 pt-2">
+            <label className="text-xs font-bold text-[#342A24] block">
+              Dòng chữ thông báo chạy trên đầu trang (Tùy chỉnh):
+            </label>
+            <input
+              type="text"
+              value={announcementText}
+              onChange={(e) => setAnnouncementText(e.target.value)}
+              placeholder="Để trống sẽ dùng câu khẩu hiệu chuẩn của Mầm Mơ theo màu đã chọn"
+              className="w-full p-2.5 rounded-xl border border-gray-300 text-xs text-[#231B16] bg-white outline-none focus:border-[#2D6338]"
+            />
+            <p className="text-[11px] text-[#7E7068]">
+              Bạn có thể tự nhập thông báo của nhóm (ví dụ: đợt mở bán mới, ưu đãi freeship, hoặc thông điệp ý nghĩa). Nếu để trống, hệ thống sẽ tự động hiển thị slogan của Mầm Mơ.
+            </p>
+          </div>
+
           {/* Real-time Visual Live Preview */}
           <div className="p-4 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#342A24]">
@@ -511,7 +532,7 @@ export default function AdminSettingsPage() {
               <div className={`py-1.5 px-3 text-center text-[11px] font-bold transition-colors ${
                 coverThemes.find((c) => c.id === coverTheme)?.bg || "bg-[#1B2B20] text-[#BFE9C3]"
               }`}>
-                {coverThemes.find((c) => c.id === coverTheme)?.name.split("(")[0]} — Little Pieces, Bigger Dreams
+                {announcementText.trim() || coverThemes.find((c) => c.id === coverTheme)?.defaultSlogan}
               </div>
               <div className="bg-[#FFF8EE] p-3 flex items-center justify-between border-t border-[#F0E5D8]">
                 <div className="flex items-center gap-2">

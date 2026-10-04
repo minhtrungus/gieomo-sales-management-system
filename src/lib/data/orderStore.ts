@@ -1724,6 +1724,7 @@ export interface SiteSettings {
   qrImageUrl: string;
   activePalette: string;
   coverTheme: string;
+  announcementText?: string;
   faviconPreview: string;
   avatarPreview: string;
   facebookUrl?: string;
@@ -1747,6 +1748,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   qrImageUrl: "/images/logo_gieo mơ.jpg",
   activePalette: "soft-green",
   coverTheme: "emerald",
+  announcementText: "",
   faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
   facebookUrl: "https://www.facebook.com/BanHangGieoMo",

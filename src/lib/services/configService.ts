@@ -14,6 +14,7 @@ export interface SiteSettings {
   qrImageUrl: string;
   activePalette: string;
   coverTheme: string;
+  announcementText?: string;
   faviconPreview: string;
   avatarPreview: string;
   shippingNote?: string;
@@ -39,6 +40,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   qrImageUrl: "/images/logo_gieo mơ.jpg",
   activePalette: "soft-green",
   coverTheme: "emerald",
+  announcementText: "",
   faviconPreview: "/icon.png",
   avatarPreview: "/images/logo_gieo mơ.jpg",
   shippingNote: "Giao hàng trong 3-5 ngày.",
@@ -71,6 +73,7 @@ export function rowsToSettings(rows: { config_key: string; config_value: string 
     qrImageUrl: map.qr_image_url || DEFAULT_SITE_SETTINGS.qrImageUrl,
     activePalette: map.active_palette || DEFAULT_SITE_SETTINGS.activePalette,
     coverTheme: map.cover_theme || DEFAULT_SITE_SETTINGS.coverTheme,
+    announcementText: map.announcement_text !== undefined ? map.announcement_text : DEFAULT_SITE_SETTINGS.announcementText,
     faviconPreview: map.favicon_preview || DEFAULT_SITE_SETTINGS.faviconPreview,
     avatarPreview: map.avatar_preview || DEFAULT_SITE_SETTINGS.avatarPreview,
     shippingNote: map.shipping_note || DEFAULT_SITE_SETTINGS.shippingNote,
@@ -99,6 +102,7 @@ export function settingsToRows(settings: Partial<SiteSettings>): { config_key: s
     qrImageUrl: "qr_image_url",
     activePalette: "active_palette",
     coverTheme: "cover_theme",
+    announcementText: "announcement_text",
     faviconPreview: "favicon_preview",
     avatarPreview: "avatar_preview",
     shippingNote: "shipping_note",

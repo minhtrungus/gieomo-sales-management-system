@@ -53,7 +53,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
     { href: "/admin/customers", label: "Khách hàng", icon: Users },
     { href: "/admin/payments", label: "Xác nhận thanh toán", icon: CreditCard },
-    { href: "/admin/messages", label: "Tin nhắn khách", icon: MessageSquare },
+    { href: "/admin/messages", label: "Tin nhắn & Đánh giá", icon: MessageSquare },
     { href: "/admin/vouchers", label: "Mã giảm giá", icon: Ticket },
     { href: "/admin/members", label: "Thành viên & Referral", icon: UserCheck },
     { href: "/admin/reports", label: "Báo cáo doanh thu", icon: BarChart3 },
