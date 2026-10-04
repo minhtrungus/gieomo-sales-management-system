@@ -30,25 +30,9 @@ export function ProductDetailClient({
 }: ProductDetailClientProps) {
   const router = useRouter();
 
-  const [product, setProduct] = useState<ExtendedProduct | null>(() => {
-    if (initialProduct) return initialProduct;
-    if (typeof window !== "undefined") {
-      const list = getStoredProducts();
-      const decodedSlug = decodeURIComponent(slug);
-      const found = list.find(
-        (p) =>
-          p.slug === slug ||
-          p.slug === decodedSlug ||
-          p.product_id === slug ||
-          p.product_id === decodedSlug
-      );
-      if (found) return found;
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState<boolean>(!initialProduct && !product);
-  const [selectedVariant, setSelectedVariant] = useState<any>(product?.variants?.[0] ?? null);
+  const [product, setProduct] = useState<ExtendedProduct | null>(initialProduct ?? null);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialProduct);
+  const [selectedVariant, setSelectedVariant] = useState<any>(initialProduct?.variants?.[0] ?? null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
 
