@@ -134,12 +134,20 @@ export default function AdminSettingsPage() {
   const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const localPreview = URL.createObjectURL(file);
-      setFaviconPreview(localPreview);
-      const res = await uploadAsset(file, "content-media", `favicon-${Date.now()}.${file.name.split('.').pop()}`);
-      if (res.success && res.url) {
-        setFaviconPreview(res.url);
-      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Url = reader.result as string;
+        setFaviconPreview(base64Url);
+        try {
+          const res = await uploadAsset(file, "content-media", `favicon-${Date.now()}.${file.name.split('.').pop()}`);
+          if (res.success && res.url) {
+            setFaviconPreview(res.url);
+          }
+        } catch {
+          // Keep base64 fallback
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -147,13 +155,21 @@ export default function AdminSettingsPage() {
   const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const localPreview = URL.createObjectURL(file);
-      setQrImageUrl(localPreview);
-      setQrMode("upload");
-      const res = await uploadAsset(file, "content-media", `vietqr-${Date.now()}.${file.name.split('.').pop()}`);
-      if (res.success && res.url) {
-        setQrImageUrl(res.url);
-      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Url = reader.result as string;
+        setQrImageUrl(base64Url);
+        setQrMode("upload");
+        try {
+          const res = await uploadAsset(file, "content-media", `vietqr-${Date.now()}.${file.name.split('.').pop()}`);
+          if (res.success && res.url) {
+            setQrImageUrl(res.url);
+          }
+        } catch {
+          // Keep base64 fallback
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -161,12 +177,20 @@ export default function AdminSettingsPage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const localPreview = URL.createObjectURL(file);
-      setAvatarPreview(localPreview);
-      const res = await uploadAsset(file, "content-media", `avatar-${Date.now()}.${file.name.split('.').pop()}`);
-      if (res.success && res.url) {
-        setAvatarPreview(res.url);
-      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Url = reader.result as string;
+        setAvatarPreview(base64Url);
+        try {
+          const res = await uploadAsset(file, "content-media", `avatar-${Date.now()}.${file.name.split('.').pop()}`);
+          if (res.success && res.url) {
+            setAvatarPreview(res.url);
+          }
+        } catch {
+          // Keep base64 fallback
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -192,12 +216,12 @@ export default function AdminSettingsPage() {
       bankHolder,
       bankName,
       qrMode,
-      qrImageUrl,
+      qrImageUrl: qrImageUrl.startsWith("blob:") ? "/images/logo_gieo mơ.jpg" : qrImageUrl,
       activePalette,
       coverTheme,
       announcementText: announcementText.trim(),
-      faviconPreview,
-      avatarPreview,
+      faviconPreview: faviconPreview.startsWith("blob:") ? "/icon.png" : faviconPreview,
+      avatarPreview: avatarPreview.startsWith("blob:") ? "/images/logo_gieo mơ.jpg" : avatarPreview,
       facebookUrl: facebookUrl.trim(),
       tiktokUrl: tiktokUrl.trim(),
       instagramUrl: instagramUrl.trim(),
