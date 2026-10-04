@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { saveNewProduct } from "@/lib/data/orderStore";
-import { uploadAsset } from "@/lib/services/uploadService";
+import { uploadAsset, uploadAssetsParallel } from "@/lib/services/uploadService";
+import { generateSku } from "@/lib/utils/skuGenerator";
 import {
   ArrowLeft,
   Plus,
@@ -20,6 +21,7 @@ import {
   Info,
   Link as LinkIcon,
   ImageIcon,
+  Sparkles,
 } from "lucide-react";
 
 export default function AdminNewProductPage() {
@@ -59,7 +61,7 @@ export default function AdminNewProductPage() {
 
   // Variants list with initial stock 0 (must be stocked via warehouse inflow receipt)
   const [variants, setVariants] = useState([
-    { name: "Mặc định", sku: "", stock: 0, imageUrl: "" },
+    { name: "Mặc định", sku: "GM-SP-01", stock: 0, imageUrl: "" },
   ]);
 
   const handleNameChange = (val: string) => {
@@ -73,45 +75,63 @@ export default function AdminNewProductPage() {
       .trim()
       .replace(/\s+/g, "-");
     setSlug(generatedSlug);
+
+    // Auto-generate SKUs for all variants when product name changes
+    setVariants((prev) =>
+      prev.map((v, i) => {
+        // If sku is empty or starts with GM-, update it with the new product name
+        if (!v.sku || v.sku.startsWith("GM-")) {
+          return { ...v, sku: generateSku(val, v.name, i) };
+        }
+        return v;
+      })
+    );
   };
 
   const handleAddVariant = () => {
-    setVariants((prev) => [
-      ...prev,
-      {
-        name: `Phân loại ${prev.length + 1}`,
-        sku: "",
-        stock: 20,
-        imageUrl: "",
-      },
-    ]);
+    setVariants((prev) => {
+      const nextIdx = prev.length;
+      const vName = `Phân loại ${nextIdx + 1}`;
+      return [
+        ...prev,
+        {
+          name: vName,
+          sku: generateSku(name, vName, nextIdx),
+          stock: 20,
+          imageUrl: "",
+        },
+      ];
+    });
+  };
+
+  const handleRegenerateAllSkus = () => {
+    setVariants((prev) =>
+      prev.map((v, i) => ({
+        ...v,
+        sku: generateSku(name, v.name, i),
+      }))
+    );
   };
 
   const handleRemoveVariant = (index: number) => {
     setVariants((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Upload multiple images from local computer/device
+  // Upload multiple images concurrently with automatic client-side compression
   const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const fileList = Array.from(files);
     setIsUploading(true);
     setUploadError(null);
     try {
-      const newUrls: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const res = await uploadAsset(file, "product-media");
-        if (res.success && res.url) {
-          newUrls.push(res.url);
-        } else {
-          setUploadError(`Lỗi tải ảnh "${file.name}": ${res.error || "Không thể tải lên"}`);
-        }
+      const { successfulUrls, errors } = await uploadAssetsParallel(fileList, "product-media");
+      if (successfulUrls.length > 0) {
+        setImages((prev) => Array.from(new Set([...prev, ...successfulUrls])));
       }
-
-      if (newUrls.length > 0) {
-        setImages((prev) => Array.from(new Set([...prev, ...newUrls])));
+      if (errors.length > 0) {
+        setUploadError(`Có ${errors.length} ảnh gặp sự cố: ${errors.join("; ")}`);
       }
     } catch (err: any) {
       setUploadError(err?.message || "Lỗi tải ảnh");
@@ -398,16 +418,27 @@ export default function AdminNewProductPage() {
                   3. Danh sách phân loại (Variants)
                 </h3>
                 <p className="text-[11px] text-gray-500 mt-0.5">
-                  Mỗi mặt hàng có thể có các mẫu màu, họa tiết hoặc kích cỡ khác nhau.
+                  Mỗi mặt hàng có thể có các mẫu màu, họa tiết hoặc kích cỡ khác nhau. Mã SKU được tự động khởi tạo.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleAddVariant}
-                className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Thêm phân loại
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRegenerateAllSkus}
+                  className="text-xs font-bold text-gray-600 hover:text-emerald-800 flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-emerald-50 transition-colors shadow-2xs"
+                  title="Tự động tính toán lại toàn bộ mã SKU chuẩn theo tên sản phẩm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Tự tạo lại SKU</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddVariant}
+                  className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-2xs"
+                >
+                  <Plus className="w-4 h-4" /> Thêm phân loại
+                </button>
+              </div>
             </div>
 
             {/* Note box explaining stock connection */}
@@ -441,7 +472,15 @@ export default function AdminNewProductPage() {
                       onChange={(e) => {
                         const val = e.target.value;
                         setVariants((prev) =>
-                          prev.map((item, i) => (i === idx ? { ...item, name: val } : item))
+                          prev.map((item, i) => {
+                            if (i !== idx) return item;
+                            const shouldAuto = !item.sku || item.sku.startsWith("GM-");
+                            return {
+                              ...item,
+                              name: val,
+                              sku: shouldAuto ? generateSku(name, val, idx) : item.sku,
+                            };
+                          })
                         );
                       }}
                       className="w-full p-2 rounded-xl border border-gray-200 text-xs font-semibold outline-none focus:border-emerald-600 bg-white"
@@ -450,13 +489,29 @@ export default function AdminNewProductPage() {
                   </div>
 
                   {/* SKU */}
-                  <div className="w-32 min-w-[110px]">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">
-                      Mã SKU
-                    </label>
+                  <div className="w-36 min-w-[130px]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase block">
+                        Mã SKU
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVariants((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, sku: generateSku(name, item.name, idx) } : item
+                            )
+                          );
+                        }}
+                        className="text-[9.5px] font-bold text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                        title="Tự động tạo mã SKU chuẩn"
+                      >
+                        ⚡ Tự tạo
+                      </button>
+                    </div>
                     <input
                       type="text"
-                      placeholder="SKU"
+                      placeholder="GM-SP-01"
                       value={v.sku}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -464,12 +519,12 @@ export default function AdminNewProductPage() {
                           prev.map((item, i) => (i === idx ? { ...item, sku: val } : item))
                         );
                       }}
-                      className="w-full p-2 rounded-xl border border-gray-200 text-xs font-mono outline-none focus:border-emerald-600 bg-white"
+                      className="w-full p-2 rounded-xl border border-gray-200 text-xs font-mono outline-none focus:border-emerald-600 bg-white font-semibold text-emerald-950"
                     />
                   </div>
 
                   {/* Initial stock (Read-only 0) */}
-                  <div className="w-28">
+                  <div className="w-24">
                     <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1" title="Tồn kho ban đầu luôn là 0 cho đến khi lập phiếu nhập kho">
                       Tồn ban đầu
                     </label>
@@ -487,7 +542,7 @@ export default function AdminNewProductPage() {
                       <div className="flex items-center gap-1.5">
                         <div className="relative w-8 h-8 rounded-lg bg-white border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
                           {v.imageUrl ? (
-                            <Image src={v.imageUrl} alt="" fill className="object-cover" />
+                            <Image src={v.imageUrl} alt="" fill className="object-cover" unoptimized />
                           ) : (
                             <ImageIcon className="w-3.5 h-3.5 text-gray-300" />
                           )}
@@ -651,7 +706,7 @@ export default function AdminNewProductPage() {
                             : "border-gray-200 hover:border-emerald-300"
                         }`}
                       >
-                        <Image src={imgUrl} alt="" fill className="object-cover" />
+                        <Image src={imgUrl} alt="" fill className="object-cover" unoptimized />
 
                         {/* Cover Badge for 1st image */}
                         {imgIdx === 0 && (

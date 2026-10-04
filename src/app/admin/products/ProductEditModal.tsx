@@ -4,8 +4,9 @@ import { useState, useId } from "react";
 import Image from "next/image";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import { parseProductDescription } from "@/lib/utils/productParser";
-import { uploadAsset } from "@/lib/services/uploadService";
-import { Edit3, X, Upload, Loader2, Trash2 } from "lucide-react";
+import { uploadAsset, uploadAssetsParallel } from "@/lib/services/uploadService";
+import { generateSku } from "@/lib/utils/skuGenerator";
+import { Edit3, X, Upload, Loader2, Trash2, Sparkles } from "lucide-react";
 
 interface ProductEditModalProps {
   product: ExtendedProduct;
@@ -84,24 +85,19 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
     }
   };
 
-  // Upload multiple images to gallery
+  // Upload multiple images to gallery in parallel with automatic client-side compression
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
     setUploadingGallery(true);
     try {
-      const newUrls: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const res = await uploadAsset(file, "product-media");
-        if (res.success && res.url) {
-          newUrls.push(res.url);
-        } else {
-          alert(`Lỗi tải ảnh "${file.name}": ${res.error || "Không thể tải lên"}`);
-        }
+      const { successfulUrls, errors } = await uploadAssetsParallel(fileList, "product-media");
+      if (successfulUrls.length > 0) {
+        setImages((prev) => Array.from(new Set([...prev, ...successfulUrls])));
       }
-      if (newUrls.length > 0) {
-        setImages((prev) => Array.from(new Set([...prev, ...newUrls])));
+      if (errors.length > 0) {
+        alert(`Có ${errors.length} ảnh gặp sự cố: ${errors.join("; ")}`);
       }
     } catch (err: any) {
       alert(`Lỗi tải ảnh: ${err?.message || "Lỗi kết nối"}`);
@@ -175,21 +171,26 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
     const finalThumb = thumbnail.trim() || images[0] || "/images/products/pounch_1.png";
     const finalImages = Array.from(new Set([finalThumb, ...images])).filter(Boolean);
 
-    // Update variant warehouse stock
+    // Update variant warehouse stock and ensure valid SKU
     const updatedVariants = variants.map((v, i) => {
+      const ensuredSku = v.sku?.trim() || generateSku(name, v.name || "", i);
       if (i === 0) {
         const whStocks = { ...(v.warehouse_stocks || {}) };
         whStocks["wh-1"] = stockWh1;
         whStocks["wh-2"] = stockWh2;
         return {
           ...v,
+          sku: ensuredSku,
           stock_warehouse_1: stockWh1,
           stock_warehouse_2: stockWh2,
           warehouse_stocks: whStocks,
           stock: stockWh1 + stockWh2,
         };
       }
-      return v;
+      return {
+        ...v,
+        sku: ensuredSku,
+      };
     });
 
     const updated: ExtendedProduct = {
@@ -327,7 +328,7 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
               <div className="flex items-center gap-3">
                 <div className="relative w-16 h-16 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center shadow-2xs">
                   {thumbnail ? (
-                    <Image src={thumbnail} alt="" fill className="object-cover" />
+                    <Image src={thumbnail} alt="" fill className="object-cover" unoptimized />
                   ) : (
                     <span className="text-xl">🖼️</span>
                   )}
@@ -419,7 +420,7 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
                       key={imgIdx}
                       className="group relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 shadow-2xs"
                     >
-                      <Image src={imgUrl} alt="" fill className="object-cover" />
+                      <Image src={imgUrl} alt="" fill className="object-cover" unoptimized />
                       <button
                         type="button"
                         onClick={() => handleRemoveGalleryImage(imgIdx)}
@@ -474,9 +475,25 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
                     🎨 Phân loại sản phẩm &amp; Ảnh riêng (Variant Photos)
                   </label>
                   <p className="text-[10px] text-gray-500">
-                    Bấm &quot;Tải ảnh&quot; để gán ảnh riêng cho từng màu/mẫu. Khách bấm chọn phân loại nào sẽ lập tức đổi ảnh đó.
+                    Bấm &quot;Tải ảnh&quot; để gán ảnh riêng cho từng màu/mẫu. Mã SKU tự động đồng bộ.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVariants((prev) =>
+                      prev.map((item, i) => ({
+                        ...item,
+                        sku: generateSku(name, item.name || "", i),
+                      }))
+                    );
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-900 text-[11px] font-bold cursor-pointer border border-emerald-200 transition-colors shadow-2xs"
+                  title="Tự động tính lại toàn bộ mã SKU theo tên sản phẩm và tên phân loại"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Tự tạo lại SKU</span>
+                </button>
               </div>
 
               <div className="space-y-2">
@@ -490,14 +507,45 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
                       className="flex flex-wrap items-center gap-2.5 bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs"
                     >
                       {/* Variant name badge */}
-                      <span className="font-bold text-xs text-gray-800 w-28 truncate shrink-0">
+                      <span className="font-bold text-xs text-gray-800 w-24 truncate shrink-0">
                         {v.name}:
                       </span>
+
+                      {/* SKU input with quick auto-gen */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          type="text"
+                          value={v.sku || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setVariants((prev) =>
+                              prev.map((item, i) => (i === vIdx ? { ...item, sku: val } : item))
+                            );
+                          }}
+                          placeholder="SKU"
+                          className="w-28 px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-mono font-semibold text-emerald-950 outline-none focus:border-emerald-500 bg-white"
+                          title="Mã SKU của phân loại này"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVariants((prev) =>
+                              prev.map((item, i) =>
+                                i === vIdx ? { ...item, sku: generateSku(name, item.name || "", i) } : item
+                              )
+                            );
+                          }}
+                          className="px-1.5 py-1 rounded-md hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold cursor-pointer transition-colors border border-emerald-200 bg-emerald-50"
+                          title="Tự động tạo mã SKU chuẩn"
+                        >
+                          ⚡ SKU
+                        </button>
+                      </div>
 
                       {/* Photo preview */}
                       <div className="relative w-9 h-9 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
                         {v.image_url ? (
-                          <Image src={v.image_url} alt="" fill className="object-cover" />
+                          <Image src={v.image_url} alt="" fill className="object-cover" unoptimized />
                         ) : (
                           <span className="text-gray-300 text-xs">Không</span>
                         )}
