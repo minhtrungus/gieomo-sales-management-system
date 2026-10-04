@@ -15,6 +15,8 @@ import {
   Sparkles,
   Copy,
   Check,
+  Shield,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
@@ -160,7 +162,7 @@ export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
             );
           })}
 
-          <div className="pt-3 border-t border-[#263D2E]/60 my-2">
+          <div className="pt-3 border-t border-[#263D2E]/60 my-2 space-y-1.5">
             <Link
               href="/"
               target="_blank"
@@ -169,6 +171,19 @@ export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
               <span>Trang bán hàng Gieo Mơ</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </Link>
+
+            {session?.role === "admin" && (
+              <Link
+                href="/admin/orders"
+                className="flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-bold text-[#FFE7A8] bg-[#223B28] hover:bg-[#2C4D34] border border-[#FFE7A8]/30 transition-colors shadow-2xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Shield className="w-3.5 h-3.5 text-[#FFE7A8]" />
+                  <span>Về Quản Trị Admin</span>
+                </span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
           </div>
         </nav>
 

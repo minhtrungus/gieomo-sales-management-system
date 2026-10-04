@@ -53,6 +53,14 @@ export function SaleHeader({ onToggleSidebar }: SaleHeaderProps) {
 
       {/* Right: User avatar */}
       <div className="flex items-center gap-2">
+        {session?.role === "admin" && (
+          <Link
+            href="/admin/orders"
+            className="px-2.5 py-1 rounded-xl text-[10px] font-extrabold bg-[#FFE7A8] text-[#542B07] border border-[#ebd089] hover:bg-[#fedb80] transition-colors"
+          >
+            Về Admin
+          </Link>
+        )}
         <div className="w-8 h-8 rounded-full bg-soft-green text-[#16381D] font-bold text-xs flex items-center justify-center border border-emerald-200">
           🌱
         </div>

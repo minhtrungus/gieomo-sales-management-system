@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -28,8 +28,10 @@ import {
   Sparkles,
 } from "lucide-react";
 
-export default function SaleCreateOrderPage() {
+function SaleCreateOrderForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryProductId = searchParams.get("productId");
   const [session, setSession] = useState<AdminSession | null>(null);
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
   const [settings, setSettings] = useState(getStoredSettings());
@@ -44,6 +46,25 @@ export default function SaleCreateOrderPage() {
     window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
     return () => window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
   }, []);
+
+  useEffect(() => {
+    if (queryProductId && availableProducts.length > 0) {
+      const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
+      if (targetProd) {
+        const firstVar = targetProd.variants?.[0];
+        setOrderItems([
+          {
+            productId: targetProd.product_id,
+            variantId: firstVar?.variant_id,
+            name: targetProd.name,
+            variantName: firstVar?.name,
+            price: firstVar?.price || targetProd.price,
+            quantity: 1,
+          },
+        ]);
+      }
+    }
+  }, [queryProductId, availableProducts]);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -644,5 +665,22 @@ export default function SaleCreateOrderPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SaleCreateOrderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[50vh] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-8 h-8 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+            <span className="text-xs font-semibold text-gray-500">Đang tải form nhập đơn...</span>
+          </div>
+        </div>
+      }
+    >
+      <SaleCreateOrderForm />
+    </Suspense>
   );
 }

@@ -13,6 +13,7 @@ import {
   X,
   Inbox,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -148,14 +149,24 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
 
       {/* Right side: Clean Action Cluster (View Storefront + Notification Bell + Admin Profile) */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Quick View My Personal Sale Portal */}
+        <Link
+          href="/sale"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EBF7EE] text-[#16381D] text-xs font-extrabold hover:bg-[#BFE9C3] transition-colors border border-[#BFE9C3] shadow-2xs"
+          title="Mở Cổng cá nhân (nhập đơn hộ, lấy link giới thiệu của riêng bạn)"
+        >
+          <span>🌱 Cổng cá nhân BTC</span>
+          <Sparkles className="w-3.5 h-3.5 text-[#2D6338]" />
+        </Link>
+
         {/* Quick View Public Storefront Link */}
         <Link
           href="/"
           target="_blank"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF8EE] text-[#16381D] text-xs font-bold hover:bg-[#BFE9C3]/50 transition-colors border border-[#F0E5D8]"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF8EE] text-[#16381D] text-xs font-bold hover:bg-[#BFE9C3]/50 transition-colors border border-[#F0E5D8]"
           title="Mở trang bán hàng công khai trong tab mới"
         >
-          <span className="hidden sm:inline">Trang bán hàng</span>
+          <span>Trang bán hàng</span>
           <ExternalLink className="w-3.5 h-3.5 text-[#2D6338]" />
         </Link>
 

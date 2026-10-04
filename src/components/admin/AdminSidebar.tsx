@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -18,11 +18,11 @@ import {
   X,
   Warehouse,
   Bell,
-  MapPin,
   MessageSquare,
-  FolderTree,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
 import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
@@ -32,8 +32,9 @@ interface AdminSidebarProps {
   onClose: () => void;
 }
 
-export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
+function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const settings = useSiteSettings();
   const { unreadCount } = useNotifications();
   const [session, setSession] = useState<AdminSession | null>(null);
@@ -45,10 +46,14 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     return () => window.removeEventListener("gieomo_admin_auth_changed", updateSession);
   }, []);
 
+  const currentTab = searchParams.get("tab");
+
   const menuItems = [
     { href: "/admin/dashboard", label: "Tổng quan (Dashboard)", icon: LayoutDashboard },
     { href: "/admin/notifications", label: "Hộp thư thông báo", icon: Bell, badge: unreadCount },
-    { href: "/admin/orders", label: "Quản lý đơn hàng", icon: ShoppingBag },
+    { href: "/admin/orders", label: "Tất cả đơn hàng", icon: ShoppingBag },
+    { href: "/admin/orders?tab=my_orders", label: "Đơn cá nhân của tôi", icon: UserCheck, isPersonal: true },
+    { href: "/admin/orders?tab=by_btc", label: "Đơn theo từng BTC", icon: Users, isBtcGroup: true },
     { href: "/admin/orders/create", label: "Nhập đơn hộ", icon: Package },
     { href: "/admin/products", label: "Sản phẩm", icon: Boxes },
     { href: "/admin/combos", label: "Set Combo", icon: Package },
@@ -110,7 +115,19 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-none">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));
+            const isTabOrder = item.href.includes("?tab=");
+            let isActive = false;
+
+            if (isTabOrder) {
+              const itemTab = item.href.split("?tab=")[1];
+              isActive = pathname === "/admin/orders" && currentTab === itemTab;
+            } else if (item.href === "/admin/orders") {
+              isActive = pathname === "/admin/orders" && !currentTab;
+            } else {
+              isActive =
+                pathname === item.href ||
+                (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));
+            }
 
             return (
               <Link
@@ -121,10 +138,24 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   isActive
                     ? "bg-[#BFE9C3] text-[#16381D] shadow-xs"
+                    : item.isPersonal
+                    ? "text-[#BFE9C3] hover:bg-[#203728] hover:text-white pl-5"
+                    : item.isBtcGroup
+                    ? "text-[#FFE7A8] hover:bg-[#203728] hover:text-white pl-5"
                     : "text-[#C8BEB2] hover:bg-[#203728] hover:text-white"
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-[#16381D]" : "text-[#BFE9C3]"}`} />
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive
+                      ? "text-[#16381D]"
+                      : item.isPersonal
+                      ? "text-[#BFE9C3]"
+                      : item.isBtcGroup
+                      ? "text-[#FFE7A8]"
+                      : "text-[#BFE9C3]"
+                  }`}
+                />
                 <span className="truncate">{item.label}</span>
                 {item.badge !== undefined && item.badge > 0 && (
                   <span
@@ -140,6 +171,20 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               </Link>
             );
           })}
+
+          {/* Quick Link to Personal Sale Portal */}
+          <div className="pt-2 border-t border-[#263D2E]/60 my-2">
+            <Link
+              href="/sale"
+              className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold text-[#BFE9C3] bg-[#203728] hover:bg-[#284533] border border-[#BFE9C3]/20 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span>🌱</span>
+                <span>Cổng cá nhân BTC</span>
+              </span>
+              <ExternalLink className="w-3.5 h-3.5 text-[#BFE9C3]" />
+            </Link>
+          </div>
         </nav>
 
         {/* Footer User Info */}
@@ -172,5 +217,13 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </div>
       </aside>
     </>
+  );
+}
+
+export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
+  return (
+    <Suspense fallback={null}>
+      <AdminSidebarInner isOpen={isOpen} onClose={onClose} />
+    </Suspense>
   );
 }

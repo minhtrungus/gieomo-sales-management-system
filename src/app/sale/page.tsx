@@ -14,6 +14,9 @@ import {
   ChevronRight,
   Sparkles,
   QrCode,
+  Eye,
+  X,
+  Phone,
 } from "lucide-react";
 import {
   getAdminSession,
@@ -23,7 +26,7 @@ import {
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import type { Order } from "@/types/database";
 
 export default function SaleDashboardPage() {
@@ -31,6 +34,7 @@ export default function SaleDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     const s = getAdminSession();
@@ -272,7 +276,11 @@ export default function SaleDashboardPage() {
             <h2 className="font-heading font-extrabold text-base text-[#231B16]">
               Đơn Hàng Gần Đây Của Bạn
             </h2>
-            <p className="text-xs text-gray-400">5 đơn hàng mới nhất được ghi nhận cho bạn</p>
+            <p className="text-xs text-gray-400">
+              {orders.length === 0
+                ? "Chưa có đơn hàng nào được ghi nhận cho bạn"
+                : `Hiển thị ${Math.min(orders.length, 5)} đơn hàng mới nhất`}
+            </p>
           </div>
           <Link
             href="/sale/orders"
@@ -294,6 +302,7 @@ export default function SaleDashboardPage() {
                   <th className="py-3 px-3">Tổng tiền</th>
                   <th className="py-3 px-3">Trạng thái</th>
                   <th className="py-3 px-3">Ngày đặt</th>
+                  <th className="py-3 px-3 text-right">Chi tiết</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -313,12 +322,23 @@ export default function SaleDashboardPage() {
                       <MoneyDisplay amount={ord.final_amount} className="font-bold text-emerald-950" />
                     </td>
                     <td className="py-3.5 px-3">
-                      <Badge variant={ord.order_status === "completed" ? "success" : "warning"}>
+                      <Badge variant={ord.order_status === "completed" ? "success" : ord.order_status === "cancelled" ? "default" : "warning"}>
                         {ORDER_STATUS_LABELS[ord.order_status]}
                       </Badge>
                     </td>
                     <td className="py-3.5 px-3 text-gray-400 text-[11px]">
                       {new Date(ord.created_at).toLocaleDateString("vi-VN")}
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrder(ord)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        title="Xem chi tiết đơn hàng"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Xem</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -346,6 +366,117 @@ export default function SaleDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <span className="text-[10px] text-gray-400 uppercase font-bold">Chi tiết đơn hàng</span>
+                <h3 className="font-mono font-extrabold text-lg text-[#16381D]">
+                  {selectedOrder.order_code}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="p-1 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Customer Details */}
+            <div className="bg-gray-50 rounded-2xl p-4 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Khách hàng:</span>
+                <span className="font-bold text-gray-800">{selectedOrder.buyer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Điện thoại:</span>
+                <span className="font-bold text-gray-800 flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-gray-400" />
+                  {selectedOrder.buyer_phone}
+                </span>
+              </div>
+              {selectedOrder.buyer_email && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Email:</span>
+                  <span className="text-gray-800">{selectedOrder.buyer_email}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-400">Địa chỉ:</span>
+                <span className="text-gray-800 text-right max-w-[240px] font-medium">
+                  {selectedOrder.address_detail}
+                </span>
+              </div>
+              {selectedOrder.customer_note && (
+                <div className="flex justify-between border-t border-gray-200/60 pt-2">
+                  <span className="text-gray-400">Ghi chú:</span>
+                  <span className="text-gray-700 text-right italic">{selectedOrder.customer_note}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Items List */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-gray-700 block">Sản phẩm trong đơn:</span>
+              <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
+                {selectedOrder.items?.map((it, idx) => (
+                  <div key={idx} className="p-3 text-xs flex justify-between items-center bg-white">
+                    <div>
+                      <span className="font-bold text-gray-900 block">{it.product_name_snapshot}</span>
+                      {it.variant_name_snapshot && (
+                        <span className="text-[11px] text-gray-500">
+                          Phân loại: {it.variant_name_snapshot}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-gray-400 block">
+                        Số lượng: x{it.quantity}
+                      </span>
+                    </div>
+                    <MoneyDisplay amount={it.subtotal} className="font-bold text-emerald-950" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Total Pricing */}
+            <div className="bg-[#16381D] text-white p-4 rounded-2xl space-y-2 text-xs">
+              <div className="flex justify-between text-emerald-100/80">
+                <span>Tiền hàng:</span>
+                <span>{selectedOrder.subtotal?.toLocaleString("vi-VN")}đ</span>
+              </div>
+              <div className="flex justify-between text-emerald-100/80">
+                <span>Phí vận chuyển:</span>
+                <span>{selectedOrder.shipping_fee?.toLocaleString("vi-VN")}đ</span>
+              </div>
+              <div className="flex justify-between text-base font-extrabold text-[#BFE9C3] pt-2 border-t border-[#264E2E]">
+                <span>Tổng cộng:</span>
+                <span>{selectedOrder.final_amount?.toLocaleString("vi-VN")}đ</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-xs text-gray-700 transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
+              <Link
+                href="/sale/orders"
+                className="flex-1 py-2.5 rounded-xl bg-[#16381D] hover:bg-[#234E2B] text-white font-bold text-xs transition-colors text-center inline-flex items-center justify-center gap-1"
+              >
+                <span>Xem ở DS đơn hàng</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
