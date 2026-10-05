@@ -38,50 +38,43 @@ export function syncOrdersFromServer(force = false): void {
   safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.orders)) {
-        const current = getStoredOrders();
-        const map = new Map<string, Order>();
-        for (const o of current) {
-          const key = (o.order_code || o.order_id || "").trim().toUpperCase();
-          if (key) map.set(key, o);
+        if (data.orders.length === 0) {
+          cachedOrders = [];
+          cachedPayments = [];
+          localStorage.setItem("gieomo_orders", JSON.stringify([]));
+          localStorage.setItem("gieomo_payments", JSON.stringify([]));
+          localStorage.setItem("gieomo_customers", JSON.stringify([]));
+          window.dispatchEvent(new Event("gieomo_orders_updated"));
+          window.dispatchEvent(new Event("gieomo_payments_updated"));
+          return;
         }
-        for (const sOrd of data.orders) {
-          const key = (sOrd.order_code || sOrd.order_id || "").trim().toUpperCase();
-          if (!key) continue;
-          const existing = map.get(key);
-          const normalized: Order = {
-            ...sOrd,
-            buyer_name:
-              (sOrd.buyer_name && sOrd.buyer_name !== "Khách tại quầy" ? sOrd.buyer_name : null) ||
-              existing?.buyer_name ||
-              sOrd.buyer_name ||
-              "Khách hàng",
-            buyer_phone:
-              (sOrd.buyer_phone && sOrd.buyer_phone !== "—" ? sOrd.buyer_phone : null) ||
-              existing?.buyer_phone ||
-              sOrd.buyer_phone ||
-              "",
-            recipient_name: sOrd.recipient_name || existing?.recipient_name || sOrd.buyer_name,
-            recipient_phone: sOrd.recipient_phone || existing?.recipient_phone || sOrd.buyer_phone,
-            address_detail: sOrd.address_detail || existing?.address_detail || "",
-            source_type: sOrd.source_type || existing?.source_type || "landing_page",
-            introducer_info: sOrd.introducer_info || existing?.introducer_info || null,
-            referral_code: sOrd.referral_code || existing?.referral_code || null,
-            items: (sOrd.items && sOrd.items.length > 0) ? sOrd.items : existing?.items,
-          };
-          map.set(key, existing ? { ...existing, ...normalized } : normalized);
-        }
-        const merged = Array.from(map.values()).sort(
+
+        const merged: Order[] = data.orders.map((sOrd) => ({
+          ...sOrd,
+          buyer_name: sOrd.buyer_name || "Khách hàng",
+          buyer_phone: sOrd.buyer_phone || "",
+          recipient_name: sOrd.recipient_name || sOrd.buyer_name || "Khách hàng",
+          recipient_phone: sOrd.recipient_phone || sOrd.buyer_phone || "",
+          address_detail: sOrd.address_detail || "",
+          source_type: sOrd.source_type || "landing_page",
+          introducer_info: sOrd.introducer_info || null,
+          referral_code: sOrd.referral_code || null,
+          items: sOrd.items || [],
+        })).sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
+
         cachedOrders = merged;
         localStorage.setItem("gieomo_orders", JSON.stringify(merged));
         window.dispatchEvent(new Event("gieomo_orders_updated"));
+        window.dispatchEvent(new Event("gieomo_payments_updated"));
       }
     })
     .catch((err) => {
       console.warn("Could not sync orders from server:", err);
     });
 }
+
 
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return [];
