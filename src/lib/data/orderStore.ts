@@ -1350,7 +1350,7 @@ export function syncProductsFromServer(): void {
   safeFetchJson<{ success: boolean; products: ExtendedProduct[] }>("/api/products?admin=true")
     .then((data) => {
       if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
-        const current = getStoredProducts();
+        const current = cachedProducts || (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("gieomo_products") || "[]") : []);
         const map = new Map<string, ExtendedProduct>();
 
         for (const p of current) {
@@ -1403,7 +1403,6 @@ export async function clearAllStoredProducts(): Promise<void> {
   cachedProducts = [];
   if (typeof window !== "undefined") {
     localStorage.setItem("gieomo_products", JSON.stringify([]));
-    localStorage.setItem("gieomo_products_cleared_v3", "true");
     localStorage.removeItem("gieomo-cart");
     window.dispatchEvent(new Event("gieomo_products_updated"));
     window.dispatchEvent(new Event("gieomo_cart_updated"));
@@ -1418,16 +1417,8 @@ export async function clearAllStoredProducts(): Promise<void> {
 export function getStoredProducts(): ExtendedProduct[] {
   if (typeof window === "undefined") return MOCK_PRODUCTS;
 
-  // One-time auto purge of legacy demo products as requested by user
-  if (localStorage.getItem("gieomo_products_cleared_v3") !== "true") {
-    localStorage.setItem("gieomo_products", JSON.stringify([]));
-    localStorage.setItem("gieomo_products_cleared_v3", "true");
-    localStorage.removeItem("gieomo-cart");
-    window.dispatchEvent(new Event("gieomo_cart_updated"));
-    cachedProducts = [];
-    MOCK_PRODUCTS.length = 0;
-    fetch("/api/products?id=all", { method: "DELETE" }).catch(() => {});
-    return [];
+  if (!hasSyncedProductsWithServer) {
+    syncProductsFromServer();
   }
 
   if (cachedProducts !== null) return cachedProducts;
