@@ -1087,6 +1087,21 @@ export function deleteStoredMember(memberId: string): void {
     localStorage.setItem("gieomo_members", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_members_updated"));
 
+    // If the deleted member was logged in currently, clear their session immediately!
+    const rawSession = localStorage.getItem("gieomo_admin_session");
+    if (rawSession) {
+      try {
+        const s = JSON.parse(rawSession);
+        if (
+          s.memberId === memberId ||
+          (target?.email && s.email?.toLowerCase() === target.email.toLowerCase()) ||
+          (target?.referralCode && s.referralCode?.toUpperCase() === target.referralCode.toUpperCase())
+        ) {
+          clearAdminSession();
+        }
+      } catch {}
+    }
+
     // Sync DELETE to Supabase
     const params = new URLSearchParams();
     if (memberId) params.append("id", memberId);

@@ -59,7 +59,7 @@ export async function GET() {
 
     if (error) {
       console.warn("[GET /api/members] DB error:", error);
-      return NextResponse.json({ success: true, members: [DEFAULT_SALE_ACCOUNT] });
+      return NextResponse.json({ success: true, members: [] });
     }
 
     let membersList = data || [];
@@ -111,32 +111,10 @@ export async function GET() {
       };
     });
 
-    // 4. Fallback default account ONLY when database is completely empty
-    if (membersList.length === 0) {
-      membersList = [DEFAULT_SALE_ACCOUNT];
-      (async () => {
-        try {
-          await supabase
-            .from("members")
-            .upsert({
-              member_id: DEFAULT_SALE_ACCOUNT.member_id,
-              full_name: DEFAULT_SALE_ACCOUNT.full_name,
-              email: DEFAULT_SALE_ACCOUNT.email,
-              phone: DEFAULT_SALE_ACCOUNT.phone,
-              role: DEFAULT_SALE_ACCOUNT.role,
-              status: DEFAULT_SALE_ACCOUNT.status,
-              referral_code: DEFAULT_SALE_ACCOUNT.referral_code,
-            }, { onConflict: "member_id" });
-        } catch {
-          // Ignore non-fatal background upsert error
-        }
-      })();
-    }
-
     return NextResponse.json({ success: true, members: membersList });
   } catch (err: any) {
     console.error("[GET /api/members] Exception:", err);
-    return NextResponse.json({ success: true, members: [DEFAULT_SALE_ACCOUNT] });
+    return NextResponse.json({ success: true, members: [] });
   }
 }
 
