@@ -26,8 +26,8 @@ interface ComboItemSelection {
 const COMBO_IMAGE_PRESETS = [
   { label: "Set quà tặng Mầm Mơ (Mặc định)", url: "/images/products/set_combo_1.jpg" },
   { label: "Pouch Vải & Phụ Kiện Handmade", url: "/images/products/pounch_1.png" },
-  { label: "Kẹp Tóc & Đồ May Vá Mini", url: "/images/products/kep_toc.jpg" },
-  { label: "Sổ Tay & Túi Mầm Mơ", url: "/images/products/so_tay.jpg" },
+  { label: "Kẹp Tóc & Đồ May Vá Mini", url: "/images/products/kep-toc-1.jpg" },
+  { label: "Túi Tote & Đồ May Mầm Mơ", url: "/images/products/tote-gieo-mo-1.jpg" },
 ];
 
 function getProductTotalStock(prod?: ExtendedProduct | null): number {
