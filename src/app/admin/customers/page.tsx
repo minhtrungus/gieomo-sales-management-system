@@ -136,11 +136,68 @@ export default function AdminCustomersPage() {
         </div>
       </div>
 
-      {/* Customers Table */}
-      <div className="bg-white rounded-3xl border border-gray-200/80 shadow-2xs overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-gray-400 italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {filteredCustomers.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-gray-200/80 text-center text-gray-500 shadow-2xs">
+            <p className="font-bold text-sm text-gray-800">Không tìm thấy khách hàng nào phù hợp.</p>
+          </div>
+        ) : (
+          filteredCustomers.map((c, idx) => (
+            <div
+              key={c.customerId}
+              className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-2xs space-y-3"
+            >
+              <div className="flex items-start justify-between gap-2 pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center">
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">{c.fullName}</h4>
+                    <span className="font-mono text-[11px] text-[#16381D] font-bold block">{c.phone}</span>
+                  </div>
+                </div>
+                {c.introducerInfo && c.introducerInfo !== "Trực tiếp" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-[10px] shrink-0">
+                    🌱 {c.introducerInfo}
+                  </span>
+                ) : (
+                  <span className="text-gray-400 text-[10px] italic">Trực tiếp</span>
+                )}
+              </div>
+
+              {c.email && (
+                <div className="text-[11px] text-gray-600 flex items-center gap-1">
+                  <span className="text-gray-400">✉️</span>
+                  <span className="truncate">{c.email}</span>
+                </div>
+              )}
+
+              {c.address && (
+                <div className="text-[11px] text-gray-600 flex items-start gap-1">
+                  <span className="text-gray-400 shrink-0 mt-0.5">📍</span>
+                  <span className="line-clamp-2">{c.address}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100 bg-[#FFFDF9] -mx-4 -mb-4 p-3 rounded-b-2xl">
+                <div>
+                  <span className="text-[10px] text-gray-500 block">Số đơn đã đặt</span>
+                  <span className="font-extrabold text-xs text-gray-900">{c.totalOrders} đơn</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-gray-500 block">Tổng tiền ủng hộ</span>
+                  <MoneyDisplay amount={c.totalSpent} className="font-extrabold text-emerald-950 text-sm" />
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-gray-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[780px] text-left text-xs">
             <thead>

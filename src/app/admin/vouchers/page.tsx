@@ -257,11 +257,128 @@ export default function AdminVouchersPage() {
         </div>
       </div>
 
-      {/* Vouchers Table */}
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {filteredVouchers.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-gray-500 shadow-soft">
+            <Ticket className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="font-bold text-sm">Không tìm thấy mã giảm giá nào phù hợp bộ lọc.</p>
+          </div>
+        ) : (
+          filteredVouchers.map((v) => {
+            const voucherOrders = getOrdersForVoucher(v.code);
+            const actualCount = voucherOrders.length > 0 ? voucherOrders.length : (v.usage_count ?? 0);
+            const isPublic = (v.visibility || "public") === "public";
+            const isActive = v.status === "active";
+
+            return (
+              <div
+                key={v.voucher_id}
+                className="bg-white rounded-2xl p-4 border border-[#F0E5D8] shadow-soft space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-extrabold text-[#2D6338] text-sm bg-[#EAF7ED] px-2.5 py-0.5 rounded-lg border border-[#BFE9C3]">
+                        {v.code}
+                      </span>
+                      {v.is_gift_voucher && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold">
+                          🎁 Quà tặng
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-xs text-[#342A24]">
+                      {v.discount_type === "percentage" ? (
+                        <span className="text-[#E2884E]">Giảm {v.discount_value}%</span>
+                      ) : v.discount_type === "freeship" ? (
+                        <span className="text-emerald-700">🚚 Miễn phí vận chuyển (Freeship)</span>
+                      ) : (
+                        <span className="text-[#2D6338]">
+                          Giảm <MoneyDisplay amount={v.discount_value} />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStatus(v)}
+                    className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                      isActive
+                        ? "bg-[#BFE9C3] text-[#16381D]"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-emerald-600" : "bg-gray-400"}`} />
+                    <span>{isActive ? "Đang chạy" : "Tạm dừng"}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div>
+                    <span className="text-[10px] text-gray-400 block">Đơn tối thiểu:</span>
+                    <span className="font-bold text-gray-800">
+                      {v.min_order_value ? `${v.min_order_value.toLocaleString("vi-VN")}đ` : "0đ"}
+                    </span>
+                    {Boolean(v.min_items_count && v.min_items_count > 0) && (
+                      <span className="text-[10px] text-amber-800 font-bold block">
+                        Tối thiểu {v.min_items_count} món
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 block">Lượt đã dùng:</span>
+                    <span className="font-bold text-gray-800">
+                      {actualCount} / {v.usage_limit ?? "∞"} lượt
+                    </span>
+                    <span className="text-[10px] text-gray-500 block">
+                      {isPublic ? "🌐 Công khai" : "🔒 Riêng tư"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                  {voucherOrders.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setViewingOrdersVoucher(v)}
+                      className="px-2.5 py-1 rounded-xl bg-emerald-50 text-[#16381D] font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer border border-emerald-200"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Xem {voucherOrders.length} đơn</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-gray-400 italic">Chưa có đơn áp dụng</span>
+                  )}
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingVoucher(v)}
+                      className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 cursor-pointer"
+                      title="Sửa"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingVoucher(v)}
+                      className="p-1.5 rounded-xl hover:bg-red-50 text-red-500 cursor-pointer"
+                      title="Xóa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[780px] text-left text-xs">
             <thead>

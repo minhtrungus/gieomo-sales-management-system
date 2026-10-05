@@ -1396,15 +1396,20 @@ export function getStoredProducts(): ExtendedProduct[] {
     syncProductsFromServer();
   }
 
-  if (cachedProducts !== null) return cachedProducts;
+  if (cachedProducts !== null && cachedProducts.length > 0) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
     const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+    if (products.length === 0) {
+      cachedProducts = MOCK_PRODUCTS;
+      localStorage.setItem("gieomo_products", JSON.stringify(MOCK_PRODUCTS));
+      return MOCK_PRODUCTS;
+    }
     cachedProducts = products;
     return products;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
-    return [];
+    return MOCK_PRODUCTS;
   }
 }
 
@@ -2343,23 +2348,28 @@ export function syncCombosFromServer(force = false): void {
 }
 
 export function getStoredCombos(): ExtendedCombo[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return MOCK_COMBOS;
   if (!hasSyncedCombosWithServer) {
     syncCombosFromServer();
   }
-  if (cachedCombos !== null) return cachedCombos;
+  if (cachedCombos !== null && cachedCombos.length > 0) return cachedCombos;
   try {
     const raw = localStorage.getItem("gieomo_combos");
     if (!raw) {
-      cachedCombos = [];
-      return [];
+      cachedCombos = MOCK_COMBOS;
+      localStorage.setItem("gieomo_combos", JSON.stringify(MOCK_COMBOS));
+      return MOCK_COMBOS;
     }
     const combos: ExtendedCombo[] = JSON.parse(raw);
+    if (combos.length === 0) {
+      cachedCombos = MOCK_COMBOS;
+      return MOCK_COMBOS;
+    }
     cachedCombos = combos;
     return combos;
   } catch (e) {
     console.error("Error reading gieomo_combos", e);
-    return [];
+    return MOCK_COMBOS;
   }
 }
 

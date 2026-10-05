@@ -902,11 +902,181 @@ export default function AdminMembersPage() {
         </button>
       </div>
 
-      {/* Members Table */}
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {members.map((m, idx) => {
+          const statById = statsByMemberId.get(m.memberId);
+          const statByRef = m.referralCode ? statsByReferralCode.get(m.referralCode.toUpperCase()) : undefined;
+          const stat = statById || statByRef;
+
+          const displayOrdersCount = stat ? stat.count : m.totalOrders;
+          const displayRevenue = stat ? stat.revenue : m.totalRevenue;
+
+          const isProtected = Boolean(
+            m.isSystemProtected ||
+            m.email.toLowerCase() === "baotri@gieomo.store" ||
+            m.memberId === "baotri-system"
+          );
+
+          const presence = getMemberPresence(m);
+
+          return (
+            <div
+              key={m.memberId}
+              className="bg-white rounded-2xl p-4 border border-[#F0E5D8] shadow-soft space-y-3"
+            >
+              {/* Header: Name + Presence + Role */}
+              <div className="flex items-start justify-between gap-2 pb-2 border-b border-gray-100">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <h4
+                      onClick={() => setViewingOrdersMember(m)}
+                      className="font-bold text-gray-900 text-xs hover:text-emerald-700 cursor-pointer"
+                    >
+                      {m.fullName}
+                    </h4>
+                  </div>
+                  <span className="text-[10.5px] text-gray-500 block mt-0.5 ml-6.5">
+                    {m.email} • {m.phone}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {m.role === "admin" ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFE7A8] text-[#542B07] text-[9.5px] font-extrabold border border-[#ebd089]">
+                      <Shield className="w-2.5 h-2.5 text-[#E2884E]" />
+                      <span>Admin</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#CFE8FF] text-[#133A63] text-[9.5px] font-bold border border-[#b2d9ff]">
+                      <User className="w-2.5 h-2.5 text-[#0068FF]" />
+                      <span>BTC Sale</span>
+                    </span>
+                  )}
+                  {presence.isOnline ? (
+                    <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Online</span>
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] text-gray-400">{presence.label}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Referral Code & Status */}
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500">Mã Ref:</span>
+                  <span className="font-mono font-bold text-[#1B3622] bg-[#EAF7ED] px-2 py-0.5 rounded-lg border border-[#BFE9C3] text-[10.5px]">
+                    {m.referralCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(m.referralCode)}
+                    className="p-1 rounded-lg text-gray-500 hover:text-emerald-800 hover:bg-emerald-50 cursor-pointer"
+                    title="Sao chép"
+                  >
+                    {copiedCode === m.referralCode ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleStatus(m)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-all cursor-pointer ${
+                    m.status === "active"
+                      ? "bg-[#BFE9C3]/50 text-[#16381D] border-[#9ed4a3]"
+                      : "bg-red-50 text-red-700 border-red-200"
+                  }`}
+                >
+                  {m.status === "active" ? (
+                    <>
+                      <Unlock className="w-2.5 h-2.5 text-[#2D6338]" />
+                      <span>Cho phép</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-2.5 h-2.5 text-red-600" />
+                      <span>Đã khóa</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Performance Stats */}
+              <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-[#FFFDF9] border border-[#F0E5D8] text-xs">
+                <div>
+                  <span className="text-[10px] text-gray-500 block">Đơn đã chốt</span>
+                  <button
+                    type="button"
+                    onClick={() => setViewingOrdersMember(m)}
+                    className="font-extrabold text-xs text-emerald-900 hover:underline flex items-center gap-1 mt-0.5 cursor-pointer"
+                  >
+                    <span>{displayOrdersCount} đơn</span>
+                    <Eye className="w-3 h-3 text-gray-400" />
+                  </button>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-500 block">Doanh số gây quỹ</span>
+                  <MoneyDisplay amount={displayRevenue} className="font-extrabold text-[#2D6338] text-xs block mt-0.5" />
+                </div>
+              </div>
+
+              {/* Actions Toolbar */}
+              <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setViewingOrdersMember(m)}
+                  className="px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Xem đơn ({displayOrdersCount})</span>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingMember(m)}
+                    className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-600 cursor-pointer"
+                    title="Chỉnh sửa"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordMember(m)}
+                    className="p-1.5 rounded-xl hover:bg-amber-50 text-amber-700 cursor-pointer"
+                    title="Đổi mật khẩu"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                  </button>
+                  {!isProtected && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingMember(m)}
+                      className="p-1.5 rounded-xl hover:bg-red-50 text-red-500 cursor-pointer"
+                      title="Thu hồi tài khoản"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-[11px]">
             <thead>

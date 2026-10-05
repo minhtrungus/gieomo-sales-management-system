@@ -40,10 +40,70 @@ export default function AdminPaymentsPage() {
         </p>
       </div>
 
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {payments.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-[#7E7068] shadow-soft">
+            <p className="font-bold text-sm text-[#231B16]">Chưa có giao dịch thanh toán VietQR nào.</p>
+          </div>
+        ) : (
+          payments.map((p, idx) => (
+            <div
+              key={p.paymentId}
+              className="bg-white rounded-2xl p-4 border border-[#F0E5D8] shadow-soft space-y-3"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gray-100 text-[#7E7068] font-bold text-[10px] flex items-center justify-center">
+                    {idx + 1}
+                  </span>
+                  <span className="font-mono font-bold text-xs text-[#1B3622] bg-[#EAF7ED] px-2 py-0.5 rounded-lg border border-[#BFE9C3]">
+                    {p.orderCode}
+                  </span>
+                </div>
+                <Badge variant={p.status === "paid" ? "success" : "warning"} className="text-[10px] px-2 py-0.5">
+                  {p.status === "paid" ? "✓ Đã xác nhận" : "⏳ Chờ đối soát"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-[10.5px] text-[#7E7068] block">Số tiền thanh toán:</span>
+                  <MoneyDisplay amount={p.amount} className="font-extrabold text-[#1B3622] text-sm" />
+                </div>
+                <div>
+                  <span className="text-[10.5px] text-[#7E7068] block">Mã GD / Tham chiếu:</span>
+                  <span className="font-mono text-gray-800 text-[11px] block truncate font-semibold">
+                    {p.transactionCode}
+                  </span>
+                </div>
+                <div className="col-span-2 pt-1 text-[11px] text-gray-500">
+                  <span>Thời gian: </span>
+                  <span className="font-medium text-gray-700">{p.createdAt}</span>
+                </div>
+              </div>
+
+              {p.status === "pending" ? (
+                <button
+                  type="button"
+                  onClick={() => setApprovingPayment(p)}
+                  className="w-full py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-800" />
+                  <span>Duyệt thanh toán này</span>
+                </button>
+              ) : (
+                <div className="py-1.5 rounded-xl bg-emerald-50 text-[#16381D] font-bold text-[11px] text-center border border-emerald-200">
+                  ✓ Giao dịch đã được duyệt thành công
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] text-left text-[11px]">
             <thead>

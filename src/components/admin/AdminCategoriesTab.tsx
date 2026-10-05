@@ -222,11 +222,83 @@ export function AdminCategoriesTab() {
         </span>
       </div>
 
-      {/* Categories Table */}
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {filteredCategories.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-[#7E7068] shadow-soft">
+            <p className="font-bold text-sm text-[#231B16]">
+              {searchQuery ? "Không tìm thấy danh mục nào." : "Chưa có danh mục nào."}
+            </p>
+          </div>
+        ) : (
+          filteredCategories.map((cat, idx) => {
+            const prodCount = productCountByCat.get(cat.category_id) || 0;
+            return (
+              <div
+                key={cat.category_id}
+                className="bg-white rounded-2xl p-4 border border-[#F0E5D8] shadow-soft space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <h4 className="font-bold text-gray-900 text-xs">{cat.name}</h4>
+                    </div>
+                    <span className="font-mono text-[10.5px] text-gray-500 block mt-0.5 ml-6.5">
+                      /{cat.slug}
+                    </span>
+                  </div>
+
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      cat.status === "active"
+                        ? "bg-[#EAF7ED] text-[#16381D] border border-emerald-200"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {cat.status === "active" ? "Đang dùng" : "Tạm ẩn"}
+                  </span>
+                </div>
+
+                {cat.description && (
+                  <p className="text-[11px] text-gray-600 line-clamp-2">{cat.description}</p>
+                )}
+
+                <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-xs">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-bold text-[11px] border border-emerald-200">
+                    <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{prodCount} sản phẩm</span>
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategory(cat)}
+                      className="p-1.5 rounded-xl hover:bg-emerald-50 text-gray-600 hover:text-emerald-800 cursor-pointer"
+                      title="Sửa"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingCategory(cat)}
+                      className="p-1.5 rounded-xl hover:bg-red-50 text-red-500 cursor-pointer"
+                      title="Xóa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-xs">
             <thead>
