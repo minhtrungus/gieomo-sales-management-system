@@ -11,11 +11,12 @@ import {
   saveNewOrder,
   getStoredProducts,
   getStoredPickupPoints,
+  syncPickupPointsFromServer,
   getStoredSettings,
   getAdminSession,
   type AdminSession,
 } from "@/lib/data/orderStore";
-import type { Order, OrderItem, PickupPoint } from "@/types/database";
+import type { Order, OrderItem, PickupPoint, DeliveryType, PaymentMethod } from "@/types/database";
 import {
   ArrowLeft,
   Plus,
@@ -26,6 +27,11 @@ import {
   CheckCircle,
   ExternalLink,
   Sparkles,
+  MapPin,
+  UserCheck,
+  Truck,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 
 function SaleCreateOrderForm() {
@@ -34,17 +40,26 @@ function SaleCreateOrderForm() {
   const queryProductId = searchParams.get("productId");
   const [session, setSession] = useState<AdminSession | null>(null);
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
+  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>(getStoredPickupPoints());
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
     const s = getAdminSession();
     setSession(s);
     setAvailableProducts(getStoredProducts());
+    setPickupPoints(getStoredPickupPoints());
     setSettings(getStoredSettings());
+    syncPickupPointsFromServer(true);
 
     const handleSettingsUpdate = () => setSettings(getStoredSettings());
+    const handlePickupUpdate = () => setPickupPoints(getStoredPickupPoints());
+
     window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
-    return () => window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
+    window.addEventListener("gieomo_pickup_points_updated", handlePickupUpdate);
+    return () => {
+      window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
+      window.removeEventListener("gieomo_pickup_points_updated", handlePickupUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -69,6 +84,12 @@ function SaleCreateOrderForm() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+
+  // Delivery & Payment States
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("member_delivery");
+  const [pickupPointId, setPickupPointId] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("banking");
+
   const [addressDetail, setAddressDetail] = useState("");
   const [province, setProvince] = useState("TP. Hồ Chí Minh");
   const [customerNote, setCustomerNote] = useState("");
@@ -176,13 +197,23 @@ function SaleCreateOrderForm() {
   );
   const isFreeship = (settings.freeShippingThreshold ?? 0) > 0 && subtotal >= (settings.freeShippingThreshold ?? 0);
   const baseShippingFee = settings.flatShippingFee !== undefined ? settings.flatShippingFee : 15000;
-  const shippingFee = isFreeship ? 0 : baseShippingFee;
+  const shippingFee = deliveryType === "home_delivery" ? (isFreeship ? 0 : baseShippingFee) : 0;
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !customerPhone.trim()) {
       alert("Vui lòng điền họ tên và số điện thoại của người nhận!");
+      return;
+    }
+
+    if (deliveryType === "home_delivery" && !addressDetail.trim()) {
+      alert("Vui lòng nhập địa chỉ chi tiết giao hàng!");
+      return;
+    }
+
+    if (deliveryType === "pickup_point" && !pickupPointId && pickupPoints.length > 0) {
+      alert("Vui lòng chọn điểm hẹn nhận hàng!");
       return;
     }
 
@@ -210,6 +241,16 @@ function SaleCreateOrderForm() {
 
     const memberName = session?.name || "Thành viên";
     const refCode = session?.referralCode || "";
+    const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
+
+    const calculatedAddress =
+      deliveryType === "home_delivery"
+        ? addressDetail || "Địa chỉ giao hàng"
+        : deliveryType === "pickup_point"
+        ? selectedPickup
+          ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}`
+          : "Điểm hẹn nhận hàng Mầm Mơ"
+        : `Giao qua thành viên: ${memberName} (${refCode || "Người quen"})`;
 
     const newOrder: Order = {
       order_id: newOrderId,
@@ -219,11 +260,12 @@ function SaleCreateOrderForm() {
       buyer_email: customerEmail || "",
       recipient_name: customerName,
       recipient_phone: customerPhone,
-      delivery_type: "home_delivery",
-      address_detail: addressDetail || "Địa chỉ giao hàng",
+      delivery_type: deliveryType,
+      pickup_point_id: deliveryType === "pickup_point" ? pickupPointId || null : null,
+      address_detail: calculatedAddress,
       district: "",
-      province: province,
-      payment_method: "banking",
+      province: deliveryType === "home_delivery" ? province : "TP. Hồ Chí Minh",
+      payment_method: paymentMethod,
       payment_status: "pending",
       order_status: "pending",
       delivery_status: "not_ready",
@@ -236,7 +278,9 @@ function SaleCreateOrderForm() {
       introducer_info: refCode ? `${memberName} (${refCode})` : memberName,
       referral_code: refCode || null,
       created_by_member_id: session?.memberId || null,
-      customer_note: customerNote ? `[Thành viên chốt]: ${customerNote}` : "Thành viên chốt đơn hộ",
+      customer_note: customerNote
+        ? `[Đơn chốt hộ]: ${customerNote}`
+        : `Thành viên ${memberName} đặt hàng giùm khách`,
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
       completed_at: null,
@@ -246,19 +290,21 @@ function SaleCreateOrderForm() {
     saveNewOrder(newOrder);
     setOrderCreatedSuccess(newOrder);
 
-    const qrUrl =
-      settings.qrMode === "upload" && settings.qrImageUrl
-        ? settings.qrImageUrl
-        : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
-            `${randomCode} ${customerPhone}`
-          )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
+    if (paymentMethod === "banking") {
+      const qrUrl =
+        settings.qrMode === "upload" && settings.qrImageUrl
+          ? settings.qrImageUrl
+          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
+              `${randomCode} ${customerPhone}`
+            )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
 
-    setActiveQrModal({
-      orderCode: randomCode,
-      orderId: newOrderId,
-      amount: finalAmount,
-      qrUrl,
-    });
+      setActiveQrModal({
+        orderCode: randomCode,
+        orderId: newOrderId,
+        amount: finalAmount,
+        qrUrl,
+      });
+    }
   };
 
   const handleResetForm = () => {
@@ -545,73 +591,137 @@ function SaleCreateOrderForm() {
         </div>
 
         {/* Delivery & Payment */}
-        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xs space-y-4">
-          <h2 className="font-heading font-extrabold text-base text-[#231B16] border-b border-gray-100 pb-3">
-            3. Nhận Hàng & Thanh Toán
+        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xs space-y-5">
+          <h2 className="font-heading font-extrabold text-base text-[#231B16] border-b border-gray-100 pb-3 flex items-center justify-between">
+            <span>3. Nhận Hàng & Thanh Toán</span>
+            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              {deliveryType === "home_delivery"
+                ? isFreeship
+                  ? "Phí ship: 0đ (Freeship)"
+                  : `Phí ship: ${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`
+                : "Phí ship: 0đ"}
+            </span>
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-gray-700 mb-1.5 block">
-                Hình thức nhận hàng
+                Hình thức nhận hàng *
               </label>
               <select
-                className="w-full h-11 px-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 text-xs font-bold text-emerald-950 focus:outline-none cursor-default"
-                value="home_delivery"
-                disabled
+                className="w-full h-11 px-3 rounded-2xl border border-gray-300 bg-white text-xs font-bold text-gray-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                value={deliveryType}
+                onChange={(e) => setDeliveryType(e.target.value as DeliveryType)}
               >
+                <option value="member_delivery">
+                  🌱 Nhận qua thành viên Mầm Mơ (0đ - Giao trực tiếp)
+                </option>
+                <option value="pickup_point">
+                  📍 Nhận tại điểm hẹn / Trường (0đ)
+                </option>
                 <option value="home_delivery">
-                  Giao tận nơi ({isFreeship ? "Miễn phí 0đ" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
+                  🚚 Giao tận nơi ({isFreeship ? "Miễn phí 0đ" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
                 </option>
               </select>
             </div>
 
             <div>
               <label className="text-xs font-bold text-gray-700 mb-1.5 block">
-                Phương thức thanh toán
+                Phương thức thanh toán *
               </label>
               <select
-                className="w-full h-11 px-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 text-xs font-bold text-emerald-950 focus:outline-none cursor-default"
-                value="banking"
-                disabled
+                className="w-full h-11 px-3 rounded-2xl border border-gray-300 bg-white text-xs font-bold text-gray-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
               >
-                <option value="banking">Chuyển khoản Ngân hàng (VietQR)</option>
+                <option value="banking">💳 Chuyển khoản Ngân hàng (VietQR)</option>
+                <option value="cod">💵 Tiền mặt khi nhận hàng (COD)</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Địa chỉ chi tiết (Số nhà, đường, phường/xã) *"
-              placeholder="Ví dụ: 227 Nguyễn Văn Cừ, P.4, Q.5"
-              value={addressDetail}
-              onChange={(e) => setAddressDetail(e.target.value)}
-              required
-            />
-            <Select
-              label="Tỉnh / Thành phố *"
-              value={province}
-              onChange={(e) => setProvince(e.target.value)}
-              options={[
-                { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
-                { value: "Hà Nội", label: "Hà Nội" },
-                { value: "Tây Ninh", label: "Tây Ninh" },
-                { value: "Đồng Tháp", label: "Đồng Tháp" },
-                { value: "Bình Dương", label: "Bình Dương" },
-                { value: "Đồng Nai", label: "Đồng Nai" },
-                { value: "Long An", label: "Long An" },
-                { value: "Tiền Giang", label: "Tiền Giang" },
-                { value: "Bến Tre", label: "Bến Tre" },
-                { value: "Cần Thơ", label: "Cần Thơ" },
-                { value: "Đà Nẵng", label: "Đà Nẵng" },
-                { value: "Hải Phòng", label: "Hải Phòng" },
-                { value: "Bà Rịa - Vũng Tàu", label: "Bà Rịa - Vũng Tàu" },
-                { value: "Lâm Đồng", label: "Lâm Đồng" },
-                { value: "Khánh Hòa", label: "Khánh Hòa" },
-                { value: "Tỉnh thành khác", label: "Các tỉnh thành khác" },
-              ]}
-            />
-          </div>
+          {/* Conditional Delivery Helpers */}
+          {deliveryType === "member_delivery" && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-3">
+              <span className="text-lg">🌱</span>
+              <div className="space-y-1">
+                <p className="font-bold">Nhận qua thành viên ({session?.name || "Người bán"}):</p>
+                <p className="text-emerald-800 text-[11.5px] leading-relaxed">
+                  Đơn hàng sẽ được chuyển cho bạn để trực tiếp giao tận tay cho người quen. Phí vận chuyển: <strong>0đ</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {deliveryType === "pickup_point" && (
+            <div className="space-y-3 p-4 rounded-2xl bg-amber-50/60 border border-amber-200">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-950">
+                <MapPin className="w-4 h-4 text-amber-700" />
+                <span>Chọn điểm hẹn nhận hàng Mầm Mơ (0đ)</span>
+              </div>
+              <select
+                className="w-full h-11 px-3 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-gray-900 focus:outline-none focus:border-amber-600 cursor-pointer"
+                value={pickupPointId}
+                onChange={(e) => setPickupPointId(e.target.value)}
+                required={deliveryType === "pickup_point"}
+              >
+                <option value="">-- Chọn điểm hẹn nhận hàng gần bạn --</option>
+                {pickupPoints.map((p) => (
+                  <option key={p.pickup_point_id} value={p.pickup_point_id}>
+                    {p.name} {p.address || p.address_detail ? `(${p.address || p.address_detail})` : ""}
+                  </option>
+                ))}
+              </select>
+              {pickupPointId && (() => {
+                const pt = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
+                if (!pt) return null;
+                return (
+                  <p className="text-[11px] text-amber-900 bg-white p-2.5 rounded-xl border border-amber-200">
+                    📍 <strong>Địa chỉ:</strong> {pt.address || pt.address_detail || "Liên hệ BTC"}
+                    {pt.opening_hours && <span className="block mt-0.5 text-amber-800">• Giờ nhận: {pt.opening_hours}</span>}
+                    {pt.location_guide && <span className="block mt-0.5 text-amber-800">• Hướng dẫn: {pt.location_guide}</span>}
+                  </p>
+                );
+              })()}
+            </div>
+          )}
+
+          {deliveryType === "home_delivery" && (
+            <div className="space-y-4 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Địa chỉ chi tiết (Số nhà, tên đường, phường/xã) *"
+                  placeholder="Ví dụ: 227 Nguyễn Văn Cừ, P.4, Q.5"
+                  value={addressDetail}
+                  onChange={(e) => setAddressDetail(e.target.value)}
+                  required={deliveryType === "home_delivery"}
+                />
+                <Select
+                  label="Tỉnh / Thành phố *"
+                  value={province}
+                  onChange={(e) => setProvince(e.target.value)}
+                  options={[
+                    { value: "TP. Hồ Chí Minh", label: "TP. Hồ Chí Minh" },
+                    { value: "Hà Nội", label: "Hà Nội" },
+                    { value: "Tây Ninh", label: "Tây Ninh" },
+                    { value: "Đồng Tháp", label: "Đồng Tháp" },
+                    { value: "Bình Dương", label: "Bình Dương" },
+                    { value: "Đồng Nai", label: "Đồng Nai" },
+                    { value: "Long An", label: "Long An" },
+                    { value: "Tiền Giang", label: "Tiền Giang" },
+                    { value: "Bến Tre", label: "Bến Tre" },
+                    { value: "Cần Thơ", label: "Cần Thơ" },
+                    { value: "Đà Nẵng", label: "Đà Nẵng" },
+                    { value: "Hải Phòng", label: "Hải Phòng" },
+                    { value: "Bà Rịa - Vũng Tàu", label: "Bà Rịa - Vũng Tàu" },
+                    { value: "Lâm Đồng", label: "Lâm Đồng" },
+                    { value: "Khánh Hòa", label: "Khánh Hòa" },
+                    { value: "Tỉnh thành khác", label: "Các tỉnh thành khác" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-bold text-gray-700 mb-1.5 block">
@@ -619,7 +729,7 @@ function SaleCreateOrderForm() {
             </label>
             <input
               type="text"
-              placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi đến..."
+              placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi đến, hẹn giờ gặp..."
               value={customerNote}
               onChange={(e) => setCustomerNote(e.target.value)}
               className="w-full h-11 px-4 rounded-2xl border border-gray-200 bg-white text-xs text-gray-800 focus:outline-none focus:border-emerald-600"
@@ -636,7 +746,7 @@ function SaleCreateOrderForm() {
           <div className="flex items-center justify-between text-xs text-emerald-100/90 pb-3 border-b border-[#264E2E]">
             <span>Phí vận chuyển:</span>
             <span className="font-bold">
-              {shippingFee === 0 ? "Miễn phí" : `${shippingFee.toLocaleString("vi-VN")}đ`}
+              {shippingFee === 0 ? "Miễn phí (0đ)" : `${shippingFee.toLocaleString("vi-VN")}đ`}
             </span>
           </div>
           <div className="flex items-center justify-between text-base sm:text-lg font-extrabold text-[#BFE9C3]">
@@ -649,7 +759,11 @@ function SaleCreateOrderForm() {
             className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
           >
             <CheckCircle className="w-5 h-5" />
-            <span>Xác nhận & Hoàn tất tạo đơn hộ</span>
+            <span>
+              {paymentMethod === "banking"
+                ? "Xác nhận & Xuất mã VietQR ➔"
+                : "Xác nhận & Hoàn tất tạo đơn COD ➔"}
+            </span>
           </button>
         </div>
       </form>
