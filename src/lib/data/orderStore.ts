@@ -32,10 +32,10 @@ let hasSyncedContactMessagesWithServer = false;
 let hasSyncedOrdersWithServer = false;
 let hasSyncedInventoryWithServer = false;
 
-export function syncOrdersFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedOrdersWithServer) return;
+export function syncOrdersFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedOrdersWithServer && !force)) return;
   hasSyncedOrdersWithServer = true;
-  safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200")
+  safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.orders)) {
         const current = getStoredOrders();
@@ -585,11 +585,14 @@ export const SEED_PICKUP_POINTS: PickupPoint[] = [
  * Safely fetches and parses JSON without throwing SyntaxError on empty, aborted, or non-JSON responses.
  * Especially crucial when search engine crawlers (like Googlebot) abort background fetches or block /api routes.
  */
-async function safeFetchJson<T = any>(url: string, timeoutMs = 4000): Promise<T | null> {
+async function safeFetchJson<T = any>(url: string, timeoutMs = 10000): Promise<T | null> {
   try {
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
-    const res = await fetch(url, { signal: controller ? controller.signal : undefined });
+    const res = await fetch(url, {
+      signal: controller ? controller.signal : undefined,
+      cache: "no-store",
+    });
     if (timeoutId) clearTimeout(timeoutId);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
@@ -602,12 +605,12 @@ async function safeFetchJson<T = any>(url: string, timeoutMs = 4000): Promise<T 
   }
 }
 
-export function syncPickupPointsFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedPickupPointsWithServer) return;
-  hasSyncedPickupPointsWithServer = true;
-  safeFetchJson<{ success: boolean; pickup_points: PickupPoint[] }>("/api/pickup-points")
+export function syncPickupPointsFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedPickupPointsWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; pickup_points: PickupPoint[] }>("/api/pickup-points", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.pickup_points) && data.pickup_points.length > 0) {
+        hasSyncedPickupPointsWithServer = true;
         const current = getStoredPickupPoints();
         const merged = [...current];
         for (const p of data.pickup_points) {
@@ -696,12 +699,12 @@ export function deleteStoredPickupPoint(pointId: string): void {
 
 const SEED_CONTACT_MESSAGES: ContactMessage[] = [];
 
-export function syncContactMessagesFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedContactMessagesWithServer) return;
-  hasSyncedContactMessagesWithServer = true;
-  safeFetchJson<{ success: boolean; messages: ContactMessage[] }>("/api/contact/messages")
+export function syncContactMessagesFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedContactMessagesWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; messages: ContactMessage[] }>("/api/contact/messages", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
+        hasSyncedContactMessagesWithServer = true;
         const current = getStoredContactMessages();
         const merged = [...current];
         for (const m of data.messages) {
@@ -866,12 +869,12 @@ export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
   isSystemProtected: true,
 };
 
-export function syncMembersFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedMembersWithServer) return;
-  hasSyncedMembersWithServer = true;
-  safeFetchJson<{ success: boolean; members: any[] }>("/api/members")
+export function syncMembersFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedMembersWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; members: any[] }>("/api/members", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.members)) {
+        hasSyncedMembersWithServer = true;
         if (data.members.length > 0) {
           const currentLocal = cachedMembers || [];
           const localMap = new Map<string, StoredMember>();
@@ -1238,12 +1241,12 @@ export function updateOrderShipper(
 // VOUCHERS STORE (BÁN HÀNG & QUẢN TRỊ ƯU ĐÃI)
 // ==========================================
 
-export function syncVouchersFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedVouchersWithServer) return;
-  hasSyncedVouchersWithServer = true;
-  safeFetchJson<{ success: boolean; vouchers: Voucher[] }>("/api/vouchers")
+export function syncVouchersFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedVouchersWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; vouchers: Voucher[] }>("/api/vouchers", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.vouchers)) {
+        hasSyncedVouchersWithServer = true;
         cachedVouchers = data.vouchers;
         localStorage.setItem("gieomo_vouchers", JSON.stringify(data.vouchers));
         window.dispatchEvent(new Event("gieomo_vouchers_updated"));
@@ -1344,57 +1347,29 @@ export function deleteStoredVoucher(voucherId: string): void {
 // PRODUCTS STORE (TOÀN BỘ SẢN PHẨM & CỬA HÀNG)
 // ==========================================
 
-export function syncProductsFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedProductsWithServer) return;
-  hasSyncedProductsWithServer = true;
-  safeFetchJson<{ success: boolean; products: ExtendedProduct[] }>("/api/products?admin=true")
+export function syncProductsFromServer(force = false): Promise<ExtendedProduct[]> {
+  if (typeof window === "undefined") return Promise.resolve([]);
+  if (hasSyncedProductsWithServer && !force && cachedProducts && cachedProducts.length > 0) {
+    return Promise.resolve(cachedProducts);
+  }
+  return safeFetchJson<{ success: boolean; products: ExtendedProduct[] }>("/api/products?admin=true", 10000)
     .then((data) => {
-      if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
-        const current = cachedProducts || (typeof window !== "undefined" ? JSON.parse(localStorage.getItem("gieomo_products") || "[]") : []);
-        const map = new Map<string, ExtendedProduct>();
-
-        for (const p of current) {
-          const key = p.slug || p.product_id;
-          map.set(key, p);
+      if (data?.success && Array.isArray(data.products)) {
+        hasSyncedProductsWithServer = true;
+        if (data.products.length > 0) {
+          const merged = data.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+          cachedProducts = merged;
+          try {
+            localStorage.setItem("gieomo_products", JSON.stringify(merged));
+          } catch {}
+          window.dispatchEvent(new Event("gieomo_products_updated"));
+          return merged;
         }
-
-        for (const sProd of data.products) {
-          const key = sProd.slug || sProd.product_id;
-          const existing = map.get(key);
-          if (existing) {
-            const isFallbackOnly = sProd.images?.length === 1 && sProd.images[0] === "/images/products/pounch_1.png" && sProd.slug !== "pouch-mam-mo";
-            const existingHasImages = Boolean(existing.images && existing.images.length > 0);
-            const serverHasImages = Boolean(sProd.images && sProd.images.length > 0);
-            const validImages = isFallbackOnly
-              ? (existingHasImages ? existing.images : sProd.images)
-              : (serverHasImages ? sProd.images : existing.images);
-            const validThumbnail = isFallbackOnly
-              ? (existing.thumbnail || sProd.thumbnail)
-              : (sProd.thumbnail || existing.thumbnail);
-
-            map.set(key, {
-              ...existing,
-              ...sProd,
-              images: validImages,
-              thumbnail: validThumbnail,
-              specs: existing.specs || sProd.specs,
-              impact_story: sProd.impact_story || existing.impact_story,
-              badge: existing.badge || sProd.badge,
-              badge_label: existing.badge_label || sProd.badge_label,
-            });
-          } else {
-            map.set(key, sProd);
-          }
-        }
-
-        const merged = Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-        cachedProducts = merged;
-        localStorage.setItem("gieomo_products", JSON.stringify(merged));
-        window.dispatchEvent(new Event("gieomo_products_updated"));
       }
+      return cachedProducts || [];
     })
     .catch(() => {
-      // Graceful fallback to cached/mock products
+      return cachedProducts || [];
     });
 }
 
@@ -1682,13 +1657,13 @@ export const DEFAULT_WAREHOUSES: Warehouse[] = [
   },
 ];
 
-export function syncInventoryFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedInventoryWithServer) return;
-  hasSyncedInventoryWithServer = true;
-  fetch("/api/inventory")
+export function syncInventoryFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedInventoryWithServer && !force)) return;
+  fetch("/api/inventory", { cache: "no-store" })
     .then((res) => res.json())
     .then((data) => {
       if (data?.success) {
+        hasSyncedInventoryWithServer = true;
         if (Array.isArray(data.warehouses) && data.warehouses.length > 0) {
           cachedWarehouses = data.warehouses;
           localStorage.setItem("gieomo_warehouses", JSON.stringify(data.warehouses));
@@ -2051,12 +2026,12 @@ export const DEFAULT_SETTINGS: SiteSettings = {
 let cachedSettings: SiteSettings | null = null;
 let hasSyncedSettingsWithServer = false;
 
-export function syncSettingsFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedSettingsWithServer) return;
-  hasSyncedSettingsWithServer = true;
-  safeFetchJson<{ success: boolean; settings: Partial<SiteSettings> }>("/api/settings")
+export function syncSettingsFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedSettingsWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; settings: Partial<SiteSettings> }>("/api/settings", 10000)
     .then((data) => {
       if (data?.success && data?.settings) {
+        hasSyncedSettingsWithServer = true;
         cachedSettings = { ...DEFAULT_SETTINGS, ...data.settings };
         if (
           !cachedSettings.avatarPreview ||
@@ -2156,12 +2131,12 @@ export function saveStoredSettings(settings: Partial<SiteSettings>): void {
 
 let cachedCategories: ProductCategory[] | null = null;
 
-export function syncCategoriesFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedCategoriesWithServer) return;
-  hasSyncedCategoriesWithServer = true;
-  safeFetchJson<{ success: boolean; categories: ProductCategory[] }>("/api/categories")
+export function syncCategoriesFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedCategoriesWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; categories: ProductCategory[] }>("/api/categories", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.categories)) {
+        hasSyncedCategoriesWithServer = true;
         // Server database is the Single Source of Truth
         cachedCategories = data.categories;
         localStorage.setItem("gieomo_categories", JSON.stringify(data.categories));
@@ -2315,12 +2290,12 @@ export function deleteStoredCategory(categoryId: string): void {
 let cachedCombos: ExtendedCombo[] | null = null;
 let hasSyncedCombosWithServer = false;
 
-export function syncCombosFromServer(): void {
-  if (typeof window === "undefined" || hasSyncedCombosWithServer) return;
-  hasSyncedCombosWithServer = true;
-  safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos")
+export function syncCombosFromServer(force = false): void {
+  if (typeof window === "undefined" || (hasSyncedCombosWithServer && !force)) return;
+  safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.combos)) {
+        hasSyncedCombosWithServer = true;
         const mapped: ExtendedCombo[] = data.combos.map((sC) => {
           const itemThumb = sC.image_url || sC.thumbnail || "/images/products/set_combo_1.jpg";
           return {
@@ -2691,8 +2666,8 @@ const SEED_REVIEWS: ProductReview[] = [];
 let cachedReviews: ProductReview[] | null = null;
 let hasSyncedReviewsWithServer = false;
 
-export function syncReviewsFromServer(productId?: string, slug?: string): void {
-  if (typeof window === "undefined") return;
+export function syncReviewsFromServer(productId?: string, slug?: string, force = false): void {
+  if (typeof window === "undefined" || (hasSyncedReviewsWithServer && !force)) return;
   const params = new URLSearchParams();
   const cleanId = productId && productId !== "undefined" && productId !== "null" ? productId.trim() : null;
   const cleanSlug = slug && slug !== "undefined" && slug !== "null" ? slug.trim() : null;
@@ -2700,7 +2675,7 @@ export function syncReviewsFromServer(productId?: string, slug?: string): void {
   if (cleanId) params.set("productId", cleanId);
   if (cleanSlug) params.set("slug", cleanSlug);
 
-  fetch(`/api/reviews?${params.toString()}`)
+  fetch(`/api/reviews?${params.toString()}`, { cache: "no-store" })
     .then((res) => res.json())
     .then((data) => {
       if (data?.success && Array.isArray(data.reviews)) {

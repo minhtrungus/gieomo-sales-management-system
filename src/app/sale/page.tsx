@@ -22,6 +22,7 @@ import {
   getAdminSession,
   getStoredOrders,
   touchMemberActive,
+  syncOrdersFromServer,
   type AdminSession,
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -37,6 +38,7 @@ export default function SaleDashboardPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
+    syncOrdersFromServer(true);
     const s = getAdminSession();
     setSession(s);
     const allOrders = getStoredOrders();

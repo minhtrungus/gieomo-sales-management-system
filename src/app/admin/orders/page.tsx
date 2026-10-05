@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import {
   getStoredOrders,
+  syncOrdersFromServer,
   updateStoredOrderStatus,
   getStoredMembers,
+  syncMembersFromServer,
   getAdminSession,
   type StoredMember,
   type AdminSession,
@@ -33,6 +35,7 @@ import {
   CheckCircle2,
   ChevronRight,
   TrendingUp,
+  RefreshCw,
 } from "lucide-react";
 
 type OrderTab = "all" | "my_orders" | "by_btc";
@@ -71,6 +74,8 @@ function AdminOrdersContent() {
     setOrders(getStoredOrders());
     setMembers(getStoredMembers());
     setSession(getAdminSession());
+    syncOrdersFromServer(true);
+    syncMembersFromServer(true);
 
     const handleOrdersUpdate = () => setOrders(getStoredOrders());
     const handleMembersUpdate = () => setMembers(getStoredMembers());

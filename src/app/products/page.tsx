@@ -5,7 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import type { ExtendedProduct } from "@/lib/data/mockData";
-import { getStoredProducts } from "@/lib/data/orderStore";
+import { getStoredProducts, syncProductsFromServer } from "@/lib/data/orderStore";
 import { EmptyState } from "@/components/ui/States";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { Search, Sparkles } from "lucide-react";
@@ -16,6 +16,7 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<string>("featured");
 
   useEffect(() => {
+    syncProductsFromServer(true);
     setProducts(getStoredProducts());
     const handleUpdate = () => setProducts(getStoredProducts());
     window.addEventListener("gieomo_products_updated", handleUpdate);

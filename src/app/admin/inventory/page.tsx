@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
+  syncProductsFromServer,
   updateStoredProduct,
   getStoredWarehouses,
+  syncInventoryFromServer,
   saveNewWarehouse,
   updateStoredWarehouse,
   deleteStoredWarehouse,
@@ -40,6 +42,7 @@ import {
   User,
   History,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 
 export default function AdminInventoryPage() {
@@ -51,6 +54,8 @@ export default function AdminInventoryPage() {
 
   // Load from persistent stores
   useEffect(() => {
+    syncInventoryFromServer(true);
+    syncProductsFromServer(true);
     const loadData = () => {
       const whs = getStoredWarehouses();
       setWarehouses(whs);

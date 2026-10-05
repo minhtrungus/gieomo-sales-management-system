@@ -10,6 +10,8 @@ import {
   saveNewVoucher,
   updateStoredVoucher,
   deleteStoredVoucher,
+  syncVouchersFromServer,
+  syncOrdersFromServer,
 } from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
@@ -38,6 +40,8 @@ export default function AdminVouchersPage() {
   const [viewingOrdersVoucher, setViewingOrdersVoucher] = useState<Voucher | null>(null);
 
   useEffect(() => {
+    syncVouchersFromServer(true);
+    syncOrdersFromServer(true);
     setVouchers(getStoredVouchers());
     setOrders(getStoredOrders());
 

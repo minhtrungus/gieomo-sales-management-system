@@ -28,6 +28,7 @@ import {
   getStoredReviews,
   deleteStoredReview,
   getStoredProducts,
+  syncProductsFromServer,
 } from "@/lib/data/orderStore";
 import type { ContactMessage, ProductReview } from "@/types/database";
 import type { ExtendedProduct } from "@/lib/data/mockData";
@@ -54,7 +55,8 @@ export default function AdminMessagesPage() {
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
 
   const loadData = async () => {
-    // 1. Load initial cache
+    // 1. Load initial cache & sync products
+    syncProductsFromServer(true);
     setMessages(getStoredContactMessages());
     setReviews(getStoredReviews());
     setProducts(getStoredProducts());

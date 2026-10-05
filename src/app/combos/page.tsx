@@ -7,6 +7,8 @@ import { Footer } from "@/components/layout/Footer";
 import {
   getStoredCombos,
   getStoredProducts,
+  syncCombosFromServer,
+  syncProductsFromServer,
   type ExtendedCombo,
   type ExtendedProduct,
 } from "@/lib/data/orderStore";
@@ -142,6 +144,8 @@ export default function CombosPage() {
   const [availableProducts, setAvailableProducts] = useState<ExtendedProduct[]>([]);
 
   useEffect(() => {
+    syncCombosFromServer(true);
+    syncProductsFromServer(true);
     setCombos(getStoredCombos().filter((c) => c.status === "active"));
     setAvailableProducts(getStoredProducts());
 

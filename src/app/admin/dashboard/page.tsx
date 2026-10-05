@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { getStoredOrders, getStoredProducts } from "@/lib/data/orderStore";
+import { getStoredOrders, getStoredProducts, syncOrdersFromServer, syncProductsFromServer, syncCombosFromServer } from "@/lib/data/orderStore";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -26,6 +26,9 @@ export default function AdminDashboardPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
 
   useEffect(() => {
+    syncOrdersFromServer(true);
+    syncProductsFromServer(true);
+    syncCombosFromServer(true);
     setOrders(getStoredOrders());
     setProducts(getStoredProducts());
 

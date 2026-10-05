@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   getStoredCategories,
+  syncCategoriesFromServer,
   saveNewCategory,
   updateStoredCategory,
   deleteStoredCategory,
   getStoredProducts,
+  syncProductsFromServer,
 } from "@/lib/data/orderStore";
 import type { ProductCategory } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
@@ -28,6 +30,8 @@ export function AdminCategoriesTab() {
   const loadData = () => {
     setCategories(getStoredCategories());
     setProducts(getStoredProducts());
+    syncCategoriesFromServer(true);
+    syncProductsFromServer(true);
   };
 
   useEffect(() => {

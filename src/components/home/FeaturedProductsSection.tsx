@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ProductCard } from "@/components/products/ProductCard";
 import { MOCK_PRODUCTS, ExtendedProduct } from "@/lib/data/mockData";
-import { getStoredProducts } from "@/lib/data/orderStore";
+import { getStoredProducts, syncProductsFromServer } from "@/lib/data/orderStore";
 import { ArrowRight } from "lucide-react";
 
 export function FeaturedProductsSection() {
@@ -13,6 +13,7 @@ export function FeaturedProductsSection() {
   });
 
   useEffect(() => {
+    syncProductsFromServer(true);
     const update = () => {
       const all = getStoredProducts().filter((p) => p.status === "active");
       const feat = all.filter((p) => p.featured);

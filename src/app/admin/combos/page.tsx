@@ -5,6 +5,8 @@ import Image from "next/image";
 import {
   getStoredProducts,
   getStoredCombos,
+  syncCombosFromServer,
+  syncProductsFromServer,
   saveNewCombo,
   updateStoredCombo,
   deleteStoredCombo,
@@ -117,6 +119,8 @@ export default function AdminCombosPage() {
   useEffect(() => {
     setCombos(getStoredCombos());
     setAvailableProducts(getStoredProducts());
+    syncCombosFromServer(true);
+    syncProductsFromServer(true);
 
     const handleUpdate = () => {
       setCombos(getStoredCombos());

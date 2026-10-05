@@ -30,6 +30,8 @@ import {
   deleteStoredMember,
   getMemberPresence,
   syncPresenceFromServer,
+  syncMembersFromServer,
+  syncOrdersFromServer,
   type StoredMember,
 } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
@@ -749,6 +751,8 @@ export default function AdminMembersPage() {
   const [viewingOrdersMember, setViewingOrdersMember] = useState<MemberItem | null>(null);
 
   useEffect(() => {
+    syncMembersFromServer(true);
+    syncOrdersFromServer(true);
     setOrders(getStoredOrders());
     setMembers(getStoredMembers());
 

@@ -11,7 +11,19 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
-import { saveNewOrder, getStoredPickupPoints, getStoredVouchers, getStoredSettings, getStoredMembers, type StoredMember, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
+import {
+  saveNewOrder,
+  getStoredPickupPoints,
+  getStoredVouchers,
+  getStoredSettings,
+  getStoredMembers,
+  syncMembersFromServer,
+  syncVouchersFromServer,
+  syncSettingsFromServer,
+  syncPickupPointsFromServer,
+  type StoredMember,
+  DEFAULT_SETTINGS,
+} from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 
 function getCookieRef(): string | null {
@@ -30,6 +42,10 @@ function CheckoutContent() {
   const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
 
   useEffect(() => {
+    syncMembersFromServer(true);
+    syncVouchersFromServer(true);
+    syncSettingsFromServer(true);
+    syncPickupPointsFromServer(true);
     validateCart();
   }, [validateCart]);
 

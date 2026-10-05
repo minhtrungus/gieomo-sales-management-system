@@ -8,26 +8,51 @@ import { Badge } from "@/components/ui/Badge";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
+  syncProductsFromServer,
   updateStoredProduct,
   deleteStoredProduct,
   toggleStoredProductStatus,
   toggleStoredProductFeatured,
 } from "@/lib/data/orderStore";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import { Plus, Edit3, Trash2, AlertTriangle, Eye, Star, ShoppingBag } from "lucide-react";
+import { Plus, Edit3, Trash2, AlertTriangle, Eye, Star, ShoppingBag, RefreshCw } from "lucide-react";
 import { ProductEditModal } from "./ProductEditModal";
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<ExtendedProduct[]>([]);
+  const [products, setProducts] = useState<ExtendedProduct[]>(() => {
+    return typeof window !== "undefined" ? getStoredProducts() : [];
+  });
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const fresh = await syncProductsFromServer(true);
+      if (fresh && fresh.length > 0) {
+        setProducts(fresh);
+      } else {
+        setProducts(getStoredProducts());
+      }
+    } catch {
+      setProducts(getStoredProducts());
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setProducts(getStoredProducts());
-    const handleUpdate = () => setProducts(getStoredProducts());
+    const initial = getStoredProducts();
+    setProducts(initial);
+    handleRefresh();
+
+    const handleUpdate = () => {
+      setProducts(getStoredProducts());
+    };
     window.addEventListener("gieomo_products_updated", handleUpdate);
     return () => {
       window.removeEventListener("gieomo_products_updated", handleUpdate);
     };
-  }, []);
+  }, [handleRefresh]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -86,8 +111,6 @@ export default function AdminProductsPage() {
     setDeletingProduct(null);
   }, [deletingProduct]);
 
-
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -101,7 +124,18 @@ export default function AdminProductsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isSyncing}
+            className="p-2.5 rounded-full border border-[#F0E5D8] bg-white text-[#5C4D44] hover:text-[#1B3622] hover:bg-[#FFF4E5] transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            title="Đồng bộ lại dữ liệu từ Server"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-[#2D6338]" : ""}`} />
+            <span className="hidden sm:inline">{isSyncing ? "Đang đồng bộ..." : "Đồng bộ"}</span>
+          </button>
+
           <Link
             href="/admin/orders/create"
             className="px-4 py-2.5 rounded-full border border-[#1B3622] text-[#1B3622] hover:bg-[#1B3622] hover:text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-xs"

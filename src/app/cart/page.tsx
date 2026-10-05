@@ -9,7 +9,13 @@ import { useCartStore } from "@/store/cart";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
-import { getStoredVouchers, getStoredSettings, DEFAULT_SETTINGS } from "@/lib/data/orderStore";
+import {
+  getStoredVouchers,
+  getStoredSettings,
+  DEFAULT_SETTINGS,
+  syncVouchersFromServer,
+  syncSettingsFromServer,
+} from "@/lib/data/orderStore";
 import type { Voucher } from "@/types/database";
 
 export default function CartPage() {
@@ -27,6 +33,8 @@ export default function CartPage() {
   const [removedAlert, setRemovedAlert] = useState(false);
 
   useEffect(() => {
+    syncVouchersFromServer(true);
+    syncSettingsFromServer(true);
     const res = validateCart();
     if (res && res.removedCount > 0) {
       setRemovedAlert(true);
