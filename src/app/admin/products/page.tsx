@@ -163,23 +163,167 @@ export default function AdminProductsPage() {
         </span>
       </div>
 
-      {/* Search Input */}
-      <div className="bg-white rounded-3xl p-4 border border-[#F0E5D8] shadow-soft">
+      {/* Search & View Controls */}
+      <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-[#F0E5D8] shadow-soft flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="w-full sm:w-80">
           <AdminSearchInput
             placeholder="Tìm tên sản phẩm, mã slug..."
             onSearch={setSearchQuery}
           />
         </div>
+
+        <div className="flex items-center justify-between sm:justify-end gap-2">
+          <span className="text-xs font-bold text-[#7E7068]">
+            Tổng cộng: <strong className="text-[#1B3622]">{filteredProducts.length}</strong> sản phẩm
+          </span>
+        </div>
       </div>
 
-      {/* Products Table */}
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-[#7E7068] space-y-3 shadow-soft">
+            <div className="text-3xl">🌱</div>
+            <p className="font-bold text-sm text-[#231B16]">
+              {searchQuery ? "Không tìm thấy sản phẩm nào khớp với từ khóa." : "Chưa có sản phẩm nào trong kho."}
+            </p>
+            <p className="text-xs text-[#A89B92]">
+              {searchQuery ? "Vui lòng thử đổi từ khóa tìm kiếm." : "Bạn có thể bấm nút Thêm sản phẩm để tạo mới."}
+            </p>
+            {!searchQuery && (
+              <div className="pt-2">
+                <Link
+                  href="/admin/products/new"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1B3622] text-white font-extrabold text-xs shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Thêm sản phẩm</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          filteredProducts.map((p, idx) => {
+            const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? 0;
+            const isOutOfStock = totalStock <= 0;
+            return (
+              <div
+                key={p.product_id}
+                className="bg-white rounded-2xl p-3.5 border border-[#F0E5D8] shadow-soft space-y-3 transition-all"
+              >
+                {/* Header: Image + Title + Status Badges */}
+                <div className="flex items-start gap-3">
+                  <div className="relative w-14 h-14 rounded-xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden shrink-0 flex items-center justify-center shadow-2xs">
+                    {p.images?.[0] ? (
+                      <Image src={p.images[0]} alt="" fill className="object-cover" />
+                    ) : (
+                      <span className="text-xl">🌱</span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1">
+                      <h4 className="font-bold text-[#231B16] text-xs leading-tight line-clamp-2">
+                        {p.name}
+                      </h4>
+                      <button
+                        onClick={() => handleToggleFeatured(p.product_id)}
+                        className="cursor-pointer p-1 shrink-0 rounded-lg hover:bg-amber-50"
+                        title="Bật/tắt nổi bật"
+                      >
+                        <Star className={`w-4 h-4 ${p.featured ? "text-amber-500 fill-amber-400" : "text-gray-300"}`} />
+                      </button>
+                    </div>
+                    <div className="text-[10px] text-[#A89B92] font-mono mt-0.5 truncate">
+                      /{p.slug}
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="font-extrabold text-[#1B3622] text-xs">
+                        <MoneyDisplay amount={p.price} />
+                      </span>
+                      {p.cost_price ? (
+                        <span className="text-[10px] text-[#A89B92]">
+                          (Vốn: <MoneyDisplay amount={p.cost_price} />)
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stock & Status Row */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F5EFE6] text-xs">
+                  <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                    isOutOfStock
+                      ? "bg-red-100 text-red-800 border border-red-200"
+                      : totalStock <= 10
+                      ? "bg-amber-50 text-amber-800 border border-amber-200"
+                      : "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  }`}>
+                    {isOutOfStock ? "Hết hàng (0)" : `Tồn kho: ${totalStock} món`}
+                  </span>
+
+                  <button
+                    onClick={() => handleToggleStatus(p.product_id)}
+                    className="cursor-pointer"
+                  >
+                    {p.status === "active" ? (
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        🟢 Đang bán
+                      </span>
+                    ) : (
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                        ⚪ Nháp
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Actions Toolbar */}
+                <div className="flex items-center justify-between gap-1 pt-2 border-t border-[#F5EFE6]">
+                  <Link
+                    href={`/admin/orders/create?productId=${p.product_id}`}
+                    className="flex-1 py-1.5 px-2 rounded-xl text-[10.5px] font-bold bg-[#E8F5E9] text-[#1B3622] hover:bg-[#1B3622] hover:text-white transition-all flex items-center justify-center gap-1 border border-[#C8E6C9]"
+                  >
+                    <ShoppingBag className="w-3 h-3" />
+                    <span>+ Đơn hộ</span>
+                  </Link>
+
+                  <Link
+                    href={`/products/${p.slug}`}
+                    target="_blank"
+                    className="p-1.5 rounded-xl text-[#7E7068] hover:bg-[#FFF8EE] border border-[#F0E5D8]"
+                    title="Xem trang web"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </Link>
+
+                  <button
+                    onClick={() => handleStartEdit(p)}
+                    className="p-1.5 rounded-xl text-[#1B3622] bg-[#BFE9C3]/30 hover:bg-[#BFE9C3] border border-[#9ed4a3]/40 cursor-pointer"
+                    title="Sửa sản phẩm"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setDeletingProduct(p)}
+                    className="p-1.5 rounded-xl text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer"
+                    title="Xóa sản phẩm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left text-[11px]">
+          <table className="w-full min-w-[680px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
@@ -201,7 +345,7 @@ export default function AdminProductsPage() {
                         {searchQuery ? "Không tìm thấy sản phẩm nào khớp với từ khóa." : "Chưa có sản phẩm nào trong kho."}
                       </p>
                       <p className="text-xs text-[#A89B92]">
-                        {searchQuery ? "Vui lòng thử đổi từ khóa tìm kiếm." : "Kho sản phẩm đã được làm sạch 100%. Bạn có thể bấm nút bên dưới để tạo mặt hàng gây quỹ thật!"}
+                        {searchQuery ? "Vui lòng thử đổi từ khóa tìm kiếm." : "Bạn có thể bấm nút bên dưới để tạo mặt hàng gây quỹ thật!"}
                       </p>
                       {!searchQuery && (
                         <div className="pt-2">
@@ -235,9 +379,9 @@ export default function AdminProductsPage() {
                           <span>🌱</span>
                         )}
                       </div>
-                      <div>
-                        <span className="font-bold text-[#342A24] block text-xs">{p.name}</span>
-                        <span className="text-[10px] text-[#A89B92] font-mono">/{p.slug}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-[#342A24] block text-xs truncate max-w-[180px]">{p.name}</span>
+                        <span className="text-[10px] text-[#A89B92] font-mono truncate block max-w-[180px]">/{p.slug}</span>
                       </div>
                     </td>
 

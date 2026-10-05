@@ -45,10 +45,36 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
       query = query.eq("status", "active");
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
     if (error) {
-      console.warn("[getProductsServer] Error querying products from Supabase:", error);
-      return [];
+      console.warn("[getProductsServer] Primary joined query failed, falling back to separate queries:", error);
+      try {
+        let fallbackQuery = supabase
+          .from("products")
+          .select("*")
+          .order("sort_order", { ascending: true });
+        if (!includeDrafts) {
+          fallbackQuery = fallbackQuery.eq("status", "active");
+        }
+        const { data: rawProds, error: fbErr } = await fallbackQuery;
+        if (fbErr || !rawProds) {
+          console.warn("[getProductsServer] Fallback query also failed:", fbErr);
+          return [];
+        }
+
+        // Fetch variants and media separately
+        const { data: allVariants } = await supabase.from("product_variants").select("*");
+        const { data: allMedia } = await supabase.from("product_media").select("*");
+
+        data = rawProds.map((p: any) => ({
+          ...p,
+          variants: (allVariants || []).filter((v: any) => v.product_id === p.product_id),
+          media: (allMedia || []).filter((m: any) => m.product_id === p.product_id),
+        }));
+      } catch (fallbackEx) {
+        console.error("[getProductsServer] Exception during fallback:", fallbackEx);
+        return [];
+      }
     }
 
     if (!data || data.length === 0) {

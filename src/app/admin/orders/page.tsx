@@ -393,13 +393,138 @@ function AdminOrdersContent() {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-        <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-          <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
-        </div>
+      {/* MOBILE CARD VIEW (< sm) */}
+      <div className="block sm:hidden space-y-3">
+        {filteredOrders.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-gray-500 shadow-soft">
+            <div className="w-12 h-12 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center mx-auto text-xl mb-2">
+              📦
+            </div>
+            <span className="font-bold text-gray-700 block">Không tìm thấy đơn hàng nào.</span>
+          </div>
+        ) : (
+          filteredOrders.map((ord) => (
+            <div
+              key={ord.order_id}
+              className="bg-white rounded-2xl p-3.5 border border-[#F0E5D8] shadow-soft space-y-2.5"
+            >
+              {/* Row 1: Code + Created At + Badges */}
+              <div className="flex items-center justify-between gap-2">
+                <Link
+                  href={`/admin/orders/${ord.order_id}`}
+                  className="font-mono font-extrabold text-[#1B3622] text-xs hover:underline flex items-center gap-1"
+                >
+                  <span>{ord.order_code}</span>
+                  <ChevronRight className="w-3 h-3 text-gray-400" />
+                </Link>
+                <div className="flex items-center gap-1.5">
+                  <Badge
+                    variant={ord.payment_status === "paid" ? "success" : "warning"}
+                    className="text-[9.5px] px-1.5 py-0.2"
+                  >
+                    {PAYMENT_STATUS_LABELS[ord.payment_status]}
+                  </Badge>
+                  <Badge
+                    variant={
+                      ord.order_status === "completed"
+                        ? "success"
+                        : ord.order_status === "cancelled"
+                        ? "default"
+                        : "warning"
+                    }
+                    className="text-[9.5px] px-1.5 py-0.2"
+                  >
+                    {ORDER_STATUS_LABELS[ord.order_status]}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Row 2: Customer & Referral */}
+              <div className="flex items-start justify-between gap-2 text-xs pt-1 border-t border-[#F5EFE6]">
+                <div>
+                  <div className="font-bold text-[#231B16] text-xs">
+                    {ord.buyer_name || "Khách tại quầy"}
+                  </div>
+                  <div className="text-[10px] text-[#7E7068] font-mono">
+                    {ord.buyer_phone || "—"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <MoneyDisplay
+                    amount={ord.final_amount}
+                    className="font-extrabold text-[#1B3622] text-xs block"
+                  />
+                  <span className="text-[10px] text-[#A89B92]">
+                    {formatDateTime(ord.created_at)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Row 3: Address & Copy */}
+              <div className="p-2 rounded-xl bg-[#FFFDF9] border border-[#F5EFE6] text-xs flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] text-[#7E7068] block truncate">
+                    {ord.delivery_type === "home_delivery" ? "🏠 " : "📍 "}
+                    {ord.address_detail || "Nhận tại quầy"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyAddress(e, ord)}
+                  className="shrink-0 px-2 py-1 rounded-lg bg-white border border-[#F0E5D8] text-[10px] font-bold text-[#1B3622] hover:bg-[#BFE9C3]/30 cursor-pointer flex items-center gap-1"
+                >
+                  {copiedAddressId === ord.order_id ? (
+                    <>
+                      <Check className="w-2.5 h-2.5 text-emerald-600" />
+                      <span>Đã chép</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-2.5 h-2.5" />
+                      <span>Chép địa chỉ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Row 4: Status Changer & Detail Button */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F5EFE6]">
+                <select
+                  value={ord.order_status}
+                  onChange={(e) =>
+                    setPendingStatusChange({
+                      orderId: ord.order_id,
+                      orderCode: ord.order_code,
+                      newStatus: e.target.value as OrderStatus,
+                      buyerName: ord.buyer_name || "Khách",
+                    })
+                  }
+                  className="flex-1 text-[10.5px] font-bold py-1.5 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none"
+                >
+                  <option value="pending">Chờ xác nhận</option>
+                  <option value="confirmed">Đã xác nhận</option>
+                  <option value="processing">Đang chuẩn bị</option>
+                  <option value="shipping">Đang giao hàng</option>
+                  <option value="completed">Đã hoàn thành</option>
+                  <option value="cancelled">Đã hủy đơn</option>
+                </select>
+
+                <Link
+                  href={`/admin/orders/${ord.order_id}`}
+                  className="px-3 py-1.5 rounded-xl bg-[#1B3622] text-white font-extrabold text-[10.5px] hover:bg-[#132819]"
+                >
+                  Chi tiết ➔
+                </Link>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= sm) */}
+      <div className="hidden sm:block bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-[11px]">
+          <table className="w-full min-w-[880px] text-left text-[11px]">
             <thead>
               <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-2.5 text-center w-10 whitespace-nowrap">STT</th>
