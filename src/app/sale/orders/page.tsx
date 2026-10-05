@@ -21,6 +21,9 @@ import {
 import {
   getAdminSession,
   getStoredOrders,
+  updateStoredDeliveryStatus,
+  updateStoredPaymentStatus,
+  updateStoredOrderStatus,
   type AdminSession,
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -45,7 +48,8 @@ export default function SaleOrdersPage() {
         (o) =>
           (s.referralCode && o.referral_code?.toLowerCase() === s.referralCode.toLowerCase()) ||
           (s.memberId && o.seller_id === s.memberId) ||
-          (s.memberId && o.created_by_member_id === s.memberId)
+          (s.memberId && o.created_by_member_id === s.memberId) ||
+          (s.memberId && o.assigned_shipper_id === s.memberId)
       );
       setOrders(myOrders);
     }
@@ -60,7 +64,8 @@ export default function SaleOrdersPage() {
             (currentSession.referralCode &&
               o.referral_code?.toLowerCase() === currentSession.referralCode.toLowerCase()) ||
             (currentSession.memberId && o.seller_id === currentSession.memberId) ||
-            (currentSession.memberId && o.created_by_member_id === currentSession.memberId)
+            (currentSession.memberId && o.created_by_member_id === currentSession.memberId) ||
+            (currentSession.memberId && o.assigned_shipper_id === currentSession.memberId)
         );
         setOrders(filtered);
       }
@@ -69,6 +74,7 @@ export default function SaleOrdersPage() {
     window.addEventListener("gieomo_orders_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
   }, []);
+
 
   // Filter & Search
   const filteredOrders = orders.filter((o) => {
@@ -172,6 +178,11 @@ export default function SaleOrdersPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {ord.assigned_shipper_id === session?.memberId && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[10.5px] font-bold">
+                      🚴 Bạn giao đơn này
+                    </span>
+                  )}
                   <Badge variant={ord.order_status === "completed" ? "success" : ord.order_status === "cancelled" ? "default" : "warning"}>
                     {ORDER_STATUS_LABELS[ord.order_status]}
                   </Badge>
@@ -191,11 +202,14 @@ export default function SaleOrdersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div>
                   <span className="text-gray-400 text-[11px] block">Người nhận:</span>
-                  <span className="font-bold text-gray-900 block">{ord.buyer_name}</span>
-                  <span className="text-gray-500 font-mono text-[11px] flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3 h-3 text-gray-400" />
-                    {ord.buyer_phone}
-                  </span>
+                  <span className="font-bold text-gray-900 block">{ord.recipient_name || ord.buyer_name}</span>
+                  <a
+                    href={`tel:${ord.recipient_phone || ord.buyer_phone}`}
+                    className="text-[#2D6338] font-mono text-[11px] font-bold flex items-center gap-1 mt-0.5 hover:underline"
+                  >
+                    <Phone className="w-3 h-3 text-emerald-600" />
+                    {ord.recipient_phone || ord.buyer_phone}
+                  </a>
                 </div>
 
                 <div>
@@ -204,7 +218,7 @@ export default function SaleOrdersPage() {
                     {ord.delivery_type === "home_delivery" ? "Giao tận nơi" : "Nhận tại điểm hẹn"}
                   </span>
                   <span className="text-gray-500 text-[11px] block truncate mt-0.5">
-                    {ord.address_detail}
+                    {ord.address_detail || "Chưa có địa chỉ chi tiết"}
                   </span>
                 </div>
 
@@ -221,7 +235,7 @@ export default function SaleOrdersPage() {
                     className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-colors cursor-pointer mt-1"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Chi tiết đơn</span>
+                    <span>Chi tiết &amp; Giao hàng</span>
                   </button>
                 </div>
               </div>
@@ -237,15 +251,15 @@ export default function SaleOrdersPage() {
           <p className="text-xs text-gray-400 max-w-sm mx-auto">
             {searchQuery || statusFilter !== "all"
               ? "Hãy thử thay đổi điều kiện tìm kiếm hoặc bộ lọc trạng thái."
-              : "Bạn chưa có đơn hàng nào. Hãy chia sẻ link giới thiệu hoặc tạo đơn hộ cho người quen!"}
+              : "Các đơn hàng gắn mã giới thiệu của bạn hoặc được phân công giao sẽ xuất hiện tại đây."}
           </p>
         </div>
       )}
 
-      {/* Order Details Modal */}
+      {/* Order Details Modal with Shipper Actions */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
                 <span className="text-[10px] text-gray-400 uppercase font-bold">Chi tiết đơn hàng</span>
@@ -261,15 +275,81 @@ export default function SaleOrdersPage() {
               </button>
             </div>
 
+            {/* Shipper Delivery Banner & Quick Status Update */}
+            {selectedOrder.assigned_shipper_id === session?.memberId && (
+              <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-blue-950 flex items-center gap-1.5">
+                    🚴 Bạn đang phụ trách giao đơn này
+                  </span>
+                  <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
+                    {selectedOrder.delivery_status === "delivered"
+                      ? "Đã giao xong"
+                      : selectedOrder.delivery_status === "out_for_delivery"
+                      ? "Đang đi giao"
+                      : "Chờ giao"}
+                  </span>
+                </div>
+
+                {/* Shipper Action Buttons */}
+                <div className="flex items-center gap-2 pt-1 border-t border-blue-100">
+                  {selectedOrder.delivery_status !== "out_for_delivery" && selectedOrder.delivery_status !== "delivered" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateStoredDeliveryStatus(selectedOrder.order_id, "out_for_delivery");
+                        setSelectedOrder((prev) => prev ? { ...prev, delivery_status: "out_for_delivery" } : prev);
+                      }}
+                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                    >
+                      🚀 Bắt đầu đi giao
+                    </button>
+                  )}
+
+                  {selectedOrder.delivery_status !== "delivered" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateStoredDeliveryStatus(selectedOrder.order_id, "delivered");
+                        updateStoredOrderStatus(selectedOrder.order_id, "completed");
+                        if (selectedOrder.payment_status !== "paid") {
+                          updateStoredPaymentStatus(selectedOrder.order_id, "paid");
+                        }
+                        setSelectedOrder((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                delivery_status: "delivered",
+                                order_status: "completed",
+                                payment_status: "paid",
+                              }
+                            : prev
+                        );
+                      }}
+                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                    >
+                      ✅ Đã giao &amp; Thu tiền
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Customer Details */}
             <div className="bg-gray-50 rounded-2xl p-4 text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Khách hàng:</span>
-                <span className="font-bold text-gray-800">{selectedOrder.buyer_name}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Người nhận:</span>
+                <span className="font-bold text-gray-800">{selectedOrder.recipient_name || selectedOrder.buyer_name}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-gray-400">Điện thoại:</span>
-                <span className="font-bold text-gray-800">{selectedOrder.buyer_phone}</span>
+                <a
+                  href={`tel:${selectedOrder.recipient_phone || selectedOrder.buyer_phone}`}
+                  className="font-bold text-emerald-800 font-mono flex items-center gap-1 hover:underline"
+                >
+                  <Phone className="w-3 h-3 text-emerald-600" />
+                  {selectedOrder.recipient_phone || selectedOrder.buyer_phone}
+                </a>
               </div>
               {selectedOrder.buyer_email && (
                 <div className="flex justify-between">
@@ -280,7 +360,7 @@ export default function SaleOrdersPage() {
               <div className="flex justify-between">
                 <span className="text-gray-400">Địa chỉ:</span>
                 <span className="text-gray-800 text-right max-w-[240px] font-medium">
-                  {selectedOrder.address_detail}
+                  {selectedOrder.address_detail || "Chưa có địa chỉ chi tiết"}
                 </span>
               </div>
               {selectedOrder.customer_note && (

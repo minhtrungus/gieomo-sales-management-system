@@ -2017,7 +2017,21 @@ export function clearInventoryLogs(): void {
   localStorage.setItem("gieomo_inventory_inflow_logs", JSON.stringify([]));
   localStorage.setItem("gieomo_inventory_transfer_logs", JSON.stringify([]));
   window.dispatchEvent(new Event("gieomo_inventory_logs_updated"));
+
+  // Sync wipe to Supabase server in background
+  fetch("/api/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "saveInflowLogs", inflowLogs: [] }),
+  }).catch((err) => console.warn("Could not clear inflow logs on server:", err));
+
+  fetch("/api/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "saveTransferLogs", transferLogs: [] }),
+  }).catch((err) => console.warn("Could not clear transfer logs on server:", err));
 }
+
 
 // === SITE SETTINGS STORE ===
 
