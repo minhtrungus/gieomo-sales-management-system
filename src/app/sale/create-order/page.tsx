@@ -10,13 +10,11 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import {
   saveNewOrder,
   getStoredProducts,
-  getStoredPickupPoints,
-  syncPickupPointsFromServer,
   getStoredSettings,
   getAdminSession,
   type AdminSession,
 } from "@/lib/data/orderStore";
-import type { Order, OrderItem, PickupPoint, DeliveryType, PaymentMethod } from "@/types/database";
+import type { Order, OrderItem, DeliveryType } from "@/types/database";
 import {
   ArrowLeft,
   Plus,
@@ -27,11 +25,10 @@ import {
   CheckCircle,
   ExternalLink,
   Sparkles,
-  MapPin,
   UserCheck,
   Truck,
   CreditCard,
-  Banknote,
+  UserPlus,
 } from "lucide-react";
 
 function SaleCreateOrderForm() {
@@ -40,25 +37,18 @@ function SaleCreateOrderForm() {
   const queryProductId = searchParams.get("productId");
   const [session, setSession] = useState<AdminSession | null>(null);
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
-  const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>(getStoredPickupPoints());
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
     const s = getAdminSession();
     setSession(s);
     setAvailableProducts(getStoredProducts());
-    setPickupPoints(getStoredPickupPoints());
     setSettings(getStoredSettings());
-    syncPickupPointsFromServer(true);
 
     const handleSettingsUpdate = () => setSettings(getStoredSettings());
-    const handlePickupUpdate = () => setPickupPoints(getStoredPickupPoints());
-
     window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
-    window.addEventListener("gieomo_pickup_points_updated", handlePickupUpdate);
     return () => {
       window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
-      window.removeEventListener("gieomo_pickup_points_updated", handlePickupUpdate);
     };
   }, []);
 
@@ -81,15 +71,18 @@ function SaleCreateOrderForm() {
     }
   }, [queryProductId, availableProducts]);
 
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
+  // Buyer Information
+  const [buyerName, setBuyerName] = useState("");
+  const [buyerPhone, setBuyerPhone] = useState("");
+  const [buyerEmail, setBuyerEmail] = useState("");
 
-  // Delivery & Payment States
+  // Ordering for someone else (Đặt hàng giùm)
+  const [isOrderingForOther, setIsOrderingForOther] = useState(false);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+
+  // Delivery & Payment States (No COD, only VietQR banking)
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("member_delivery");
-  const [pickupPointId, setPickupPointId] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("banking");
-
   const [addressDetail, setAddressDetail] = useState("");
   const [province, setProvince] = useState("TP. Hồ Chí Minh");
   const [customerNote, setCustomerNote] = useState("");
@@ -202,8 +195,13 @@ function SaleCreateOrderForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim() || !customerPhone.trim()) {
-      alert("Vui lòng điền họ tên và số điện thoại của người nhận!");
+    if (!buyerName.trim() || !buyerPhone.trim()) {
+      alert("Vui lòng điền họ tên và số điện thoại của người đặt hàng!");
+      return;
+    }
+
+    if (isOrderingForOther && (!recipientName.trim() || !recipientPhone.trim())) {
+      alert("Vui lòng điền họ tên và số điện thoại của người nhận hàng!");
       return;
     }
 
@@ -212,10 +210,8 @@ function SaleCreateOrderForm() {
       return;
     }
 
-    if (deliveryType === "pickup_point" && !pickupPointId && pickupPoints.length > 0) {
-      alert("Vui lòng chọn điểm hẹn nhận hàng!");
-      return;
-    }
+    const finalRecipientName = isOrderingForOther && recipientName.trim() ? recipientName.trim() : buyerName.trim();
+    const finalRecipientPhone = isOrderingForOther && recipientPhone.trim() ? recipientPhone.trim() : buyerPhone.trim();
 
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrderId = `ord-${Date.now()}`;
@@ -241,31 +237,34 @@ function SaleCreateOrderForm() {
 
     const memberName = session?.name || "Thành viên";
     const refCode = session?.referralCode || "";
-    const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
 
     const calculatedAddress =
       deliveryType === "home_delivery"
         ? addressDetail || "Địa chỉ giao hàng"
-        : deliveryType === "pickup_point"
-        ? selectedPickup
-          ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}`
-          : "Điểm hẹn nhận hàng Mầm Mơ"
-        : `Giao qua thành viên: ${memberName} (${refCode || "Người quen"})`;
+        : `Bạn tự giao hàng cho người nhận (${memberName})`;
+
+    let combinedNote = customerNote.trim();
+    if (isOrderingForOther) {
+      combinedNote = `[Đặt giùm cho: ${finalRecipientName} - SĐT: ${finalRecipientPhone}] ${combinedNote}`.trim();
+    }
+    if (!combinedNote) {
+      combinedNote = `Thành viên ${memberName} chốt đơn hộ`;
+    }
 
     const newOrder: Order = {
       order_id: newOrderId,
       order_code: randomCode,
-      buyer_name: customerName,
-      buyer_phone: customerPhone,
-      buyer_email: customerEmail || "",
-      recipient_name: customerName,
-      recipient_phone: customerPhone,
+      buyer_name: buyerName.trim(),
+      buyer_phone: buyerPhone.trim(),
+      buyer_email: buyerEmail.trim() || "",
+      recipient_name: finalRecipientName,
+      recipient_phone: finalRecipientPhone,
       delivery_type: deliveryType,
-      pickup_point_id: deliveryType === "pickup_point" ? pickupPointId || null : null,
+      pickup_point_id: null,
       address_detail: calculatedAddress,
       district: "",
       province: deliveryType === "home_delivery" ? province : "TP. Hồ Chí Minh",
-      payment_method: paymentMethod,
+      payment_method: "banking",
       payment_status: "pending",
       order_status: "pending",
       delivery_status: "not_ready",
@@ -278,9 +277,7 @@ function SaleCreateOrderForm() {
       introducer_info: refCode ? `${memberName} (${refCode})` : memberName,
       referral_code: refCode || null,
       created_by_member_id: session?.memberId || null,
-      customer_note: customerNote
-        ? `[Đơn chốt hộ]: ${customerNote}`
-        : `Thành viên ${memberName} đặt hàng giùm khách`,
+      customer_note: combinedNote,
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
       completed_at: null,
@@ -290,27 +287,28 @@ function SaleCreateOrderForm() {
     saveNewOrder(newOrder);
     setOrderCreatedSuccess(newOrder);
 
-    if (paymentMethod === "banking") {
-      const qrUrl =
-        settings.qrMode === "upload" && settings.qrImageUrl
-          ? settings.qrImageUrl
-          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
-              `${randomCode} ${customerPhone}`
-            )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
+    const qrUrl =
+      settings.qrMode === "upload" && settings.qrImageUrl
+        ? settings.qrImageUrl
+        : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
+            `${randomCode} ${buyerPhone}`
+          )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
 
-      setActiveQrModal({
-        orderCode: randomCode,
-        orderId: newOrderId,
-        amount: finalAmount,
-        qrUrl,
-      });
-    }
+    setActiveQrModal({
+      orderCode: randomCode,
+      orderId: newOrderId,
+      amount: finalAmount,
+      qrUrl,
+    });
   };
 
   const handleResetForm = () => {
-    setCustomerName("");
-    setCustomerPhone("");
-    setCustomerEmail("");
+    setBuyerName("");
+    setBuyerPhone("");
+    setBuyerEmail("");
+    setIsOrderingForOther(false);
+    setRecipientName("");
+    setRecipientPhone("");
     setAddressDetail("");
     setCustomerNote("");
     setOrderCreatedSuccess(null);
@@ -396,36 +394,80 @@ function SaleCreateOrderForm() {
           </span>
         </div>
 
-        {/* Customer Information */}
+        {/* Customer Information (Buyer & Recipient) */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xs space-y-4">
           <h2 className="font-heading font-extrabold text-base text-[#231B16] border-b border-gray-100 pb-3">
             1. Thông Tin Khách Hàng
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Họ và tên khách hàng *"
-              placeholder="Nguyễn Văn A"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              required
-            />
-            <Input
-              label="Số điện thoại người nhận *"
-              placeholder="0912345678"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              required
-            />
-          </div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Họ và tên người đặt hàng *"
+                placeholder="Nguyễn Văn A"
+                value={buyerName}
+                onChange={(e) => setBuyerName(e.target.value)}
+                required
+              />
+              <Input
+                label="Số điện thoại người đặt *"
+                placeholder="0912345678"
+                value={buyerPhone}
+                onChange={(e) => setBuyerPhone(e.target.value)}
+                required
+              />
+            </div>
 
-          <Input
-            label="Email khách hàng (nếu có, để nhận thông báo đơn)"
-            type="email"
-            placeholder="khachhang@gmail.com"
-            value={customerEmail}
-            onChange={(e) => setCustomerEmail(e.target.value)}
-          />
+            <Input
+              label="Email người đặt (nếu có, để nhận thông báo đơn)"
+              type="email"
+              placeholder="khachhang@gmail.com"
+              value={buyerEmail}
+              onChange={(e) => setBuyerEmail(e.target.value)}
+            />
+
+            {/* Ordering for someone else checkbox */}
+            <div className="pt-1">
+              <label className="inline-flex items-center gap-2.5 cursor-pointer select-none bg-gray-50 hover:bg-gray-100/80 px-3.5 py-2.5 rounded-2xl border border-gray-200 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isOrderingForOther}
+                  onChange={(e) => setIsOrderingForOther(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300 cursor-pointer accent-emerald-600"
+                />
+                <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Đặt hàng giùm cho người khác (Người nhận khác người đặt)</span>
+                </span>
+              </label>
+            </div>
+
+            {/* Recipient Details (when ordering for someone else) */}
+            {isOrderingForOther && (
+              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
+                  <UserCheck className="w-4 h-4 text-emerald-700" />
+                  <span>Thông tin người nhận thực tế</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Họ và tên người nhận *"
+                    placeholder="Trần Thị B"
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    required={isOrderingForOther}
+                  />
+                  <Input
+                    label="Số điện thoại người nhận *"
+                    placeholder="0987654321"
+                    value={recipientPhone}
+                    onChange={(e) => setRecipientPhone(e.target.value)}
+                    required={isOrderingForOther}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Products Selection */}
@@ -590,7 +632,7 @@ function SaleCreateOrderForm() {
           })()}
         </div>
 
-        {/* Delivery & Payment */}
+        {/* Delivery & Payment (No COD - 100% VietQR Banking) */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xs space-y-5">
           <h2 className="font-heading font-extrabold text-base text-[#231B16] border-b border-gray-100 pb-3 flex items-center justify-between">
             <span>3. Nhận Hàng & Thanh Toán</span>
@@ -599,7 +641,7 @@ function SaleCreateOrderForm() {
                 ? isFreeship
                   ? "Phí ship: 0đ (Freeship)"
                   : `Phí ship: ${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`
-                : "Phí ship: 0đ"}
+                : "Phí ship: 0đ (Tự giao)"}
             </span>
           </h2>
 
@@ -614,10 +656,7 @@ function SaleCreateOrderForm() {
                 onChange={(e) => setDeliveryType(e.target.value as DeliveryType)}
               >
                 <option value="member_delivery">
-                  🌱 Nhận qua thành viên Mầm Mơ (0đ - Giao trực tiếp)
-                </option>
-                <option value="pickup_point">
-                  📍 Nhận tại điểm hẹn / Trường (0đ)
+                  🌱 Bạn tự giao hàng cho người nhận (0đ)
                 </option>
                 <option value="home_delivery">
                   🚚 Giao tận nơi ({isFreeship ? "Miễn phí 0đ" : `+${(settings.flatShippingFee ?? 15000).toLocaleString("vi-VN")}đ`})
@@ -627,67 +666,33 @@ function SaleCreateOrderForm() {
 
             <div>
               <label className="text-xs font-bold text-gray-700 mb-1.5 block">
-                Phương thức thanh toán *
+                Phương thức thanh toán
               </label>
-              <select
-                className="w-full h-11 px-3 rounded-2xl border border-gray-300 bg-white text-xs font-bold text-gray-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-              >
-                <option value="banking">💳 Chuyển khoản Ngân hàng (VietQR)</option>
-                <option value="cod">💵 Tiền mặt khi nhận hàng (COD)</option>
-              </select>
+              <div className="w-full h-11 px-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex items-center gap-2 text-xs font-bold text-emerald-950">
+                <CreditCard className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>Chuyển khoản Ngân hàng (VietQR)</span>
+              </div>
             </div>
           </div>
 
-          {/* Conditional Delivery Helpers */}
+          {/* Notice when member delivers directly */}
           {deliveryType === "member_delivery" && (
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-3">
-              <span className="text-lg">🌱</span>
+              <span className="text-xl">🌱</span>
               <div className="space-y-1">
-                <p className="font-bold">Nhận qua thành viên ({session?.name || "Người bán"}):</p>
+                <p className="font-bold text-emerald-950 text-sm">
+                  Bạn sẽ tự giao hàng cho người nhận
+                </p>
                 <p className="text-emerald-800 text-[11.5px] leading-relaxed">
-                  Đơn hàng sẽ được chuyển cho bạn để trực tiếp giao tận tay cho người quen. Phí vận chuyển: <strong>0đ</strong>.
+                  Bạn (<span className="font-bold">{session?.name || "Thành viên"}</span>) sẽ trực tiếp nhận sản phẩm và trao tận tay cho khách. Phí vận chuyển: <strong>0đ</strong> (Không cần nhập địa chỉ giao hàng).
                 </p>
               </div>
             </div>
           )}
 
-          {deliveryType === "pickup_point" && (
-            <div className="space-y-3 p-4 rounded-2xl bg-amber-50/60 border border-amber-200">
-              <div className="flex items-center gap-2 text-xs font-bold text-amber-950">
-                <MapPin className="w-4 h-4 text-amber-700" />
-                <span>Chọn điểm hẹn nhận hàng Mầm Mơ (0đ)</span>
-              </div>
-              <select
-                className="w-full h-11 px-3 rounded-xl border border-amber-300 bg-white text-xs font-semibold text-gray-900 focus:outline-none focus:border-amber-600 cursor-pointer"
-                value={pickupPointId}
-                onChange={(e) => setPickupPointId(e.target.value)}
-                required={deliveryType === "pickup_point"}
-              >
-                <option value="">-- Chọn điểm hẹn nhận hàng gần bạn --</option>
-                {pickupPoints.map((p) => (
-                  <option key={p.pickup_point_id} value={p.pickup_point_id}>
-                    {p.name} {p.address || p.address_detail ? `(${p.address || p.address_detail})` : ""}
-                  </option>
-                ))}
-              </select>
-              {pickupPointId && (() => {
-                const pt = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
-                if (!pt) return null;
-                return (
-                  <p className="text-[11px] text-amber-900 bg-white p-2.5 rounded-xl border border-amber-200">
-                    📍 <strong>Địa chỉ:</strong> {pt.address || pt.address_detail || "Liên hệ BTC"}
-                    {pt.opening_hours && <span className="block mt-0.5 text-amber-800">• Giờ nhận: {pt.opening_hours}</span>}
-                    {pt.location_guide && <span className="block mt-0.5 text-amber-800">• Hướng dẫn: {pt.location_guide}</span>}
-                  </p>
-                );
-              })()}
-            </div>
-          )}
-
+          {/* Home delivery address inputs */}
           {deliveryType === "home_delivery" && (
-            <div className="space-y-4 pt-1">
+            <div className="space-y-4 pt-1 animate-in fade-in duration-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Địa chỉ chi tiết (Số nhà, tên đường, phường/xã) *"
@@ -759,11 +764,7 @@ function SaleCreateOrderForm() {
             className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
           >
             <CheckCircle className="w-5 h-5" />
-            <span>
-              {paymentMethod === "banking"
-                ? "Xác nhận & Xuất mã VietQR ➔"
-                : "Xác nhận & Hoàn tất tạo đơn COD ➔"}
-            </span>
+            <span>Xác nhận & Xuất mã VietQR ➔</span>
           </button>
         </div>
       </form>
