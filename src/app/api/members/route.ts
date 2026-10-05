@@ -111,49 +111,26 @@ export async function GET() {
       };
     });
 
-    // 4. Ensure there is at least one active BTC Sale account available
-    const hasSaleAccount = membersList.some(
-      (m: any) => m.role === "btc_sale" && m.status === "active"
-    );
-
-    if (!hasSaleAccount) {
-      // Check if DEFAULT_SALE_ACCOUNT exists in list by email or referral
-      const existingIdx = membersList.findIndex(
-        (m: any) =>
-          (m.email && m.email.toLowerCase() === DEFAULT_SALE_ACCOUNT.email.toLowerCase()) ||
-          (m.referral_code && m.referral_code === DEFAULT_SALE_ACCOUNT.referral_code)
-      );
-
-      if (existingIdx >= 0) {
-        membersList[existingIdx] = {
-          ...membersList[existingIdx],
-          role: "btc_sale",
-          status: "active",
-          password: membersList[existingIdx].password || DEFAULT_SALE_ACCOUNT.password_hash,
-        };
-      } else {
-        // Prepend default sale account so sale login always works immediately
-        membersList = [DEFAULT_SALE_ACCOUNT, ...membersList];
-
-        // Also persist default sale account to Supabase in background
-        (async () => {
-          try {
-            await supabase
-              .from("members")
-              .upsert({
-                member_id: DEFAULT_SALE_ACCOUNT.member_id,
-                full_name: DEFAULT_SALE_ACCOUNT.full_name,
-                email: DEFAULT_SALE_ACCOUNT.email,
-                phone: DEFAULT_SALE_ACCOUNT.phone,
-                role: DEFAULT_SALE_ACCOUNT.role,
-                status: DEFAULT_SALE_ACCOUNT.status,
-                referral_code: DEFAULT_SALE_ACCOUNT.referral_code,
-              }, { onConflict: "member_id" });
-          } catch {
-            // Ignore non-fatal background upsert error
-          }
-        })();
-      }
+    // 4. Fallback default account ONLY when database is completely empty
+    if (membersList.length === 0) {
+      membersList = [DEFAULT_SALE_ACCOUNT];
+      (async () => {
+        try {
+          await supabase
+            .from("members")
+            .upsert({
+              member_id: DEFAULT_SALE_ACCOUNT.member_id,
+              full_name: DEFAULT_SALE_ACCOUNT.full_name,
+              email: DEFAULT_SALE_ACCOUNT.email,
+              phone: DEFAULT_SALE_ACCOUNT.phone,
+              role: DEFAULT_SALE_ACCOUNT.role,
+              status: DEFAULT_SALE_ACCOUNT.status,
+              referral_code: DEFAULT_SALE_ACCOUNT.referral_code,
+            }, { onConflict: "member_id" });
+        } catch {
+          // Ignore non-fatal background upsert error
+        }
+      })();
     }
 
     return NextResponse.json({ success: true, members: membersList });
@@ -192,61 +169,76 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    if (isUuid) {
-      payload.member_id = memberId;
-    }
-
-    // Try including password_hash in payload if provided and not masked
     if (rawPassword && rawPassword !== "••••••••") {
       payload.password_hash = rawPassword;
     }
 
-    // Upsert by member_id if UUID, or insert/update by email
-    let result = await supabase
-      .from("members")
-      .upsert(payload, { onConflict: isUuid ? "member_id" : "email" })
-      .select()
-      .maybeSingle();
-
-    // If upsert failed due to password_hash column not existing yet in schema
-    if (result.error && result.error.message?.includes("password_hash")) {
-      delete payload.password_hash;
-      result = await supabase
+    // 1. Locate existing member in database
+    let existingMemberId: string | null = null;
+    if (isUuid) {
+      const { data: byId } = await supabase
         .from("members")
-        .upsert(payload, { onConflict: isUuid ? "member_id" : "email" })
-        .select()
+        .select("member_id")
+        .eq("member_id", memberId)
         .maybeSingle();
+      if (byId?.member_id) existingMemberId = byId.member_id;
     }
 
-    // If still failed and had no UUID, try fallback insert/update
-    if (result.error) {
-      if (email) {
-        const { data: existing } = await supabase
-          .from("members")
-          .select("member_id")
-          .eq("email", email)
-          .maybeSingle();
+    if (!existingMemberId && email) {
+      const { data: byEmail } = await supabase
+        .from("members")
+        .select("member_id")
+        .ilike("email", email)
+        .maybeSingle();
+      if (byEmail?.member_id) existingMemberId = byEmail.member_id;
+    }
 
-        if (existing) {
-          result = await supabase
-            .from("members")
-            .update(payload)
-            .eq("member_id", existing.member_id)
-            .select()
-            .single();
-        } else {
-          result = await supabase
-            .from("members")
-            .insert(payload)
-            .select()
-            .single();
-        }
-      } else {
+    if (!existingMemberId && referralCode) {
+      const { data: byRef } = await supabase
+        .from("members")
+        .select("member_id")
+        .eq("referral_code", referralCode)
+        .maybeSingle();
+      if (byRef?.member_id) existingMemberId = byRef.member_id;
+    }
+
+    let result: any;
+    if (existingMemberId) {
+      // UPDATE existing member
+      result = await supabase
+        .from("members")
+        .update(payload)
+        .eq("member_id", existingMemberId)
+        .select()
+        .maybeSingle();
+
+      if (result.error && result.error.message?.includes("password_hash")) {
+        delete payload.password_hash;
+        result = await supabase
+          .from("members")
+          .update(payload)
+          .eq("member_id", existingMemberId)
+          .select()
+          .maybeSingle();
+      }
+    } else {
+      // INSERT new member
+      if (isUuid) {
+        payload.member_id = memberId;
+      }
+      result = await supabase
+        .from("members")
+        .insert(payload)
+        .select()
+        .maybeSingle();
+
+      if (result.error && result.error.message?.includes("password_hash")) {
+        delete payload.password_hash;
         result = await supabase
           .from("members")
           .insert(payload)
           .select()
-          .single();
+          .maybeSingle();
       }
     }
 

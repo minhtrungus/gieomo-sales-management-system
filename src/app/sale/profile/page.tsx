@@ -30,9 +30,12 @@ export default function SaleProfilePage() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Change password states
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,12 +71,26 @@ export default function SaleProfilePage() {
     setPasswordError(null);
     setPasswordSuccess(null);
 
-    if (newPassword.length < 6) {
+    const cleanCurrent = currentPassword.trim();
+    const cleanNew = newPassword.trim();
+    const cleanConfirm = confirmPassword.trim();
+
+    if (!cleanCurrent) {
+      setPasswordError("Vui lòng nhập mật khẩu hiện tại!");
+      return;
+    }
+
+    if (cleanNew.length < 6) {
       setPasswordError("Mật khẩu mới phải có tối thiểu 6 ký tự!");
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (cleanNew === cleanCurrent) {
+      setPasswordError("Mật khẩu mới không được trùng với mật khẩu hiện tại!");
+      return;
+    }
+
+    if (cleanNew !== cleanConfirm) {
       setPasswordError("Mật khẩu xác nhận không khớp!");
       return;
     }
@@ -85,13 +102,14 @@ export default function SaleProfilePage() {
 
     setIsSubmitting(true);
     setTimeout(() => {
-      const ok = updateMemberPassword(session.email, newPassword);
-      if (ok) {
-        setPasswordSuccess("Đổi mật khẩu thành công! Bạn có thể sử dụng mật khẩu mới này cho lần đăng nhập tới.");
+      const result = updateMemberPassword(session.email, cleanNew, cleanCurrent);
+      if (result.success) {
+        setPasswordSuccess("✓ Đổi mật khẩu thành công! Bạn có thể sử dụng mật khẩu mới này cho lần đăng nhập tới.");
+        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
-        setPasswordError("Không thể cập nhật mật khẩu, vui lòng liên hệ Ban Tổ Chức.");
+        setPasswordError(result.error || "Không thể cập nhật mật khẩu, vui lòng liên hệ Ban Tổ Chức.");
       }
       setIsSubmitting(false);
     }, 400);
@@ -189,7 +207,7 @@ export default function SaleProfilePage() {
               Đổi Mật Khẩu Cá Nhân
             </h2>
             <p className="text-xs text-gray-400">
-              Cập nhật mật khẩu mới để bảo mật tài khoản thành viên của bạn.
+              Nhập mật khẩu hiện tại và tạo mật khẩu mới để bảo mật tài khoản.
             </p>
           </div>
         </div>
@@ -211,8 +229,26 @@ export default function SaleProfilePage() {
         <form onSubmit={handleChangePassword} className="space-y-4">
           <div className="relative">
             <Input
+              label="Mật khẩu hiện tại *"
+              type={showCurrentPassword ? "text" : "password"}
+              placeholder="Nhập mật khẩu đang dùng"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrentPassword((prev) => !prev)}
+              className="absolute right-3.5 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <div className="relative">
+            <Input
               label="Mật khẩu mới (tối thiểu 6 ký tự) *"
-              type={showPassword ? "text" : "password"}
+              type={showNewPassword ? "text" : "password"}
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -220,21 +256,30 @@ export default function SaleProfilePage() {
             />
             <button
               type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
+              onClick={() => setShowNewPassword((prev) => !prev)}
               className="absolute right-3.5 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
 
-          <Input
-            label="Xác nhận lại mật khẩu mới *"
-            type={showPassword ? "text" : "password"}
-            placeholder="••••••••"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <Input
+              label="Xác nhận lại mật khẩu mới *"
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              className="absolute right-3.5 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
 
           <button
             type="submit"

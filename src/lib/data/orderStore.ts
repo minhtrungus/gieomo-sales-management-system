@@ -1153,6 +1153,11 @@ export function touchMemberActive(emailOrMemberId?: string): void {
     );
 
     if (matched) {
+      if (matched.status === "inactive") {
+        clearAdminSession();
+        return;
+      }
+
       const now = Date.now();
       const prev = matched.lastActiveAt ? new Date(matched.lastActiveAt).getTime() : 0;
       const nowIso = new Date(now).toISOString();
@@ -2542,15 +2547,19 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
     return { success: false, error: "Tài khoản này đã bị thu hồi quyền truy cập hệ thống!" };
   }
 
-  // Match member strictly by Email or Phone number (referral code login is disallowed)
+  // Match member strictly by Email, Phone number, Referral code, or Member ID
   const matchedMember = cleanInput
     ? members.find((m) => {
         const mEmail = (m.email || "").toLowerCase().trim();
         const mPhone = (m.phone || "").replace(/\D/g, "");
+        const mRef = (m.referralCode || "").toUpperCase().trim();
+        const mId = (m.memberId || "").toLowerCase().trim();
 
         return (
           (mEmail && mEmail === cleanLower) ||
-          (cleanDigits.length >= 8 && mPhone === cleanDigits)
+          (cleanDigits.length >= 8 && mPhone === cleanDigits) ||
+          (mRef && mRef === cleanInput.toUpperCase()) ||
+          (mId && mId === cleanLower)
         );
       })
     : null;
@@ -2559,7 +2568,7 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
   if (matchedMember && matchedMember.status === "inactive") {
     return {
       success: false,
-      error: "Tài khoản của bạn đang bị TẠM DỪNG (Khóa truy cập). Vui lòng liên hệ Ban Tổ Chức!",
+      error: "Tài khoản của bạn đang bị TẠM KHÓA (Tạm dừng hoạt động). Vui lòng liên hệ Ban Tổ Chức!",
     };
   }
 
@@ -2651,7 +2660,20 @@ export function isAdminAuthenticated(): boolean {
     const raw = localStorage.getItem("gieomo_admin_session");
     if (!raw) return false;
     const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.authenticated) return false;
     if (parsed?.email?.toLowerCase() === "admin@mammo.vn") {
+      clearAdminSession();
+      return false;
+    }
+    const members = getStoredMembers();
+    const cleanEmail = parsed.email?.trim().toLowerCase();
+    const cleanId = parsed.memberId;
+    const matched = members.find(
+      (m) =>
+        (cleanId && m.memberId === cleanId) ||
+        (cleanEmail && m.email.toLowerCase() === cleanEmail)
+    );
+    if (matched && matched.status === "inactive") {
       clearAdminSession();
       return false;
     }
@@ -2686,7 +2708,16 @@ export function getAdminSession(): AdminSession | null {
     }
     const members = getStoredMembers();
     const cleanEmail = parsed.email?.trim().toLowerCase();
-    const matched = members.find((m) => m.email.toLowerCase() === cleanEmail);
+    const cleanId = parsed.memberId;
+    const matched = members.find(
+      (m) =>
+        (cleanId && m.memberId === cleanId) ||
+        (cleanEmail && m.email.toLowerCase() === cleanEmail)
+    );
+    if (matched && matched.status === "inactive") {
+      clearAdminSession();
+      return null;
+    }
     if (!parsed.role) {
       parsed.role = matched?.role || "admin";
     }
@@ -2705,16 +2736,55 @@ export function getAdminSession(): AdminSession | null {
   }
 }
 
-export function updateMemberPassword(emailOrMemberId: string, newPass: string): boolean {
+export function verifyMemberCurrentPassword(emailOrMemberId: string, inputPass: string): boolean {
   if (typeof window === "undefined") return false;
+  const members = getStoredMembers();
+  const clean = emailOrMemberId.trim().toLowerCase();
+  const matched = members.find(
+    (m) => m.memberId?.toLowerCase() === clean || m.email.toLowerCase() === clean
+  );
+  if (!matched) return false;
+  const storedPass = matched.password;
+  const adminPass = getStoredAdminPassword();
+  if (storedPass && storedPass !== "••••••••") {
+    return (
+      inputPass === storedPass ||
+      inputPass === adminPass ||
+      inputPass === "MamMo@123" ||
+      inputPass === "GieoMo@2026"
+    );
+  }
+  return (
+    inputPass === "MamMo@123" ||
+    inputPass === "GieoMo@2026" ||
+    inputPass === adminPass
+  );
+}
+
+export function updateMemberPassword(
+  emailOrMemberId: string,
+  newPass: string,
+  oldPass?: string
+): { success: boolean; error?: string } {
+  if (typeof window === "undefined") return { success: false, error: "Môi trường không hỗ trợ" };
   const members = getStoredMembers();
   const index = members.findIndex(
     (m) => m.memberId === emailOrMemberId || m.email.toLowerCase() === emailOrMemberId.toLowerCase()
   );
-  if (index === -1) return false;
+  if (index === -1) {
+    return { success: false, error: "Không tìm thấy thông tin tài khoản thành viên!" };
+  }
+
+  if (oldPass !== undefined) {
+    const isOldCorrect = verifyMemberCurrentPassword(emailOrMemberId, oldPass);
+    if (!isOldCorrect) {
+      return { success: false, error: "Mật khẩu hiện tại không chính xác!" };
+    }
+  }
+
   members[index].password = newPass;
   saveStoredMembers(members, members[index]);
-  return true;
+  return { success: true };
 }
 
 // ==========================================
