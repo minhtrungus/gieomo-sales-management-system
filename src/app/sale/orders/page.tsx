@@ -292,45 +292,44 @@ export default function SaleOrdersPage() {
                 </div>
 
                 {/* Shipper Action Buttons */}
-                <div className="flex items-center gap-2 pt-1 border-t border-blue-100">
-                  {selectedOrder.delivery_status !== "out_for_delivery" && selectedOrder.delivery_status !== "delivered" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateStoredDeliveryStatus(selectedOrder.order_id, "out_for_delivery");
-                        setSelectedOrder((prev) => prev ? { ...prev, delivery_status: "out_for_delivery" } : prev);
-                      }}
-                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
-                    >
-                      🚀 Bắt đầu đi giao
-                    </button>
-                  )}
+                <div className="space-y-1.5 pt-1 border-t border-blue-100">
+                  <div className="flex items-center gap-2">
+                    {selectedOrder.delivery_status !== "out_for_delivery" && selectedOrder.delivery_status !== "delivered" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateStoredDeliveryStatus(selectedOrder.order_id, "out_for_delivery");
+                          setSelectedOrder((prev) => prev ? { ...prev, delivery_status: "out_for_delivery" } : prev);
+                        }}
+                        className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                      >
+                        🚀 Bắt đầu đi giao
+                      </button>
+                    )}
 
-                  {selectedOrder.delivery_status !== "delivered" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateStoredDeliveryStatus(selectedOrder.order_id, "delivered");
-                        updateStoredOrderStatus(selectedOrder.order_id, "completed");
-                        if (selectedOrder.payment_status !== "paid") {
-                          updateStoredPaymentStatus(selectedOrder.order_id, "paid");
-                        }
-                        setSelectedOrder((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                delivery_status: "delivered",
-                                order_status: "completed",
-                                payment_status: "paid",
-                              }
-                            : prev
-                        );
-                      }}
-                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
-                    >
-                      ✅ Đã giao &amp; Thu tiền
-                    </button>
-                  )}
+                    {selectedOrder.delivery_status !== "delivered" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateStoredDeliveryStatus(selectedOrder.order_id, "delivered");
+                          setSelectedOrder((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  delivery_status: "delivered",
+                                }
+                              : prev
+                          );
+                        }}
+                        className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                      >
+                        ✅ Đã giao tận tay khách
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10.5px] text-gray-500 italic text-center">
+                    * Ban Tổ Chức (BTC) sẽ kiểm tra đối soát và duyệt trạng thái thanh toán khi nhận được tiền.
+                  </p>
                 </div>
               </div>
             )}
