@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { getProductBySlugServer, getProductsServer } from "@/lib/services/productService";
 import { getSiteUrl } from "@/lib/constants";
 import { ProductDetailClient } from "./ProductDetailClient";
-import { MOCK_PRODUCTS } from "@/lib/data/mockData";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -119,7 +118,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const product = await getProductBySlugServer(slug);
 
   const allProducts = await getProductsServer(false);
-  const relatedProducts = (allProducts.length > 0 ? allProducts : MOCK_PRODUCTS)
+  const relatedProducts = allProducts
     .filter((p) => p.status === "active" && (!product || p.product_id !== product.product_id))
     .slice(0, 3);
 

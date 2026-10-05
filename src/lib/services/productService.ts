@@ -263,32 +263,10 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
       // Supabase not available
     }
 
-    const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
-    return (
-      MOCK_PRODUCTS.find(
-        (p) =>
-          p.slug === slug ||
-          p.slug === decodedSlug ||
-          p.product_id === slug ||
-          p.product_id === decodedSlug
-      ) ?? null
-    );
+    return null;
   } catch (err) {
     console.warn("[getProductBySlugServer] Error:", err);
-    try {
-      const { MOCK_PRODUCTS } = await import("@/lib/data/mockData");
-      return (
-        MOCK_PRODUCTS.find(
-          (p) =>
-            p.slug === slug ||
-            p.slug === decodedSlug ||
-            p.product_id === slug ||
-            p.product_id === decodedSlug
-        ) ?? null
-      );
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 

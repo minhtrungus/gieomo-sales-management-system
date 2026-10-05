@@ -1403,22 +1403,20 @@ export function deleteStoredVoucher(voucherId: string): void {
 
 export function syncProductsFromServer(force = false): Promise<ExtendedProduct[]> {
   if (typeof window === "undefined") return Promise.resolve([]);
-  if (hasSyncedProductsWithServer && !force && cachedProducts && cachedProducts.length > 0) {
+  if (hasSyncedProductsWithServer && !force && cachedProducts !== null) {
     return Promise.resolve(cachedProducts);
   }
   return safeFetchJson<{ success: boolean; products: ExtendedProduct[] }>("/api/products?admin=true", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.products)) {
         hasSyncedProductsWithServer = true;
-        if (data.products.length > 0) {
-          const merged = data.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-          cachedProducts = merged;
-          try {
-            localStorage.setItem("gieomo_products", JSON.stringify(merged));
-          } catch {}
-          window.dispatchEvent(new Event("gieomo_products_updated"));
-          return merged;
-        }
+        const merged = data.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        cachedProducts = merged;
+        try {
+          localStorage.setItem("gieomo_products", JSON.stringify(merged));
+        } catch {}
+        window.dispatchEvent(new Event("gieomo_products_updated"));
+        return merged;
       }
       return cachedProducts || [];
     })
@@ -1444,28 +1442,24 @@ export async function clearAllStoredProducts(): Promise<void> {
 }
 
 export function getStoredProducts(): ExtendedProduct[] {
-  if (typeof window === "undefined") return MOCK_PRODUCTS;
+  if (typeof window === "undefined") return [];
 
   if (!hasSyncedProductsWithServer) {
     syncProductsFromServer();
   }
 
-  if (cachedProducts !== null && cachedProducts.length > 0) return cachedProducts;
+  if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
     const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
-    if (products.length === 0) {
-      cachedProducts = MOCK_PRODUCTS;
-      localStorage.setItem("gieomo_products", JSON.stringify(MOCK_PRODUCTS));
-      return MOCK_PRODUCTS;
-    }
     cachedProducts = products;
     return products;
   } catch (e) {
     console.error("Error reading gieomo_products from localStorage", e);
-    return MOCK_PRODUCTS;
+    return [];
   }
 }
+
 
 export function getStoredProductBySlug(slug: string): ExtendedProduct | undefined {
   if (!slug) return undefined;
@@ -2402,28 +2396,22 @@ export function syncCombosFromServer(force = false): void {
 }
 
 export function getStoredCombos(): ExtendedCombo[] {
-  if (typeof window === "undefined") return MOCK_COMBOS;
+  if (typeof window === "undefined") return [];
   if (!hasSyncedCombosWithServer) {
     syncCombosFromServer();
   }
-  if (cachedCombos !== null && cachedCombos.length > 0) return cachedCombos;
+  if (cachedCombos !== null) return cachedCombos;
   try {
     const raw = localStorage.getItem("gieomo_combos");
     if (!raw) {
-      cachedCombos = MOCK_COMBOS;
-      localStorage.setItem("gieomo_combos", JSON.stringify(MOCK_COMBOS));
-      return MOCK_COMBOS;
+      return [];
     }
     const combos: ExtendedCombo[] = JSON.parse(raw);
-    if (combos.length === 0) {
-      cachedCombos = MOCK_COMBOS;
-      return MOCK_COMBOS;
-    }
     cachedCombos = combos;
     return combos;
   } catch (e) {
     console.error("Error reading gieomo_combos", e);
-    return MOCK_COMBOS;
+    return [];
   }
 }
 

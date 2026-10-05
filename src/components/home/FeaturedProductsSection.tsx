@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ProductCard } from "@/components/products/ProductCard";
-import { MOCK_PRODUCTS, ExtendedProduct } from "@/lib/data/mockData";
+import type { ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts, syncProductsFromServer } from "@/lib/data/orderStore";
 import { ArrowRight } from "lucide-react";
 
 export function FeaturedProductsSection() {
-  const [products, setProducts] = useState<ExtendedProduct[]>(() => {
-    return MOCK_PRODUCTS.filter((p) => p.status === "active").slice(0, 4);
-  });
+  const [products, setProducts] = useState<ExtendedProduct[]>([]);
+
 
   useEffect(() => {
     syncProductsFromServer(true);
