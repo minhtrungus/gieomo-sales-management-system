@@ -35,9 +35,15 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         thumbnail,
         created_at,
         updated_at,
-        category:product_categories(category_id, name, slug, description, image_url, status, sort_order, created_at),
-        variants:product_variants(variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at),
-        media:product_media(media_id, url, sort_order, alt_text)
+        product_categories!category_id (
+          category_id, name, slug, description, image_url, status, sort_order, created_at
+        ),
+        product_variants!product_id (
+          variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at
+        ),
+        product_media!product_id (
+          media_id, url, sort_order, alt_text
+        )
       `)
       .order("sort_order", { ascending: true });
 
@@ -47,7 +53,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 
     let { data, error } = await query;
     if (error) {
-      console.warn("[getProductsServer] Primary joined query failed, falling back to separate queries:", error);
+      console.warn("[getProductsServer] Primary query returned notice:", error?.message || error);
       try {
         let fallbackQuery = supabase
           .from("products")
@@ -58,7 +64,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         }
         const { data: rawProds, error: fbErr } = await fallbackQuery;
         if (fbErr || !rawProds) {
-          console.warn("[getProductsServer] Fallback query also failed:", fbErr);
+          console.warn("[getProductsServer] Fallback query failed:", fbErr);
           return [];
         }
 
@@ -68,8 +74,8 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 
         data = rawProds.map((p: any) => ({
           ...p,
-          variants: (allVariants || []).filter((v: any) => v.product_id === p.product_id),
-          media: (allMedia || []).filter((m: any) => m.product_id === p.product_id),
+          product_variants: (allVariants || []).filter((v: any) => v.product_id === p.product_id),
+          product_media: (allMedia || []).filter((m: any) => m.product_id === p.product_id),
         }));
       } catch (fallbackEx) {
         console.error("[getProductsServer] Exception during fallback:", fallbackEx);
@@ -83,7 +89,8 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 
     return (data as any[]).map((p) => {
       // Map media to images array
-      const mediaImages = (p.media || [])
+      const rawMedia = p.product_media || p.media || [];
+      const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
         .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((m: any) => m.url);
       
@@ -95,7 +102,9 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         : [fallbackImage];
 
       // Map variants with warehouse calculations
-      const variants: ProductVariant[] = (p.variants || []).map((v: any) => {
+      const rawVariants = p.product_variants || p.variants || [];
+      const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+      const variants: ProductVariant[] = variantsList.map((v: any) => {
         const stock = v.stock ?? 0;
         const wh1 = Math.ceil(stock * 0.7);
         const wh2 = stock - wh1;
@@ -113,6 +122,9 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         };
       });
 
+      const rawCategory = p.product_categories || p.category;
+      const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
+
       return {
         product_id: p.product_id,
         category_id: p.category_id,
@@ -129,7 +141,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         weight_gram: p.weight_gram || 100,
         thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
         images,
-        category: p.category || undefined,
+        category: category || undefined,
         variants,
         created_at: p.created_at,
         updated_at: p.updated_at,
@@ -181,21 +193,30 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           thumbnail,
           created_at,
           updated_at,
-          category:product_categories(category_id, name, slug, description, image_url, status, sort_order, created_at),
-          variants:product_variants(variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at),
-          media:product_media(media_id, url, sort_order, alt_text)
+          product_categories!category_id (
+            category_id, name, slug, description, image_url, status, sort_order, created_at
+          ),
+          product_variants!product_id (
+            variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at
+          ),
+          product_media!product_id (
+            media_id, url, sort_order, alt_text
+          )
         `)
         .or(`slug.eq.${slug},slug.eq.${decodedSlug},product_id.eq.${slug},product_id.eq.${decodedSlug}`)
         .maybeSingle();
 
       if (p) {
-        const mediaImages = (p.media || [])
+        const rawMedia = (p as any).product_media || (p as any).media || [];
+        const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
           .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
           .map((m: any) => m.url);
         const fallbackImage = (p.slug && DEFAULT_PRODUCT_IMAGES[p.slug]) || "/images/products/pounch_1.png";
         const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
 
-        const variants: ProductVariant[] = (p.variants || []).map((v: any) => {
+        const rawVariants = (p as any).product_variants || (p as any).variants || [];
+        const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+        const variants: ProductVariant[] = variantsList.map((v: any) => {
           const stock = v.stock ?? 0;
           const wh1 = Math.ceil(stock * 0.7);
           const wh2 = stock - wh1;
@@ -213,6 +234,9 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           };
         });
 
+        const rawCategory = (p as any).product_categories || (p as any).category;
+        const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
+
         return {
           product_id: p.product_id,
           category_id: p.category_id,
@@ -228,7 +252,8 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           sort_order: p.sort_order || 1,
           weight_gram: p.weight_gram || 100,
           thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
-          category: (Array.isArray(p.category) ? p.category[0] : p.category) || undefined,
+          images,
+          category: category || undefined,
           variants,
           created_at: p.created_at,
           updated_at: p.updated_at,
