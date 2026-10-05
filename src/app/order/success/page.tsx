@@ -19,7 +19,7 @@ import {
   type SiteSettings,
 } from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
-import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift } from "lucide-react";
+import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift, Maximize2, X, ZoomIn } from "lucide-react";
 import { compressImage } from "@/lib/utils/imageCompressor";
 
 function OrderSuccessContent() {
@@ -31,9 +31,10 @@ function OrderSuccessContent() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [order, setOrder] = useState<Order | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
-  const [hasConfirmedPayment, setHasConfirmedPayment] = useState(false);
+  const [hasSubmittedProof, setHasSubmittedProof] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [zoomedProof, setZoomedProof] = useState<string | null>(null);
 
   // Social Share Card states
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -52,27 +53,28 @@ function OrderSuccessContent() {
     if (found) {
       setOrder(found);
       if (
-        found.payment_status === "paid" ||
         found.payment_proof ||
+        found.internal_note?.includes("[Khách đã nộp ảnh biên lai CK") ||
         found.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
       ) {
-        setHasConfirmedPayment(true);
+        setHasSubmittedProof(true);
         if (found.payment_proof) setProofImage(found.payment_proof);
       }
     }
 
     // Also restore cached confirmation state
     try {
-      const localConfirmed = localStorage.getItem(`gieomo_confirmed_${orderCode}`) === "true";
+      const localSubmitted = localStorage.getItem(`gieomo_proof_submitted_${orderCode}`) === "true";
       const localProof = localStorage.getItem(`gieomo_proof_${orderCode}`);
-      if (localConfirmed) setHasConfirmedPayment(true);
+      if (localSubmitted) setHasSubmittedProof(true);
       if (localProof && !proofImage) setProofImage(localProof);
     } catch {
       // ignore
     }
   }, [orderCode]);
 
-  const isPaid = (order?.payment_status === "paid") || hasConfirmedPayment || paymentMethod === "cod";
+  // isPaid is ONLY true if backend genuinely marked payment_status as "paid" or if COD
+  const isPaid = (order?.payment_status === "paid") || paymentMethod === "cod";
 
   // Polling for VietQR payment confirmation (every 2.5s)
   useEffect(() => {
@@ -85,7 +87,6 @@ function OrderSuccessContent() {
             const latest = data.orders[0];
             if (latest.payment_status === "paid") {
               setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
-              setHasConfirmedPayment(true);
 
               // Send order confirmation email upon successful payment detection
               fetch("/api/notify/email", {
@@ -147,57 +148,41 @@ function OrderSuccessContent() {
   };
 
   const handleConfirmPaymentSubmit = async () => {
-    setHasConfirmedPayment(true);
+    setHasSubmittedProof(true);
     setIsConfirmModalOpen(false);
 
     if (orderCode) {
       try {
-        localStorage.setItem(`gieomo_confirmed_${orderCode}`, "true");
+        localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
         if (proofImage) {
           localStorage.setItem(`gieomo_proof_${orderCode}`, proofImage);
           updateStoredPaymentProof(orderCode, proofImage);
         }
-        updateStoredPaymentStatus(orderCode, "paid");
-        updateStoredOrderStatus(orderCode, "confirmed");
 
+        const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
         setOrder((prev) =>
           prev
             ? {
                 ...prev,
-                payment_status: "paid",
-                order_status: "confirmed",
                 payment_proof: proofImage || prev.payment_proof,
+                internal_note: note,
               }
             : prev
         );
 
+        // Send proof and note to server WITHOUT changing payment_status to paid (keeps pending)
         const payload: any = {
-          order_code: orderCode,
-          payment_status: "paid",
-          order_status: "confirmed",
+          orderCode,
+          internalNote: note,
         };
         if (proofImage) {
-          payload.internal_note = `[Khách đính kèm ảnh biên lai CK]`;
-          payload.payment_proof = proofImage;
+          payload.paymentProof = proofImage;
         }
         await fetch("/api/orders", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-
-        // Trigger confirmation email upon payment confirmation
-        if (order) {
-          fetch("/api/notify/email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "order_confirmation",
-              order: { ...order, payment_status: "paid" },
-              toEmail: order.buyer_email || undefined,
-            }),
-          }).catch(() => {});
-        }
       } catch (err) {
         console.warn("Error updating payment confirmation:", err);
       }
@@ -582,30 +567,49 @@ function OrderSuccessContent() {
     <div className="max-w-2xl mx-auto space-y-6 text-center">
       {/* Status Header */}
       {paymentMethod === "banking" && !isPaid ? (
-        <>
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
-            💳
-          </div>
-          <div className="space-y-2">
-            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap">
-              ⏳ ĐANG CHỜ CHUYỂN KHOẢN VIETQR
+        hasSubmittedProof ? (
+          <>
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
+              🧾
             </div>
-            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
-              Đơn hàng đang chờ thanh toán
-            </h1>
-            <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
-              Vui lòng quét mã VietQR bên dưới để hoàn tất giao dịch. Sau khi nhận được chuyển khoản, hệ thống sẽ tự động xác nhận đặt hàng thành công!
-            </p>
-          </div>
-        </>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap border border-amber-300">
+                ⏳ ĐÃ NỘP BIÊN LAI — CHỜ BTC ĐỐI SOÁT
+              </div>
+              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
+                Đã tiếp nhận biên lai chuyển khoản!
+              </h1>
+              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
+                BTC Mầm Mơ đang kiểm tra đối soát với tài khoản ngân hàng. Đơn hàng sẽ tự động cập nhật ngay khi tài khoản nhận được tiền!
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
+              💳
+            </div>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap">
+                ⏳ ĐANG CHỜ CHUYỂN KHOẢN VIETQR
+              </div>
+              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
+                Đơn hàng đang chờ thanh toán
+              </h1>
+              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
+                Vui lòng quét mã VietQR bên dưới để hoàn tất giao dịch. Sau khi nhận được chuyển khoản, hệ thống sẽ tự động xác nhận đặt hàng thành công!
+              </p>
+            </div>
+          </>
+        )
       ) : (
         <>
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
             🎉
           </div>
           <div className="space-y-2">
-            <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1 whitespace-nowrap">
-              ✓ ĐÃ XÁC NHẬN ĐƠN HÀNG
+            <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1 whitespace-nowrap border border-[#A5D6A7]">
+              ✓ ĐÃ XÁC NHẬN THANH TOÁN
             </div>
             <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
               Đặt hàng thành công!
@@ -787,10 +791,27 @@ function OrderSuccessContent() {
 
             {/* Customer Payment Confirmation CTA */}
             <div className="pt-3 border-t border-gray-100">
-              {hasConfirmedPayment ? (
-                <div className="p-3.5 rounded-2xl bg-[#E6F7EC] border border-[#A5D6A7] text-xs text-[#1B5E20] flex items-center justify-center gap-2 font-bold animate-in fade-in">
-                  <span>✅</span>
-                  <span>Đã nhận thông tin thanh toán! Đơn hàng đang được chuẩn bị.</span>
+              {hasSubmittedProof ? (
+                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 text-xs text-amber-950 space-y-2 animate-in fade-in text-left">
+                  <div className="flex items-center gap-2 font-bold text-amber-900">
+                    <span className="text-base">⏳</span>
+                    <span>Đã nhận biên lai chuyển khoản — Chờ BTC đối soát</span>
+                  </div>
+                  <p className="text-[11.5px] text-amber-800 leading-relaxed">
+                    Hệ thống đang chờ BTC Mầm Mơ kiểm tra khớp lệnh ngân hàng. Đơn hàng sẽ tự động chuyển sang trạng thái đã thanh toán ngay sau khi hoàn tất.
+                  </p>
+                  {proofImage && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setZoomedProof(proofImage)}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-[11px] hover:bg-amber-100 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs transition-colors"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Xem lại ảnh biên lai đã gửi</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2 text-center">
@@ -1263,6 +1284,38 @@ function OrderSuccessContent() {
               >
                 Đã chuyển khoản xong ➔
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX MODAL: Xem ảnh biên lai phóng to cho khách hàng */}
+      {zoomedProof && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setZoomedProof(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[90vh] bg-[#16381D]/95 rounded-3xl p-4 border border-emerald-600/40 shadow-2xl flex flex-col items-center space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between text-white pb-2 border-b border-white/10 px-2">
+              <span className="font-heading font-bold text-sm">Ảnh biên lai đã gửi ({orderCode})</span>
+              <button
+                type="button"
+                onClick={() => setZoomedProof(null)}
+                className="p-1 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative w-full flex-1 flex items-center justify-center overflow-auto max-h-[75vh] p-2 bg-black/30 rounded-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={zoomedProof}
+                alt="Biên lai phóng to"
+                className="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md"
+              />
             </div>
           </div>
         </div>

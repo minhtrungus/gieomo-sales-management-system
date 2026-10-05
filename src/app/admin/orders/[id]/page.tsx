@@ -17,7 +17,7 @@ import {
   type StoredMember,
 } from "@/lib/data/orderStore";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
-import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -38,6 +38,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
+  // Lightbox modal state for receipt proof
+  const [zoomedProof, setZoomedProof] = useState<string | null>(null);
+
+  // Confirmation modal state for manual payment verification
+  const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+  const [pendingPaymentStatus, setPendingPaymentStatus] = useState<PaymentStatus | null>(null);
+
   useEffect(() => {
     setMembers(getStoredMembers());
     const stored = getStoredOrders();
@@ -55,6 +62,28 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       );
     }
   }, [resolvedParams.id]);
+
+  // Handle changing payment status with explicit confirmation for 'paid'
+  const handlePaymentStatusChange = (newStatus: PaymentStatus) => {
+    if (newStatus === "paid" && paymentStatus !== "paid") {
+      setPendingPaymentStatus("paid");
+      setShowPaymentConfirmModal(true);
+    } else {
+      setPaymentStatus(newStatus);
+    }
+  };
+
+  const handleConfirmPaid = () => {
+    setPaymentStatus("paid");
+    setShowPaymentConfirmModal(false);
+    setPendingPaymentStatus(null);
+    if (order) {
+      updateStoredPaymentStatus(order.order_id, "paid");
+      setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+      setIsSavedNotice(true);
+      setTimeout(() => setIsSavedNotice(false), 2500);
+    }
+  };
 
   const handleSaveChanges = () => {
     if (!order) return;
@@ -401,13 +430,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <label className="text-xs font-bold text-gray-700 uppercase">Trạng thái thanh toán:</label>
               <select
                 value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+                onChange={(e) => handlePaymentStatusChange(e.target.value as PaymentStatus)}
                 className="w-full p-2.5 rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
               >
-                <option value="pending">Chờ thanh toán</option>
-                <option value="paid">Đã thanh toán (Khớp VietQR)</option>
-                <option value="refunded">Đã hoàn tiền</option>
-                <option value="failed">Thất bại</option>
+                <option value="pending">⏳ Chờ thanh toán</option>
+                <option value="paid">✅ Đã thanh toán (Khớp VietQR)</option>
+                <option value="refunded">↩️ Đã hoàn tiền</option>
+                <option value="failed">❌ Thất bại</option>
               </select>
             </div>
 
@@ -446,9 +475,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           {/* Payment Proof Receipt Image Box */}
           {(order.payment_proof || (order.internal_note && order.internal_note.includes("[Ảnh biên lai]"))) && (
             <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-2xs space-y-3">
-              <h3 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
-                <span>🧾</span> Ảnh biên lai chuyển khoản
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
+                  <span>🧾</span> Ảnh biên lai chuyển khoản
+                </h3>
+                {paymentStatus !== "paid" && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                    Chờ BTC đối soát
+                  </span>
+                )}
+              </div>
+
               {(() => {
                 const proofSrc =
                   order.payment_proof ||
@@ -456,19 +493,47 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   "";
                 if (!proofSrc) return null;
                 return (
-                  <div className="space-y-2">
-                    <div className="relative w-full rounded-2xl overflow-hidden border border-emerald-100 bg-gray-50 group">
+                  <div className="space-y-3">
+                    <div
+                      onClick={() => setZoomedProof(proofSrc)}
+                      className="relative w-full rounded-2xl overflow-hidden border border-emerald-200 bg-gray-50 group cursor-pointer hover:border-emerald-500 transition-all shadow-2xs hover:shadow-md"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={proofSrc}
                         alt="Biên lai chuyển khoản"
-                        className="w-full h-auto max-h-72 object-contain mx-auto cursor-pointer hover:scale-105 transition-transform"
-                        onClick={() => window.open(proofSrc, "_blank")}
+                        className="w-full h-auto max-h-72 object-contain mx-auto transition-transform group-hover:scale-[1.02]"
                       />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white font-bold text-xs">
+                        <ZoomIn className="w-5 h-5" />
+                        <span>Nhấp để phóng to</span>
+                      </div>
                     </div>
-                    <p className="text-center text-[11px] text-gray-500 font-medium">
-                      (Nhấp vào ảnh để mở to toàn màn hình)
-                    </p>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setZoomedProof(proofSrc)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Xem ảnh lớn</span>
+                      </button>
+
+                      {paymentStatus !== "paid" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingPaymentStatus("paid");
+                            setShowPaymentConfirmModal(true);
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer border border-emerald-300 shadow-2xs transition-all"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-800" />
+                          <span>Duyệt thanh toán</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -476,6 +541,137 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
       </div>
+
+      {/* LIGHTBOX MODAL: Xem ảnh biên lai phóng to */}
+      {zoomedProof && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setZoomedProof(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[92vh] bg-[#16381D]/90 rounded-3xl p-4 border border-emerald-600/40 shadow-2xl flex flex-col items-center space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="w-full flex items-center justify-between text-white pb-2 border-b border-white/10 px-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🧾</span>
+                <span className="font-heading font-bold text-sm">
+                  Biên lai đơn {order.order_code} — {order.buyer_name} ({order.final_amount.toLocaleString("vi-VN")}đ)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={zoomedProof}
+                  download={`Bien-Lai-${order.order_code}.png`}
+                  className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                  title="Tải ảnh về máy"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Tải ảnh</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setZoomedProof(null)}
+                  className="p-1.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+                  title="Đóng (ESC)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Image Area */}
+            <div className="relative w-full flex-1 flex items-center justify-center overflow-auto max-h-[80vh] p-2 bg-black/40 rounded-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={zoomedProof}
+                alt="Ảnh biên lai phóng to"
+                className="max-w-full max-h-[76vh] object-contain rounded-xl shadow-lg select-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: Xác nhận đã nhận tiền thanh toán (Minh bạch BTC) */}
+      {showPaymentConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowPaymentConfirmModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl p-6 border border-emerald-200 shadow-2xl space-y-4 animate-in zoom-in-95 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-lg">
+                  🛡️
+                </div>
+                <h3 className="font-heading font-extrabold text-base text-emerald-950">
+                  Xác nhận đối soát thanh toán
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentConfirmModal(false)}
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-700">
+              <p className="text-gray-600">
+                Để đảm bảo minh bạch, BTC vui lòng kiểm tra tài khoản ngân hàng và xác nhận đã nhận đủ số tiền cho đơn hàng này:
+              </p>
+
+              <div className="p-3.5 rounded-2xl bg-[#FFFDF9] border border-[#F0E5D8] space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Mã đơn hàng:</span>
+                  <span className="font-mono font-bold text-emerald-950">{order.order_code}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Khách hàng:</span>
+                  <span className="font-bold text-gray-900">{order.buyer_name} ({order.buyer_phone})</span>
+                </div>
+                <div className="flex justify-between text-sm pt-1 border-t border-gray-100">
+                  <span className="text-gray-600 font-bold">Số tiền thực thu:</span>
+                  <span className="font-extrabold text-emerald-900 text-base">
+                    {order.final_amount.toLocaleString("vi-VN")}đ
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11.5px] leading-relaxed flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                <span>
+                  Sau khi xác nhận, đơn hàng sẽ được đánh dấu <strong>Đã thanh toán (Khớp VietQR)</strong> trên toàn hệ thống và lưu nhật ký đối soát.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowPaymentConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPaid}
+                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4 text-emerald-800" />
+                <span>Xác nhận đã nhận tiền</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
