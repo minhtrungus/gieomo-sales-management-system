@@ -510,12 +510,66 @@ export function updateStoredOrderWarehouse(orderId: string, warehouseId: string)
 
 export function getStoredPayments(): PaymentRecord[] {
   if (typeof window === "undefined") return [];
-  if (cachedPayments !== null) return cachedPayments;
   try {
+    const orders = getStoredOrders();
     const raw = localStorage.getItem("gieomo_payments");
-    const payments: PaymentRecord[] = raw ? JSON.parse(raw) : [];
-    cachedPayments = payments;
-    return payments;
+    const explicitPayments: PaymentRecord[] = raw ? JSON.parse(raw) : [];
+
+    const paymentMap = new Map<string, PaymentRecord>();
+    explicitPayments.forEach((p) => {
+      if (p && p.orderCode) {
+        paymentMap.set(p.orderCode, p);
+      }
+    });
+
+    orders.forEach((o) => {
+      const pm = (o.payment_method as string) || "";
+      const isBank =
+        pm === "vietqr" ||
+        pm === "banking" ||
+        pm === "bank_transfer" ||
+        !!o.payment_proof;
+
+      if (isBank && o.order_code) {
+        const existing = paymentMap.get(o.order_code);
+        if (!existing) {
+          paymentMap.set(o.order_code, {
+            paymentId: `pay-${o.order_id || o.order_code}`,
+            orderCode: o.order_code,
+            amount: o.final_amount,
+            paymentMethod: (o.payment_method as any) || "vietqr",
+            transactionCode:
+              (o as any).transaction_code ||
+              `MB-${o.order_code.replace(/\D/g, "") || Math.floor(1000000 + Math.random() * 9000000)}`,
+            status: o.payment_status === "paid" ? "paid" : "pending",
+            createdAt: o.created_at
+              ? new Date(o.created_at).toLocaleString("vi-VN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                })
+              : "Vừa xong",
+          });
+        } else {
+          // Keep synchronized with order payment status
+          if (o.payment_status === "paid") {
+            existing.status = "paid";
+          }
+          existing.amount = o.final_amount;
+        }
+      }
+    });
+
+    const combined = Array.from(paymentMap.values()).sort((a, b) => {
+      if (a.status === "pending" && b.status === "paid") return -1;
+      if (a.status === "paid" && b.status === "pending") return 1;
+      return 0;
+    });
+
+    cachedPayments = combined;
+    return combined;
   } catch (e) {
     console.error("Error reading gieomo_payments", e);
     return [];

@@ -1069,10 +1069,107 @@ export default function AdminInventoryPage() {
               </div>
             </div>
 
-            <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-              <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+            {/* MOBILE CARD VIEW (< sm) */}
+            <div className="block sm:hidden p-3 space-y-3">
+              {inventoryRows.length === 0 ? (
+                <div className="py-8 text-center text-gray-500 text-xs">
+                  {selectedWarehouseFilter !== "all"
+                    ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
+                    : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
+                </div>
+              ) : (
+                inventoryRows.map((row) => (
+                  <div
+                    key={row.variantId}
+                    className="bg-[#FFFDF9] rounded-2xl p-3.5 border border-[#F0E5D8] shadow-2xs space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#F0E5D8]">
+                      <div>
+                        <span className="font-bold text-[#342A24] text-xs block">{row.productName}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
+                          <span className="text-gray-300">•</span>
+                          <span className="font-mono text-[10px] text-gray-500 font-bold">{row.sku}</span>
+                        </div>
+                      </div>
+
+                      {row.stockTotal === 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px] shrink-0">
+                          Hết hàng
+                        </span>
+                      ) : row.stockTotal < 20 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px] shrink-0">
+                          Sắp hết ({row.stockTotal})
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10px] shrink-0">
+                          Đủ hàng ({row.stockTotal})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Stock by Warehouse breakdown */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block">
+                        Tồn kho theo từng kho:
+                      </span>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {displayedWarehouses.map((wh) => {
+                          const curStock = row.stocks[wh.warehouse_id] ?? 0;
+                          return (
+                            <div
+                              key={wh.warehouse_id}
+                              className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#F0E5D8]"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-gray-700 text-[11px]">{wh.name}</span>
+                                {wh.is_default && (
+                                  <span className="text-emerald-700 font-bold text-[9px] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                    Kho chính
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`font-bold text-xs ${
+                                    curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"
+                                  }`}
+                                >
+                                  {curStock} cái
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdjustingItem({
+                                      productId: row.productId,
+                                      variantId: row.variantId,
+                                      productName: row.productName,
+                                      variantName: row.variantName,
+                                      warehouseId: wh.warehouse_id,
+                                      warehouseName: wh.name,
+                                      currentStock: curStock,
+                                    });
+                                    setAdjustDelta(0);
+                                    setAdjustReason("Kiểm kê định kỳ");
+                                  }}
+                                  className="p-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                  title="Điều chỉnh tồn kho"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            <div className="overflow-x-auto">
+
+            {/* DESKTOP TABLE VIEW (>= sm) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
@@ -1227,12 +1324,89 @@ export default function AdminInventoryPage() {
             </button>
           </div>
 
-          {/* Warehouses Table */}
+          {/* Warehouses Table & Mobile Cards */}
           <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
-            <div className="sm:hidden px-3 pt-2 text-[10px] text-[#A89B92] italic flex items-center gap-1">
-              <span>↔</span> <span>Vuốt sang ngang để xem đầy đủ các cột</span>
+            {/* MOBILE CARD VIEW (< sm) */}
+            <div className="block sm:hidden p-3 space-y-3">
+              {warehouses.map((wh) => (
+                <div
+                  key={wh.warehouse_id}
+                  className="bg-[#FFFDF9] rounded-2xl p-4 border border-[#F0E5D8] shadow-2xs space-y-3"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-[#F0E5D8]">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-lg bg-[#EAF7ED] border border-[#BFE9C3] font-mono font-extrabold text-[#2D6338] text-xs">
+                        {wh.code}
+                      </span>
+                      <span className="font-bold text-[#231B16] text-xs sm:text-sm">{wh.name}</span>
+                    </div>
+                    {wh.is_default ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[10px] border border-emerald-300 inline-flex items-center gap-1">
+                        <Star className="w-2.5 h-2.5 fill-emerald-700 text-emerald-700" />
+                        <span>Kho chính</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium text-[10px] border border-gray-200">
+                        Kho cơ sở
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    <div className="flex items-start gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+                      <span className="text-[11px] text-gray-700">{wh.address}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <span className="font-medium text-[11px] text-[#342A24]">{wh.manager_name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <span>{wh.phone}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 flex-wrap">
+                    <button
+                      onClick={() => setViewingWarehouse(wh)}
+                      className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 text-[11px] font-bold flex items-center gap-1 border border-emerald-200 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Xem
+                    </button>
+                    {!wh.is_default && (
+                      <button
+                        onClick={() => handleSetDefaultWarehouse(wh)}
+                        className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-[11px] transition-colors cursor-pointer border border-amber-200"
+                      >
+                        Đặt mặc định
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setEditingWarehouse(wh)}
+                      className="px-2.5 py-1 rounded-xl bg-gray-100 text-gray-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Sửa
+                    </button>
+                    {!wh.is_default && (
+                      <button
+                        onClick={() => setDeletingWarehouse(wh)}
+                        className="p-1.5 rounded-xl text-red-600 bg-red-50 hover:bg-red-100 cursor-pointer border border-red-200"
+                        title="Xóa kho"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="overflow-x-auto">
+
+            {/* DESKTOP TABLE VIEW (>= sm) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full min-w-[800px] text-left text-xs">
                 <thead>
                   <tr className="bg-[#FFF8EE] border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider text-[10px]">
@@ -1413,106 +1587,192 @@ export default function AdminInventoryPage() {
           )}
 
           {activeLogTab === "inflow" ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-[11px]">
-                <thead>
-                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
-                    <th className="py-2.5 px-3 whitespace-nowrap">Mã phiếu</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhập</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-2.5 px-2.5 text-center whitespace-nowrap">SL nhập</th>
-                    <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Tồn sau nhập</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
-                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0E5D8]">
-                  {filteredInflowLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-gray-500">
-                        Chưa có phiếu nhập kho nào {selectedWarehouseFilter !== "all" ? `cho kho ${selectedWarehouseObj?.name}` : ""}.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredInflowLogs.map((log) => (
-                      <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+            <div>
+              {/* MOBILE CARD VIEW (< sm) */}
+              <div className="block sm:hidden p-3 space-y-3">
+                {filteredInflowLogs.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500 text-xs">
+                    Chưa có phiếu nhập kho nào {selectedWarehouseFilter !== "all" ? `cho kho ${selectedWarehouseObj?.name}` : ""}.
+                  </div>
+                ) : (
+                  filteredInflowLogs.map((log) => (
+                    <div
+                      key={log.logId}
+                      className="bg-[#FFFDF9] rounded-2xl p-3.5 border border-[#F0E5D8] shadow-2xs space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between pb-1.5 border-b border-[#F0E5D8]">
+                        <span className="font-mono font-bold text-xs text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                           {log.receiptCode}
-                        </td>
-                        <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
-                        <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.warehouseName}</td>
-                        <td className="py-2.5 px-2.5">
-                          <span className="font-bold text-[#342A24] block">{log.productName}</span>
-                          <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
-                        </td>
-                        <td className="py-2.5 px-2.5 text-center font-extrabold text-emerald-700">
-                          +{log.quantityAdded}
-                        </td>
-                        <td className="py-2.5 px-2.5 text-center font-bold text-gray-800">
-                          {log.stockAfter}
-                        </td>
-                        <td className="py-2.5 px-2.5 font-medium text-gray-700">{log.approvedBy}</td>
-                        <td className="py-2.5 px-3 text-right">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã nhập kho
-                          </span>
+                        </span>
+                        <span className="text-[10px] text-gray-500">{log.createdAt}</span>
+                      </div>
+
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#342A24]">{log.productName}</span>
+                          <span className="font-extrabold text-emerald-700">+{log.quantityAdded} món</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-gray-600">
+                          <span>Phân loại: <strong className="text-[#2D6338]">{log.variantName}</strong></span>
+                          <span>Tồn sau nhập: <strong>{log.stockAfter}</strong></span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100">
+                          <span>Kho nhập: <strong className="text-gray-800">{log.warehouseName}</strong></span>
+                          <span>Người duyệt: <strong>{log.approvedBy}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW (>= sm) */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full min-w-[850px] text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                      <th className="py-2.5 px-3 whitespace-nowrap">Mã phiếu</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhập</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                      <th className="py-2.5 px-2.5 text-center whitespace-nowrap">SL nhập</th>
+                      <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Tồn sau nhập</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0E5D8]">
+                    {filteredInflowLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-500">
+                          Chưa có phiếu nhập kho nào {selectedWarehouseFilter !== "all" ? `cho kho ${selectedWarehouseObj?.name}` : ""}.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredInflowLogs.map((log) => (
+                        <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+                            {log.receiptCode}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
+                          <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.warehouseName}</td>
+                          <td className="py-2.5 px-2.5">
+                            <span className="font-bold text-[#342A24] block">{log.productName}</span>
+                            <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center font-extrabold text-emerald-700">
+                            +{log.quantityAdded}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-center font-bold text-gray-800">
+                            {log.stockAfter}
+                          </td>
+                          <td className="py-2.5 px-2.5 font-medium text-gray-700">{log.approvedBy}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã nhập kho
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-[11px]">
-                <thead>
-                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
-                    <th className="py-2.5 px-3 whitespace-nowrap">Mã điều chuyển</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho xuất (Nguồn)</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhận (Đích)</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Số lượng</th>
-                    <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
-                    <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0E5D8]">
-                  {filteredTransferLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-gray-500">
-                        Chưa có phiếu điều chuyển nào {selectedWarehouseFilter !== "all" ? `liên quan đến ${selectedWarehouseObj?.name}` : ""}.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredTransferLogs.map((log) => (
-                      <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+            <div>
+              {/* MOBILE CARD VIEW (< sm) */}
+              <div className="block sm:hidden p-3 space-y-3">
+                {filteredTransferLogs.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500 text-xs">
+                    Chưa có phiếu điều chuyển nào {selectedWarehouseFilter !== "all" ? `liên quan đến ${selectedWarehouseObj?.name}` : ""}.
+                  </div>
+                ) : (
+                  filteredTransferLogs.map((log) => (
+                    <div
+                      key={log.logId}
+                      className="bg-[#FFFDF9] rounded-2xl p-3.5 border border-[#F0E5D8] shadow-2xs space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between pb-1.5 border-b border-[#F0E5D8]">
+                        <span className="font-mono font-bold text-xs text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                           {log.transferCode}
-                        </td>
-                        <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
-                        <td className="py-2.5 px-2.5">
-                          <span className="font-bold text-[#342A24] block">{log.productName}</span>
-                          <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
-                        </td>
-                        <td className="py-2.5 px-2.5 font-bold text-red-700">{log.fromWarehouse}</td>
-                        <td className="py-2.5 px-2.5 font-bold text-emerald-800">➔ {log.toWarehouse}</td>
-                        <td className="py-2.5 px-2.5 font-black text-xs text-emerald-950">
-                          {log.quantity} chiếc
-                        </td>
-                        <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.approvedBy}</td>
-                        <td className="py-2.5 px-3 text-right">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 text-[10px] font-extrabold border border-blue-200">
-                            <Check className="w-2.5 h-2.5" /> Hoàn tất
+                        </span>
+                        <span className="text-[10px] text-gray-500">{log.createdAt}</span>
+                      </div>
+
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#342A24]">{log.productName}</span>
+                          <span className="font-black text-emerald-900">{log.quantity} chiếc</span>
+                        </div>
+                        <span className="text-[11px] text-[#2D6338] block font-medium">{log.variantName}</span>
+                        <div className="p-2 rounded-xl bg-gray-50 border border-gray-200 text-[11px] flex items-center justify-between">
+                          <span className="text-red-700 font-bold">{log.fromWarehouse}</span>
+                          <span className="text-gray-400">➔</span>
+                          <span className="text-emerald-800 font-bold">{log.toWarehouse}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
+                          <span>Người duyệt: <strong>{log.approvedBy}</strong></span>
+                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 text-[9px] font-bold border border-blue-200">
+                            ✓ Hoàn tất
                           </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW (>= sm) */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full min-w-[850px] text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                      <th className="py-2.5 px-3 whitespace-nowrap">Mã điều chuyển</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Kho xuất (Nguồn)</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Kho nhận (Đích)</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Số lượng</th>
+                      <th className="py-2.5 px-2.5 whitespace-nowrap">Người duyệt</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0E5D8]">
+                    {filteredTransferLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-500">
+                          Chưa có phiếu điều chuyển nào {selectedWarehouseFilter !== "all" ? `liên quan đến ${selectedWarehouseObj?.name}` : ""}.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredTransferLogs.map((log) => (
+                        <tr key={log.logId} className="hover:bg-[#FFFDF9] transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-emerald-900 text-xs">
+                            {log.transferCode}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-[#7E7068]">{log.createdAt}</td>
+                          <td className="py-2.5 px-2.5">
+                            <span className="font-bold text-[#342A24] block">{log.productName}</span>
+                            <span className="text-[10px] text-[#2D6338]">{log.variantName}</span>
+                          </td>
+                          <td className="py-2.5 px-2.5 font-bold text-red-700">{log.fromWarehouse}</td>
+                          <td className="py-2.5 px-2.5 font-bold text-emerald-800">➔ {log.toWarehouse}</td>
+                          <td className="py-2.5 px-2.5 font-black text-xs text-emerald-950">
+                            {log.quantity} chiếc
+                          </td>
+                          <td className="py-2.5 px-2.5 font-bold text-[#342A24]">{log.approvedBy}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 text-[10px] font-extrabold border border-blue-200">
+                              <Check className="w-2.5 h-2.5" /> Hoàn tất
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
