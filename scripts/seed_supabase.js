@@ -66,7 +66,7 @@ async function seedInitial() {
       name: "Túi Tote Gieo Mơ",
       slug: "tui-tote-gieo-mo",
       short_description: "Túi tote vải canvas in hình Mầm và thông điệp gây quỹ",
-      description: "Túi tote canvas chất lượng cao, in hình Mầm và slogan 'Little Pieces, Bigger Dreams'. Thân thiện môi trường, phù hợp đi học và đi chơi.",
+      description: "Túi tote canvas chất lượng cao, in hình Mầm và slogan 'Gom từng mảnh nhỏ, dệt thành giấc mơ'. Thân thiện môi trường, phù hợp đi học và đi chơi.",
       price: 120000,
       compare_at_price: 150000,
       cost_price: 50000,

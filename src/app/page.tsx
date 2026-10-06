@@ -62,11 +62,11 @@ export default function HomePage() {
 
                 {/* Main Headline */}
                 <div className="space-y-2">
-                  <h1 className="font-heading font-extrabold text-4xl sm:text-5xl lg:text-6xl text-[#231B16] tracking-tight leading-[1.15] text-balance">
-                    Little Pieces,
+                  <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-5xl text-[#231B16] tracking-tight leading-[1.2] text-balance">
+                    Gom từng mảnh nhỏ,
                     <br />
                     <span className="bg-gradient-to-r from-[#2D6338] via-[#E2884E] to-[#D95B88] bg-clip-text text-transparent">
-                      Bigger Dreams
+                      dệt thành giấc mơ
                     </span>
                   </h1>
                   <p className="text-sm sm:text-base text-[#6B5A50] max-w-xl mx-auto lg:mx-0 leading-relaxed font-medium text-justify hyphens-auto break-words">
@@ -139,11 +139,8 @@ export default function HomePage() {
                 <span>Ý nghĩa thương hiệu</span>
               </div>
               <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] text-balance">
-                LITTLE PIECES, BIGGER DREAMS
-              </h2>
-              <p className="font-heading font-bold text-lg sm:text-xl text-[#542B07] text-balance">
                 Gom từng mảnh nhỏ, dệt thành giấc mơ
-              </p>
+              </h2>
               <p className="text-xs sm:text-sm text-[#7E7068] text-center text-balance leading-relaxed max-w-xl mx-auto">
                 Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
               </p>

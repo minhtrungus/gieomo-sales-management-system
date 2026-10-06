@@ -74,7 +74,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Gieo Mơ | Trang chủ",
-    description: "Tạp hoá gây quỹ thiện nguyện của Mầm Mơ — Little Pieces, Bigger Dreams.",
+    description: "Tạp hoá gây quỹ thiện nguyện của Mầm Mơ — Gom từng mảnh nhỏ, dệt thành giấc mơ.",
     images: ["/images/logo.png"],
   },
   robots: {

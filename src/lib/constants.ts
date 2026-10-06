@@ -7,7 +7,7 @@ export const DEFAULT_SITE_URL = "https://gieomo.store";
  */
 export const OFFICIAL_STORE_CONFIG = {
   name: "Gieo Mơ",
-  alternateName: "Little Pieces, Bigger Dreams",
+  alternateName: "Gom từng mảnh nhỏ, dệt thành giấc mơ",
   url: "https://gieomo.store",
   logo: "https://gieomo.store/images/logo.png",
   description:
@@ -163,7 +163,7 @@ export const PRODUCT_BADGES = {
  */
 export const SITE_CONFIG = {
   name: "Gieo Mơ",
-  tagline: "Little Pieces, Bigger Dreams",
+  tagline: "Gom từng mảnh nhỏ, dệt thành giấc mơ",
   description: "Gom từng mảnh nhỏ, dệt thành giấc mơ",
   currency: "VND",
   currencySymbol: "đ",

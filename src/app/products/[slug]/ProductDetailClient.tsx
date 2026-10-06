@@ -589,7 +589,7 @@ export function ProductDetailClient({
                   {parsedInfo.impactStory || product.impact_story || "100% lợi nhuận thu được từ mỗi sản phẩm bạn mua sẽ được quy đổi thành tập vở, áo ấm và học bổng cho các em nhỏ tại các điểm trường khó khăn."}
                 </p>
                 <div className="pt-2 border-t border-emerald-200/50 text-xs font-bold text-emerald-900 flex items-center justify-between">
-                  <span>✨ &quot;Little Pieces, Bigger Dreams&quot;</span>
+                  <span>✨ &quot;Gom từng mảnh nhỏ, dệt thành giấc mơ&quot;</span>
                   <span>Mầm Mơ</span>
                 </div>
               </div>

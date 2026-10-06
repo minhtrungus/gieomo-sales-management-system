@@ -28,7 +28,7 @@ export function generateOrderConfirmationHtml(
     <!-- Header -->
     <div style="background-color: #1B3622; padding: 28px 24px; text-align: center;">
       <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">🌱 Gieo Mơ — Mầm Mơ</h1>
-      <p style="margin: 6px 0 0 0; color: #BFE9C3; font-size: 13px;">Little Pieces, Bigger Dreams</p>
+      <p style="margin: 6px 0 0 0; color: #BFE9C3; font-size: 13px;">Gom từng mảnh nhỏ, dệt thành giấc mơ</p>
     </div>
 
     <!-- Body -->

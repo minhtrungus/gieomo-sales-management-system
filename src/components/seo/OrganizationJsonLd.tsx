@@ -10,7 +10,7 @@ export function OrganizationJsonLd() {
         "@id": `${OFFICIAL_STORE_CONFIG.url}/#website`,
         url: OFFICIAL_STORE_CONFIG.url,
         name: "Gieo Mơ",
-        alternateName: ["Mầm Mơ", "Tạp hoá Gieo Mơ", "Little Pieces, Bigger Dreams"],
+        alternateName: ["Mầm Mơ", "Tạp hoá Gieo Mơ", "Gom từng mảnh nhỏ, dệt thành giấc mơ"],
         description: OFFICIAL_STORE_CONFIG.description,
         inLanguage: "vi-VN",
         potentialAction: {
@@ -35,7 +35,7 @@ export function OrganizationJsonLd() {
         },
         image: `${OFFICIAL_STORE_CONFIG.url}/icon-192.png`,
         description: OFFICIAL_STORE_CONFIG.description,
-        slogan: "Little Pieces, Bigger Dreams",
+        slogan: "Gom từng mảnh nhỏ, dệt thành giấc mơ",
         email: "support@gieomo.store",
         sameAs: OFFICIAL_SAME_AS,
         knowsAbout: SEO_KEYWORD_LIST.slice(0, 20),

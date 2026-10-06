@@ -25,7 +25,7 @@ export const SEO_CATEGORIZED_KEYWORDS: KeywordCategory[] = [
       "Dự án Gieo Mơ",
       "Tạp hoá Gieo Mơ",
       "Gieo Mơ Mầm Mơ",
-      "Little Pieces Bigger Dreams",
+      "Gom từng mảnh nhỏ dệt thành giấc mơ",
       "Những mảnh ghép nhỏ nuôi dưỡng ước mơ lớn",
       "Vương quốc Mầm",
     ],
