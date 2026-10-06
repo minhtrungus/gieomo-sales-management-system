@@ -248,7 +248,8 @@ function OrderSuccessContent() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-center">
-      {/* Status Header */}
+      {/* Status Header with stable min-height to prevent CLS */}
+      <div className="min-h-[160px] flex flex-col items-center justify-center space-y-2">
       {paymentMethod === "banking" && !isPaid ? (
         hasSubmittedProof ? (
           <>
@@ -303,6 +304,7 @@ function OrderSuccessContent() {
           </div>
         </>
       )}
+      </div>
 
       {/* Summary Box */}
       <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-5">
@@ -398,13 +400,18 @@ function OrderSuccessContent() {
               <p className="text-xs text-[#7E7068] mb-3">
                 Đã tự động điền <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> & nội dung <strong>{orderCode}</strong>
               </p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={vietQrUrl}
-                alt="VietQR"
-                className="w-56 sm:w-64 h-auto object-contain rounded-xl shadow-xs border border-[#F0E5D8]"
-                decoding="async"
-              />
+              {/* Fixed Aspect-ratio Container to guarantee zero CLS */}
+              <div className="w-56 sm:w-64 h-56 sm:h-64 aspect-square flex items-center justify-center bg-gray-50 rounded-xl overflow-hidden shadow-xs border border-[#F0E5D8] my-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={vietQrUrl}
+                  alt="VietQR"
+                  width={256}
+                  height={256}
+                  className="w-full h-full object-contain"
+                  decoding="async"
+                />
+              </div>
               <div className="pt-2.5 flex items-center gap-4 text-xs font-bold">
                 <a
                   href={vietQrUrl}
@@ -693,11 +700,11 @@ function OrderSuccessContent() {
       {/* LIGHTBOX MODAL: Xem ảnh biên lai phóng to cho khách hàng */}
       {zoomedProof && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in"
           onClick={() => startTransition(() => setZoomedProof(null))}
         >
           <div
-            className="relative max-w-2xl w-full max-h-[90vh] bg-[#16381D]/95 rounded-3xl p-4 border border-emerald-600/40 shadow-2xl flex flex-col items-center space-y-3"
+            className="relative max-w-2xl w-full max-h-[90vh] bg-[#16381D] rounded-3xl p-4 border border-emerald-600/40 shadow-2xl flex flex-col items-center space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-full flex items-center justify-between text-white pb-2 border-b border-white/10 px-2">
@@ -717,7 +724,7 @@ function OrderSuccessContent() {
                 alt="Biên lai phóng to"
                 decoding="async"
                 loading="eager"
-                className="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md will-change-transform"
+                className="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md"
               />
             </div>
           </div>
