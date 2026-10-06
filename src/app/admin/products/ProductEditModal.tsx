@@ -5,8 +5,9 @@ import Image from "next/image";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { uploadAsset, uploadAssetsParallel } from "@/lib/services/uploadService";
-import { generateSku } from "@/lib/utils/skuGenerator";
 import { Edit3, X, Upload, Loader2, Trash2, Sparkles } from "lucide-react";
+import { BulkVariantGenerator } from "@/components/admin/BulkVariantGenerator";
+import { generateSku } from "@/lib/utils/skuGenerator";
 
 interface ProductEditModalProps {
   product: ExtendedProduct;
@@ -469,17 +470,25 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
           {/* ========================================================
               PHÂN LOẠI & ẢNH RIÊNG TỪNG PHÂN LOẠI (VARIANT PHOTOS)
               ======================================================== */}
-          {variants.length > 0 && (
-            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
-                    🎨 Phân loại sản phẩm &amp; Ảnh riêng (Variant Photos)
-                  </label>
-                  <p className="text-[10px] text-gray-500">
-                    Bấm &quot;Tải ảnh&quot; để gán ảnh riêng cho từng màu/mẫu. Mã SKU tự động đồng bộ.
-                  </p>
-                </div>
+          <div className="space-y-4">
+            <BulkVariantGenerator
+              productName={name}
+              galleryImages={images}
+              variants={variants}
+              onVariantsChange={(newVars) => setVariants(newVars)}
+            />
+
+            {variants.length > 0 && (
+              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-extrabold text-emerald-950 uppercase tracking-wider block text-xs">
+                      🎨 Danh sách chi tiết phân loại ({variants.length})
+                    </label>
+                    <p className="text-[10px] text-gray-500">
+                      Bấm &quot;Tải ảnh&quot; để gán ảnh riêng cho từng màu/mẫu. Mã SKU tự động đồng bộ.
+                    </p>
+                  </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -620,6 +629,7 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
               </div>
             </div>
           )}
+          </div>
 
           {/* ========================================================
               TỒN KHO (CHỈ XEM — KHÔNG CHO SỬA TRỰC TIẾP)

@@ -157,6 +157,16 @@ export function ProductDetailClient({
 
   const addItem = useCartStore((state) => state.addItem);
 
+  const isNumberedMode = useMemo(() => {
+    if (!product?.variants || product.variants.length < 5) return false;
+    return product.variants.some((v) => /#?\d+/.test(v.name));
+  }, [product?.variants]);
+
+  const availableNumberedCount = useMemo(() => {
+    if (!product?.variants) return 0;
+    return product.variants.filter((v) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)).length;
+  }, [product?.variants]);
+
   const currentStock = useMemo(() => {
     if (!product) return 0;
     if (selectedVariant && selectedVariant.stock !== undefined && selectedVariant.stock !== null) {
@@ -424,32 +434,93 @@ export function ProductDetailClient({
 
               {/* Variant Selector */}
               {product.variants && product.variants.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Phân loại: <span className="text-emerald-800 font-normal">{selectedVariant?.name}</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {product.variants.map((v) => (
-                      <button
-                        key={v.variant_id}
-                        type="button"
-                        onClick={() => handleVariantSelect(v)}
-                        className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-2 cursor-pointer ${
-                          selectedVariant?.variant_id === v.variant_id
-                            ? "bg-soft-green border-emerald-600 text-emerald-950 shadow-xs ring-2 ring-emerald-600/20"
-                            : "bg-white border-gray-200 text-gray-700 hover:border-emerald-300"
-                        }`}
-                      >
-                        {v.image_url && (
-                          <span className="relative w-4 h-4 rounded-full overflow-hidden shrink-0 inline-block border border-gray-300">
-                            <Image src={v.image_url} alt="" fill className="object-cover" />
-                          </span>
-                        )}
-                        <span>{v.name}</span>
-                      </button>
-                    ))}
+                isNumberedMode ? (
+                  <div className="space-y-3 p-4 rounded-2xl bg-[#FFFDF8] border border-[#F0E5D8] shadow-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <label className="text-xs font-bold text-gray-800 uppercase tracking-wider block">
+                          🔢 Chọn mẫu theo số (Ghi trên bảng ảnh):
+                        </label>
+                        <span className="text-[11px] text-gray-500 font-medium">
+                          Mỗi mẫu là duy nhất (1 chiếc) • Còn lại{" "}
+                          <strong className="text-emerald-800 font-extrabold">{availableNumberedCount}</strong>/{product.variants.length} mẫu
+                        </span>
+                      </div>
+                      {selectedVariant && (
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-extrabold text-xs">
+                          Đang chọn: {selectedVariant.name}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Scrollable / Responsive Matrix */}
+                    <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5 max-h-56 overflow-y-auto p-1.5 rounded-xl bg-white/80 border border-gray-100 scrollbar-thin">
+                      {product.variants.map((v) => {
+                        const isSelected = selectedVariant?.variant_id === v.variant_id;
+                        const isSold = v.stock !== undefined && v.stock !== null && Number(v.stock) <= 0;
+
+                        return (
+                          <button
+                            key={v.variant_id}
+                            type="button"
+                            disabled={isSold}
+                            onClick={() => handleVariantSelect(v)}
+                            title={isSold ? `${v.name} (Đã có người mua)` : `Chọn ${v.name}`}
+                            className={`py-2 px-1 rounded-xl text-xs font-bold font-mono transition-all text-center relative cursor-pointer select-none ${
+                              isSold
+                                ? "bg-gray-100 text-gray-400 line-through border border-gray-200 cursor-not-allowed opacity-50"
+                                : isSelected
+                                ? "bg-emerald-800 text-white border-2 border-emerald-900 shadow-sm scale-105 z-10 ring-2 ring-emerald-600/30"
+                                : "bg-white hover:bg-emerald-50 text-gray-800 border border-[#F0E5D8] hover:border-emerald-400 shadow-2xs hover:scale-102"
+                            }`}
+                          >
+                            {v.name.replace(/^Mẫu\s*/i, "")}
+                            {isSold && (
+                              <span className="sr-only">(Đã bán)</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-gray-500 italic bg-amber-50/70 text-amber-900 p-2 rounded-xl border border-amber-200/60">
+                      💡 Bấm chọn số để hệ thống tự chuyển đến ảnh chụp mẫu đó. Các số bị gạch ngang là đã có người mua.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Phân loại: <span className="text-emerald-800 font-normal">{selectedVariant?.name}</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {product.variants.map((v) => {
+                        const isSold = v.stock !== undefined && v.stock !== null && Number(v.stock) <= 0;
+                        return (
+                          <button
+                            key={v.variant_id}
+                            type="button"
+                            disabled={isSold}
+                            onClick={() => handleVariantSelect(v)}
+                            className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-2 cursor-pointer ${
+                              isSold
+                                ? "bg-gray-100 text-gray-400 line-through border-gray-200 cursor-not-allowed opacity-60"
+                                : selectedVariant?.variant_id === v.variant_id
+                                ? "bg-soft-green border-emerald-600 text-emerald-950 shadow-xs ring-2 ring-emerald-600/20"
+                                : "bg-white border-gray-200 text-gray-700 hover:border-emerald-300"
+                            }`}
+                          >
+                            {v.image_url && (
+                              <span className="relative w-4 h-4 rounded-full overflow-hidden shrink-0 inline-block border border-gray-300">
+                                <Image src={v.image_url} alt="" fill className="object-cover" />
+                              </span>
+                            )}
+                            <span>{v.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Stock Status */}

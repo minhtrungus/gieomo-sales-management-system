@@ -23,6 +23,7 @@ import {
   ImageIcon,
   Sparkles,
 } from "lucide-react";
+import { BulkVariantGenerator } from "@/components/admin/BulkVariantGenerator";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
@@ -214,14 +215,14 @@ export default function AdminNewProductPage() {
           product_id: prodId,
           name: v.name?.trim() || "Mặc định",
           sku: cleanSku,
-          stock: 0,
-          stock_warehouse_1: 0,
-          stock_warehouse_2: 0,
+          stock: v.stock !== undefined ? Number(v.stock) : 0,
+          stock_warehouse_1: (v as any).stock_warehouse_1 !== undefined ? Number((v as any).stock_warehouse_1) : Number(v.stock || 0),
+          stock_warehouse_2: (v as any).stock_warehouse_2 !== undefined ? Number((v as any).stock_warehouse_2) : 0,
           price: null,
           compare_at_price: null,
           cost_price: null,
           weight_gram: 100,
-          image_url: v.imageUrl?.trim() || null,
+          image_url: (v.imageUrl || (v as any).image_url)?.trim() || null,
           status: "active" as const,
           sort_order: i + 1,
           created_at: new Date().toISOString(),
@@ -441,17 +442,24 @@ export default function AdminNewProductPage() {
               </div>
             </div>
 
+            {/* Bulk Numbered Variants Tool */}
+            <BulkVariantGenerator
+              productName={name}
+              galleryImages={images}
+              variants={variants}
+              onVariantsChange={(newVars) => setVariants(newVars as any)}
+            />
+
             {/* Note box explaining stock connection */}
             <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/70 text-xs text-emerald-950">
               <Info className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <span className="font-bold text-[#342A24]">Quy trình khai báo nhập kho chuẩn:</span>
+                <span className="font-bold text-[#342A24]">Quy trình khai báo nhập kho:</span>
                 <p className="text-[11px] text-[#7E7068] leading-relaxed">
-                  Sản phẩm mới tạo mặc định có số lượng tồn kho ban đầu là <strong>0</strong> (Chưa nhập kho). Trên website, sản phẩm sẽ tự động hiển thị <em>&quot;Tạm hết hàng&quot;</em>. Để bổ sung số lượng thực tế có hóa đơn/chứng từ, sau khi tạo sản phẩm bạn hãy vào mục{" "}
+                  Đối với hàng thủ công độc bản đánh số (mỗi mẫu 1 chiếc), bạn có thể nhập trực tiếp tồn kho ban đầu = 1 ở công cụ tạo nhanh phía trên. Đối với hàng đại trà (túi tote, áo...), bạn có thể lập thêm <strong>Phiếu nhập kho</strong> tại mục{" "}
                   <Link href="/admin/inventory" className="font-bold text-[#2D6338] underline hover:text-[#1B3622]">
                     Kiểm kho
-                  </Link>{" "}
-                  để lập <strong>Phiếu nhập kho</strong> chính thức.
+                  </Link>.
                 </p>
               </div>
             </div>
