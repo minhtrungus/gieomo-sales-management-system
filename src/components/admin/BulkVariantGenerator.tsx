@@ -496,23 +496,66 @@ export function BulkVariantGenerator({
 
           {/* VISUAL MATRIX TILES VIEW */}
           {viewMode === "grid" && variants.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5 max-h-96 overflow-y-auto p-2.5 rounded-2xl bg-[#FAF8F5] border border-[#E8DFD5] scrollbar-thin">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 max-h-[480px] overflow-y-auto p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#E8DFD5] scrollbar-thin">
               {variants.map((v, idx) => {
                 const vImg = v.imageUrl || v.image_url;
+                const isOutOfStock = (Number(v.stock) || 0) <= 0;
+                const varFileId = `grid-var-img-${idx}`;
+                const isUploading = uploadingIdx === idx;
+
                 return (
                   <div
                     key={idx}
-                    className="p-2.5 rounded-xl bg-white border border-[#EFE8DE] hover:border-emerald-500 shadow-2xs flex flex-col justify-between gap-1.5 relative group transition-all"
+                    className={`p-3 rounded-2xl bg-white border transition-all flex flex-col justify-between gap-2.5 shadow-2xs hover:shadow-xs ${
+                      isOutOfStock
+                        ? "border-red-200/80 bg-red-50/10"
+                        : "border-[#EFE8DE] hover:border-emerald-500"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-8 h-8 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                    {/* Top Row: Badge Number & Quick Delete */}
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-[#EBF7EE] text-[#16381D] font-mono font-extrabold text-xs border border-[#BFE9C3]">
+                        {v.name.replace(/^Mẫu\s*/i, "") || `#${idx + 1}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
+                        className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Xoá mẫu này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Middle: Image Preview (56x56) & Name/SKU */}
+                    <div className="flex items-center gap-2.5">
+                      <div className="relative w-14 h-14 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center group/img">
                         {vImg ? (
                           <Image src={vImg} alt="" fill className="object-cover" unoptimized />
                         ) : (
-                          <span className="text-[10px] text-gray-400">📷</span>
+                          <span className="text-base text-gray-300">📷</span>
                         )}
+                        <label
+                          htmlFor={varFileId}
+                          className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
+                          title="Đổi ảnh cho mẫu này"
+                        >
+                          {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Đổi ảnh"}
+                        </label>
+                        <input
+                          id={varFileId}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file, idx);
+                            e.target.value = "";
+                          }}
+                        />
                       </div>
-                      <div className="flex-1 min-w-0">
+
+                      <div className="flex-1 min-w-0 space-y-0.5">
                         <input
                           type="text"
                           value={v.name}
@@ -522,17 +565,35 @@ export function BulkVariantGenerator({
                               variants.map((item, i) => (i === idx ? { ...item, name: val } : item))
                             );
                           }}
-                          className="w-full text-xs font-bold text-gray-900 truncate bg-transparent outline-none focus:bg-emerald-50 rounded px-1"
+                          className="w-full text-xs font-bold text-gray-900 truncate bg-transparent outline-none focus:bg-emerald-50 rounded px-1 border border-transparent focus:border-emerald-300"
                         />
-                        <span className="text-[9.5px] font-mono text-gray-400 block truncate px-1">
+                        <span className="text-[10px] font-mono text-gray-400 block truncate px-1">
                           {v.sku}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-xs">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-gray-500 font-semibold">Kho:</span>
+                    {/* Bottom: Stock Stepper */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                      <span className={`text-[11px] font-bold ${isOutOfStock ? "text-red-600" : "text-emerald-800"}`}>
+                        {isOutOfStock ? "Hết hàng (0)" : "Còn hàng (1)"}
+                      </span>
+                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = Number(v.stock) || 0;
+                            const next = Math.max(0, current - 1);
+                            onVariantsChange(
+                              variants.map((item, i) =>
+                                i === idx ? { ...item, stock: next, stock_warehouse_1: next, stock_warehouse_2: 0 } : item
+                              )
+                            );
+                          }}
+                          className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-200 cursor-pointer"
+                        >
+                          -
+                        </button>
                         <input
                           type="number"
                           min={0}
@@ -547,17 +608,24 @@ export function BulkVariantGenerator({
                               )
                             );
                           }}
-                          className="w-12 p-0.5 text-center font-bold rounded bg-gray-50 border border-gray-200 text-xs"
+                          className="w-8 py-0.5 text-center font-bold text-xs bg-white outline-none"
                         />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = Number(v.stock) || 0;
+                            const next = current + 1;
+                            onVariantsChange(
+                              variants.map((item, i) =>
+                                i === idx ? { ...item, stock: next, stock_warehouse_1: next, stock_warehouse_2: 0 } : item
+                              )
+                            );
+                          }}
+                          className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-200 cursor-pointer"
+                        >
+                          +
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
-                        className="text-gray-400 hover:text-red-500 p-0.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Xoá mẫu"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
                 );

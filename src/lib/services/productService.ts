@@ -2,13 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { ProductVariant } from "@/types/database";
 
-const DEFAULT_PRODUCT_IMAGES: Record<string, string> = {
-  "pouch-mam-mo": "/images/products/pounch_1.png",
-  "kep-toc-nut-ao": "/images/products/kep-toc-1.jpg",
-  "tui-tote-gieo-mo": "/images/products/tote-gieo-mo-1.jpg",
-  "bo-kim-chi-mam-mo": "/images/products/bo-kim-chi-1.jpg",
-  "sticker-pack-mam-mo": "/images/products/sticker-pack-1.jpg",
-};
+
 
 /**
  * Fetch all products from Supabase with categories and variants
@@ -94,7 +88,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((m: any) => m.url);
       
-      const fallbackImage = (p.slug && DEFAULT_PRODUCT_IMAGES[p.slug]) || "/images/products/pounch_1.png";
+      const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
       const images = mediaImages.length > 0
         ? mediaImages
         : p.thumbnail
@@ -211,7 +205,7 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
         const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
           .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
           .map((m: any) => m.url);
-        const fallbackImage = (p.slug && DEFAULT_PRODUCT_IMAGES[p.slug]) || "/images/products/pounch_1.png";
+        const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
         const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
 
         const rawVariants = (p as any).product_variants || (p as any).variants || [];
@@ -407,69 +401,47 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
       savedProductId = newProd.product_id;
     }
 
-    // 3. Upsert variants if present
+    // 3. Batch save variants if present (Ultra-fast 1-query batch insert)
     if (product.variants && product.variants.length > 0) {
-      for (let i = 0; i < product.variants.length; i++) {
-        const v = product.variants[i];
-        const isVarUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.variant_id);
-
+      const varPayloads = product.variants.map((v, i) => {
         let sku = v.sku?.trim() || null;
         if (!sku) {
           const cleanPart = (product.slug || "prod").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
-          sku = `GM-${cleanPart || "PROD"}-0${i + 1}`;
+          sku = `GM-${cleanPart || "PROD"}-${i < 9 ? "0" : ""}${i + 1}`;
         }
 
-        // Avoid unique SKU constraint collisions across different products
-        if (sku) {
-          const { data: exSkuVar } = await supabase
-            .from("product_variants")
-            .select("variant_id, product_id")
-            .eq("sku", sku)
-            .maybeSingle();
+        const stockVal = v.stock !== undefined && v.stock !== null ? Number(v.stock) : 1;
+        const wh1 = v.stock_warehouse_1 !== undefined ? Number(v.stock_warehouse_1) : stockVal;
+        const wh2 = v.stock_warehouse_2 !== undefined ? Number(v.stock_warehouse_2) : 0;
 
-          if (exSkuVar && exSkuVar.product_id !== savedProductId) {
-            sku = `${sku}-${Date.now().toString().slice(-4)}`;
-          }
-        }
-
-        const varPayload: any = {
+        return {
           product_id: savedProductId,
-          name: v.name || "Mặc định",
-          sku,
+          name: v.name || `Mẫu #${i + 1}`,
+          sku: sku,
           price: v.price || null,
           compare_at_price: v.compare_at_price || null,
           cost_price: v.cost_price || null,
-          stock: v.stock || 0,
+          stock: stockVal,
           weight_gram: v.weight_gram || 100,
           image_url: v.image_url || (v as any).imageUrl || null,
           status: v.status || "active",
           sort_order: v.sort_order || i + 1,
           updated_at: new Date().toISOString(),
         };
+      });
 
-        if (isVarUuid) {
-          const { error: upErr } = await supabase
-            .from("product_variants")
-            .upsert({ ...varPayload, variant_id: v.variant_id });
-          if (upErr) {
-            console.warn("[upsertProductServer] Upsert variant failed, inserting new:", upErr.message);
-            await supabase.from("product_variants").insert(varPayload);
-          }
-        } else if (sku) {
-          const { data: exVar } = await supabase
-            .from("product_variants")
-            .select("variant_id")
-            .eq("product_id", savedProductId)
-            .eq("sku", sku)
-            .maybeSingle();
-          if (exVar) {
-            await supabase.from("product_variants").update(varPayload).eq("variant_id", exVar.variant_id);
-          } else {
-            await supabase.from("product_variants").insert(varPayload);
-          }
-        } else {
-          await supabase.from("product_variants").insert(varPayload);
+      // Clear existing variants and batch insert fresh ones in parallel
+      try {
+        await supabase.from("product_variants").delete().eq("product_id", savedProductId);
+        const { error: batchVarErr } = await supabase.from("product_variants").insert(varPayloads);
+        if (batchVarErr) {
+          console.warn("[upsertProductServer] Batch insert warning, attempting fallback:", batchVarErr.message);
+          // Fallback if image_url column doesn't exist yet on remote table
+          const sanitizedPayloads = varPayloads.map(({ image_url, ...rest }) => rest);
+          await supabase.from("product_variants").insert(sanitizedPayloads);
         }
+      } catch (varEx) {
+        console.error("[upsertProductServer] Error batch inserting variants:", varEx);
       }
     }
 

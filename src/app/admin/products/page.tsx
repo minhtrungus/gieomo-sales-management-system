@@ -28,10 +28,8 @@ export default function AdminProductsPage() {
     setIsSyncing(true);
     try {
       const fresh = await syncProductsFromServer(true);
-      if (fresh && fresh.length > 0) {
+      if (Array.isArray(fresh)) {
         setProducts(fresh);
-      } else {
-        setProducts(getStoredProducts());
       }
     } catch {
       setProducts(getStoredProducts());
