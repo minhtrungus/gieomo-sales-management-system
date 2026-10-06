@@ -366,18 +366,30 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
       categoryId = catData?.category_id || null;
     }
 
+    // Ensure prices are valid non-negative numbers or null to satisfy PostgreSQL check constraints
+    const sanitizePrice = (val: any): number | null => {
+      if (val === null || val === undefined || val === "") return null;
+      const num = Number(val);
+      if (isNaN(num)) return null;
+      return Math.max(0, num);
+    };
+
+    const sanitizedPrice = sanitizePrice(product.price) ?? 0;
+    const sanitizedCompareAt = sanitizePrice(product.compare_at_price);
+    const sanitizedCost = sanitizePrice(product.cost_price);
+
     const productPayload: any = {
-      name: product.name,
-      slug: product.slug,
+      name: product.name?.trim() || "Sản phẩm Mầm Mơ",
+      slug: product.slug?.trim() || `prod-${Date.now()}`,
       short_description: product.short_description || null,
       description: product.description || null,
-      price: product.price,
-      compare_at_price: product.compare_at_price || null,
-      cost_price: product.cost_price || null,
+      price: sanitizedPrice,
+      compare_at_price: sanitizedCompareAt,
+      cost_price: sanitizedCost,
       status: product.status || "draft",
       featured: Boolean(product.featured),
-      sort_order: product.sort_order || 1,
-      weight_gram: product.weight_gram || 100,
+      sort_order: Number(product.sort_order) || 1,
+      weight_gram: sanitizePrice(product.weight_gram) ?? 100,
       thumbnail: product.thumbnail || product.images?.[0] || null,
       category_id: categoryId,
       updated_at: new Date().toISOString(),
@@ -418,11 +430,11 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
           product_id: savedProductId,
           name: v.name || `Mẫu #${i + 1}`,
           sku: sku,
-          price: v.price || null,
-          compare_at_price: v.compare_at_price || null,
-          cost_price: v.cost_price || null,
+          price: sanitizePrice(v.price),
+          compare_at_price: sanitizePrice(v.compare_at_price),
+          cost_price: sanitizePrice(v.cost_price),
           stock: stockVal,
-          weight_gram: v.weight_gram || 100,
+          weight_gram: sanitizePrice(v.weight_gram) ?? 100,
           image_url: v.image_url || (v as any).imageUrl || null,
           status: v.status || "active",
           sort_order: v.sort_order || i + 1,
