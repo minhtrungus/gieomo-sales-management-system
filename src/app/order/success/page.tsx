@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo, useTransition } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -38,6 +38,7 @@ function OrderSuccessContent() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [zoomedProof, setZoomedProof] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   // Social Share Card states
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -159,16 +160,22 @@ function OrderSuccessContent() {
     if (!file) return;
     setProofFile(file);
     try {
-      const compressed = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
+      const compressed = await compressImage(file, { maxWidth: 900, maxHeight: 900, quality: 0.7 });
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProofImage(event.target?.result as string);
+        const res = event.target?.result as string;
+        startTransition(() => {
+          setProofImage(res);
+        });
       };
       reader.readAsDataURL(compressed);
     } catch {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProofImage(event.target?.result as string);
+        const res = event.target?.result as string;
+        startTransition(() => {
+          setProofImage(res);
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -396,6 +403,7 @@ function OrderSuccessContent() {
                 src={vietQrUrl}
                 alt="VietQR"
                 className="w-56 sm:w-64 h-auto object-contain rounded-xl shadow-xs border border-[#F0E5D8]"
+                decoding="async"
               />
               <div className="pt-2.5 flex items-center gap-4 text-xs font-bold">
                 <a
@@ -480,7 +488,7 @@ function OrderSuccessContent() {
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => setZoomedProof(proofImage)}
+                        onClick={() => startTransition(() => setZoomedProof(proofImage))}
                         className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-[11px] hover:bg-amber-100 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs transition-colors"
                       >
                         <Maximize2 className="w-3.5 h-3.5" />
@@ -637,7 +645,7 @@ function OrderSuccessContent() {
               {proofImage ? (
                 <div className="relative inline-block rounded-2xl overflow-hidden border border-emerald-300 bg-gray-50 shadow-2xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={proofImage} alt="Biên lai" className="w-32 h-32 object-cover" />
+                  <img src={proofImage} alt="Biên lai" className="w-32 h-32 object-cover" loading="lazy" decoding="async" />
                   <button
                     type="button"
                     onClick={() => setProofImage(null)}
@@ -686,7 +694,7 @@ function OrderSuccessContent() {
       {zoomedProof && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setZoomedProof(null)}
+          onClick={() => startTransition(() => setZoomedProof(null))}
         >
           <div
             className="relative max-w-2xl w-full max-h-[90vh] bg-[#16381D]/95 rounded-3xl p-4 border border-emerald-600/40 shadow-2xl flex flex-col items-center space-y-3"
@@ -696,7 +704,7 @@ function OrderSuccessContent() {
               <span className="font-heading font-bold text-sm">Ảnh biên lai đã gửi ({orderCode})</span>
               <button
                 type="button"
-                onClick={() => setZoomedProof(null)}
+                onClick={() => startTransition(() => setZoomedProof(null))}
                 className="p-1 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -707,7 +715,9 @@ function OrderSuccessContent() {
               <img
                 src={zoomedProof}
                 alt="Biên lai phóng to"
-                className="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md"
+                decoding="async"
+                loading="eager"
+                className="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md will-change-transform"
               />
             </div>
           </div>

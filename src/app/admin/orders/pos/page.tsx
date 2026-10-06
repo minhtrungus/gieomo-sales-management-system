@@ -7,7 +7,7 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import {
   saveNewOrder,
   getStoredProducts,
-  getStoredMembers,
+  getActiveReferralMembers,
   getStoredSettings,
   updateStoredOrderStatus,
   updateStoredPaymentStatus,
@@ -23,7 +23,7 @@ export default function AdminPosPage() {
 
   useEffect(() => {
     setProducts(getStoredProducts().filter((p) => p.status === "active"));
-    setMembers(getStoredMembers().filter((m) => m.status === "active"));
+    setMembers(getActiveReferralMembers());
     setSettings(getStoredSettings());
   }, []);
 

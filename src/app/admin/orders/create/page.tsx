@@ -10,7 +10,7 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import {
   saveNewOrder,
   getStoredProducts,
-  getStoredMembers,
+  getActiveReferralMembers,
   getStoredPickupPoints,
   getStoredSettings,
   updateStoredOrderStatus,
@@ -29,7 +29,7 @@ export default function AdminCreateOrderPage() {
 
   useEffect(() => {
     setAvailableProducts(getStoredProducts());
-    setMembers(getStoredMembers());
+    setMembers(getActiveReferralMembers());
     setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
     setSettings(getStoredSettings());
   }, []);

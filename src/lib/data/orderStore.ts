@@ -38,29 +38,41 @@ export function syncOrdersFromServer(force = false): void {
   safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.orders)) {
-        if (data.orders.length === 0) {
-          cachedOrders = [];
-          cachedPayments = [];
-          localStorage.setItem("gieomo_orders", JSON.stringify([]));
-          localStorage.setItem("gieomo_payments", JSON.stringify([]));
-          localStorage.setItem("gieomo_customers", JSON.stringify([]));
-          window.dispatchEvent(new Event("gieomo_orders_updated"));
-          window.dispatchEvent(new Event("gieomo_payments_updated"));
-          return;
+        const localRaw = localStorage.getItem("gieomo_orders");
+        const localOrders: Order[] = localRaw ? JSON.parse(localRaw) : (cachedOrders || []);
+        
+        // Map keyed by uppercase code
+        const map = new Map<string, Order>();
+        
+        // 1. Preserve existing local orders first
+        for (const o of localOrders) {
+          const code = (o.order_code || o.order_id || "").trim().toUpperCase();
+          if (code) map.set(code, o);
         }
 
-        const merged: Order[] = data.orders.map((sOrd) => ({
-          ...sOrd,
-          buyer_name: sOrd.buyer_name || "Khách hàng",
-          buyer_phone: sOrd.buyer_phone || "",
-          recipient_name: sOrd.recipient_name || sOrd.buyer_name || "Khách hàng",
-          recipient_phone: sOrd.recipient_phone || sOrd.buyer_phone || "",
-          address_detail: sOrd.address_detail || "",
-          source_type: sOrd.source_type || "landing_page",
-          introducer_info: sOrd.introducer_info || null,
-          referral_code: sOrd.referral_code || null,
-          items: sOrd.items || [],
-        })).sort(
+        // 2. Merge server orders
+        for (const sOrd of data.orders) {
+          const code = (sOrd.order_code || sOrd.order_id || "").trim().toUpperCase();
+          if (!code) continue;
+          const existing = map.get(code);
+          const sanitized: Order = {
+            ...existing,
+            ...sOrd,
+            buyer_name: sOrd.buyer_name || existing?.buyer_name || "Khách hàng",
+            buyer_phone: sOrd.buyer_phone || existing?.buyer_phone || "",
+            recipient_name: sOrd.recipient_name || sOrd.buyer_name || existing?.recipient_name || existing?.buyer_name || "Khách hàng",
+            recipient_phone: sOrd.recipient_phone || sOrd.buyer_phone || existing?.recipient_phone || existing?.buyer_phone || "",
+            address_detail: sOrd.address_detail || existing?.address_detail || "",
+            source_type: sOrd.source_type || existing?.source_type || "landing_page",
+            introducer_info: sOrd.introducer_info || existing?.introducer_info || null,
+            referral_code: sOrd.referral_code || existing?.referral_code || null,
+            payment_proof: sOrd.payment_proof || existing?.payment_proof || undefined,
+            items: (sOrd.items && sOrd.items.length > 0) ? sOrd.items : (existing?.items || []),
+          };
+          map.set(code, sanitized);
+        }
+
+        const merged = Array.from(map.values()).sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
@@ -1038,6 +1050,22 @@ export function getStoredMembers(): StoredMember[] {
   } catch {
     return [SYSTEM_MAINTENANCE_ACCOUNT];
   }
+}
+
+/**
+ * Returns active members eligible for referral selection by customers or POS,
+ * strictly excluding system maintenance / admin service accounts.
+ */
+export function getActiveReferralMembers(): StoredMember[] {
+  return getStoredMembers().filter((m) => {
+    if (m.status !== "active") return false;
+    if (m.isSystemProtected) return false;
+    if (m.memberId === "baotri-system") return false;
+    if (m.email?.toLowerCase() === "baotri@gieomo.store") return false;
+    if (m.referralCode?.toUpperCase() === "BAOTRI") return false;
+    if (m.fullName?.toLowerCase().includes("bảo trì")) return false;
+    return true;
+  });
 }
 
 export function saveStoredMembers(members: StoredMember[], changedMember?: StoredMember): void {

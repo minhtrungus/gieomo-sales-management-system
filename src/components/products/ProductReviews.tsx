@@ -298,8 +298,7 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
 
               {images.map((img, idx) => (
                 <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 group">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img} alt="Review attachment" className="w-full h-full object-cover" />
+                  <Image src={img} alt="Review attachment" fill className="object-cover" sizes="64px" />
                   <button
                     type="button"
                     onClick={() => handleRemoveImage(idx)}
@@ -461,8 +460,7 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
                       onClick={() => setZoomedImage(img)}
                       className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden hover:opacity-90 transition-opacity cursor-pointer"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img} alt="Customer photo" className="w-full h-full object-cover" />
+                      <Image src={img} alt="Customer photo" fill className="object-cover" sizes="64px" />
                     </button>
                   ))}
                 </div>
@@ -480,7 +478,7 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
         >
           <div className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden bg-white p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={zoomedImage} alt="Zoomed review" className="max-w-full max-h-[80vh] object-contain rounded-xl" />
+            <img src={zoomedImage} alt="Zoomed review" className="max-w-full max-h-[80vh] object-contain rounded-xl" loading="lazy" decoding="async" />
             <button
               onClick={() => setZoomedImage(null)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center font-bold"

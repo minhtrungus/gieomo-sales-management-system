@@ -16,7 +16,7 @@ import {
   getStoredPickupPoints,
   getStoredVouchers,
   getStoredSettings,
-  getStoredMembers,
+  getActiveReferralMembers,
   syncMembersFromServer,
   syncVouchersFromServer,
   syncSettingsFromServer,
@@ -42,10 +42,11 @@ function CheckoutContent() {
   const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
 
   useEffect(() => {
-    syncMembersFromServer(true);
-    syncVouchersFromServer(true);
-    syncSettingsFromServer(true);
-    syncPickupPointsFromServer(true);
+    // Non-blocking background sync without forcing heavy re-render cascades
+    syncMembersFromServer(false);
+    syncVouchersFromServer(false);
+    syncSettingsFromServer(false);
+    syncPickupPointsFromServer(false);
     validateCart();
   }, [validateCart]);
 
@@ -61,8 +62,8 @@ function CheckoutContent() {
   const [deliveryType, setDeliveryType] = useState<"home_delivery" | "member_delivery">("home_delivery");
   const [paymentMethod] = useState<"banking">("banking");
 
-  // Members for acquaintance / referral matching
-  const [activeMembers, setActiveMembers] = useState<StoredMember[]>([]);
+  // Members for acquaintance / referral matching (excludes system accounts)
+  const [activeMembers, setActiveMembers] = useState<StoredMember[]>(() => getActiveReferralMembers());
   const [selectedMember, setSelectedMember] = useState<StoredMember | null>(null);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [showMemberSuggestions, setShowMemberSuggestions] = useState(false);
@@ -98,7 +99,7 @@ function CheckoutContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    const members = getStoredMembers().filter((m) => m.status === "active");
+    const members = getActiveReferralMembers();
     setActiveMembers(members);
 
     // Capture referral code from URL (ref, refby, referrer, gioithieu), localStorage, or cookie
@@ -137,7 +138,7 @@ function CheckoutContent() {
     }
 
     const handleMembersUpdated = () => {
-      const updated = getStoredMembers().filter((m) => m.status === "active");
+      const updated = getActiveReferralMembers();
       setActiveMembers(updated);
       const currentStoredRef =
         (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||

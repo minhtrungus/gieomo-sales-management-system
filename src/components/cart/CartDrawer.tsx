@@ -193,7 +193,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                     Xem giỏ hàng
                   </Button>
                 </Link>
-                <Link href="/checkout" onClick={onClose} className="w-full">
+                <Link href="/checkout" prefetch={true} onClick={onClose} className="w-full">
                   <Button variant="primary" fullWidth size="md">
                     Thanh toán ngay
                   </Button>

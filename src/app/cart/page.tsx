@@ -365,6 +365,7 @@ export default function CartPage() {
                 {/* Checkout CTA */}
                 <Link
                   href={appliedVoucher ? `/checkout?voucher=${appliedVoucher.code}` : "/checkout"}
+                  prefetch={true}
                   className="block w-full"
                 >
                   <Button variant="primary" fullWidth size="lg">

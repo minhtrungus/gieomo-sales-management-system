@@ -544,7 +544,7 @@ export async function generateThankYouCardCanvas(
   return canvas;
 }
 
-export function ThankYouStoryCard({
+export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
   order,
   defaultCustomerName = "Bạn đọc hảo tâm",
   onDownloadStart,
@@ -801,7 +801,7 @@ export function ThankYouStoryCard({
           {/* QR Code */}
           <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl border border-[#DCCDB8] bg-white p-1 shrink-0 overflow-hidden shadow-2xs">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrUrl} alt="QR Gieo Mơ" className="w-full h-full object-contain" />
+            <img src={qrUrl} alt="QR Gieo Mơ" className="w-full h-full object-contain" loading="lazy" decoding="async" />
           </div>
         </div>
 
@@ -835,4 +835,4 @@ export function ThankYouStoryCard({
       </div>
     </div>
   );
-}
+});

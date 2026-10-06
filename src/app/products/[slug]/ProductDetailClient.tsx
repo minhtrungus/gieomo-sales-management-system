@@ -96,8 +96,11 @@ export function ProductDetailClient({
         if (found) {
           setProduct(found);
           setSelectedVariant((prev: any) => {
-            if (!prev) return found?.variants?.[0] ?? null;
-            return found?.variants?.find((v: any) => v.variant_id === prev.variant_id) ?? found?.variants?.[0] ?? null;
+            const inStockVariant = found?.variants?.find((v: any) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found?.variants?.[0] ?? null;
+            if (!prev) return inStockVariant;
+            const matchPrev = found?.variants?.find((v: any) => v.variant_id === prev.variant_id);
+            if (matchPrev && (matchPrev.stock === undefined || matchPrev.stock === null || Number(matchPrev.stock) > 0)) return matchPrev;
+            return matchPrev ?? inStockVariant;
           });
         }
         setIsLoading(false);
@@ -119,8 +122,11 @@ export function ProductDetailClient({
       if (found) {
         setProduct(found);
         setSelectedVariant((prev: any) => {
-          if (!prev) return found.variants?.[0] ?? null;
-          return found.variants?.find((v: any) => v.variant_id === prev.variant_id) ?? found.variants?.[0] ?? null;
+          const inStockVariant = found.variants?.find((v: any) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found.variants?.[0] ?? null;
+          if (!prev) return inStockVariant;
+          const matchPrev = found.variants?.find((v: any) => v.variant_id === prev.variant_id);
+          if (matchPrev && (matchPrev.stock === undefined || matchPrev.stock === null || Number(matchPrev.stock) > 0)) return matchPrev;
+          return matchPrev ?? inStockVariant;
         });
       }
     };
@@ -131,6 +137,11 @@ export function ProductDetailClient({
       window.removeEventListener("gieomo_products_updated", handleUpdated);
     };
   }, [slug, initialProduct]);
+
+  // Pre-fetch checkout route for instantaneous 0ms transition
+  useEffect(() => {
+    router.prefetch("/checkout");
+  }, [router]);
 
   // Keep document title synchronized with product name on the client tab
   useEffect(() => {
@@ -198,6 +209,14 @@ export function ProductDetailClient({
     }
     return Number(product.stock) || 0;
   }, [product, selectedVariant]);
+
+  const isOverallProductOutOfStock = useMemo(() => {
+    if (!product) return false;
+    if (product.variants && product.variants.length > 0) {
+      return product.variants.every((v) => (v.stock !== undefined && v.stock !== null ? Number(v.stock) <= 0 : false));
+    }
+    return Number(product.stock || 0) <= 0;
+  }, [product]);
 
   const isOutOfStock = currentStock <= 0;
 
@@ -618,10 +637,15 @@ export function ProductDetailClient({
                     : "bg-cream hover:bg-emerald-50 border-2 border-emerald-600 text-emerald-950 active:scale-98 cursor-pointer"
                 }`}
               >
-                {isOutOfStock ? "Tạm hết hàng" : "🛒 Thêm vào giỏ"}
+                {isOverallProductOutOfStock
+                  ? "Tạm hết hàng"
+                  : isOutOfStock
+                  ? "Mẫu này đã hết (Chọn mẫu khác)"
+                  : "🛒 Thêm vào giỏ"}
               </button>
               <button
                 onClick={handleBuyNow}
+                onMouseEnter={() => router.prefetch("/checkout")}
                 disabled={isOutOfStock}
                 className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all shadow-xs flex items-center justify-center gap-1.5 ${
                   isOutOfStock
@@ -629,7 +653,11 @@ export function ProductDetailClient({
                     : "bg-emerald-900 hover:bg-emerald-950 text-white active:scale-98 cursor-pointer"
                 }`}
               >
-                {isOutOfStock ? "Đang chờ nhập hàng" : "⚡ Mua ngay"}
+                {isOverallProductOutOfStock
+                  ? "Đang chờ nhập hàng"
+                  : isOutOfStock
+                  ? "Vui lòng chọn mẫu còn hàng"
+                  : "⚡ Mua ngay"}
               </button>
             </div>
           </div>
