@@ -148,7 +148,7 @@ export async function createOrderServer(orderData: Partial<Order> & { items: Ord
       return { success: false, error: orderError?.message || "Lỗi tạo đơn hàng trong cơ sở dữ liệu" };
     }
 
-    // 3. Insert Order Items
+    // 3. Insert Order Items & Atomically Deduct Stock
     if (orderData.items && orderData.items.length > 0) {
       const itemsToInsert = orderData.items.map((item: any) => ({
         order_id: createdOrder.order_id,
@@ -166,6 +166,58 @@ export async function createOrderServer(orderData: Partial<Order> & { items: Ord
 
       if (itemsError) {
         console.warn("[createOrderServer] Could not insert items:", itemsError);
+      }
+
+      // Deduct inventory stock for each purchased item
+      for (const item of orderData.items) {
+        const qty = item.quantity || 1;
+        try {
+          // If variantId is provided, decrement variant stock
+          if (item.variant_id) {
+            const { data: currentVar } = await supabase
+              .from("product_variants")
+              .select("stock, product_id")
+              .eq("variant_id", item.variant_id)
+              .maybeSingle();
+
+            if (currentVar) {
+              const newStock = Math.max(0, (currentVar.stock || 0) - qty);
+              await supabase
+                .from("product_variants")
+                .update({ stock: newStock, updated_at: new Date().toISOString() })
+                .eq("variant_id", item.variant_id);
+
+              // Also sync product total stock
+              if (currentVar.product_id) {
+                const { data: allVars } = await supabase
+                  .from("product_variants")
+                  .select("stock")
+                  .eq("product_id", currentVar.product_id);
+                const totalStock = (allVars || []).reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+                await supabase
+                  .from("products")
+                  .update({ stock: totalStock, updated_at: new Date().toISOString() })
+                  .eq("product_id", currentVar.product_id);
+              }
+            }
+          } else if (item.product_id) {
+            // Decrement product directly if no variant
+            const { data: currentProd } = await supabase
+              .from("products")
+              .select("stock")
+              .eq("product_id", item.product_id)
+              .maybeSingle();
+            if (currentProd) {
+              const newStock = Math.max(0, (currentProd.stock || 0) - qty);
+              await supabase
+                .from("products")
+                .update({ stock: newStock, updated_at: new Date().toISOString() })
+                .eq("product_id", item.product_id);
+            }
+          }
+        } catch (stockErr) {
+          console.warn("[createOrderServer] Stock deduction warning:", stockErr);
+        }
       }
     }
 
@@ -221,6 +273,9 @@ export async function getOrdersServer(options?: {
         delivery_status,
         payment_method,
         customer_note,
+        internal_note,
+        payment_proof,
+        assigned_shipper_id,
         source_type,
         introducer_info,
         seller_id,

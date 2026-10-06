@@ -143,7 +143,15 @@ export function saveNewOrder(newOrder: Order): void {
           let prodModified = false;
           const updatedVariants = prod.variants?.map((v) => {
             const matchingItem = newOrder.items?.find(
-              (it) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
+              (it: any) =>
+                (it.product_id === prod.product_id || it.product_name_snapshot === prod.name || it.item_name_snapshot === prod.name) &&
+                (it.variant_id
+                  ? it.variant_id === v.variant_id
+                  : it.sku
+                  ? it.sku === v.sku
+                  : it.variant_name_snapshot
+                  ? it.variant_name_snapshot === v.name
+                  : true)
             );
             if (matchingItem) {
               prodModified = true;
@@ -170,7 +178,12 @@ export function saveNewOrder(newOrder: Order): void {
             }
             return v;
           });
-          return prodModified ? { ...prod, variants: updatedVariants } : prod;
+
+          if (prodModified) {
+            const totalProdStock = (updatedVariants || []).reduce((sum: number, vr: any) => sum + (Number(vr.stock) || 0), 0);
+            return { ...prod, variants: updatedVariants, stock: totalProdStock };
+          }
+          return prod;
         });
 
         if (prodsChanged) {

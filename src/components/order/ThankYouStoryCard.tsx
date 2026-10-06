@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import Image from "next/image";
-import { Download, Share2, Sparkles, ExternalLink, Check, Copy } from "lucide-react";
+import React, { useState } from "react";
+import { Download, Share2, Sparkles } from "lucide-react";
 import type { Order } from "@/types/database";
 
 interface ThankYouStoryCardProps {
@@ -14,7 +13,8 @@ interface ThankYouStoryCardProps {
 
 /**
  * High-speed native Canvas 2D card generator.
- * Runs in ~15-25ms without heavy DOM screenshot libraries.
+ * Faithfully matches the Gieo Mơ Thank You Certificate artwork.
+ * Runs in ~20ms directly on client-side.
  */
 export async function generateThankYouCardCanvas(
   customerName: string,
@@ -50,34 +50,45 @@ export async function generateThankYouCardCanvas(
 
   const qrSrc =
     qrDataUrl ||
-    `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=https%3A%2F%2Fgieomo.store&color=16-56-29&bgcolor=255-255-255`;
+    `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=https%3A%2F%2Fgieomo.store&color=22-56-29&bgcolor=255-255-255`;
   const qrImg = await loadImg(qrSrc);
 
-  // 1. BASE BACKGROUND: Warm artisanal parchment paper with vintage texture
+  // 1. BASE BACKGROUND: Warm artisanal parchment paper with watercolor aura
   const bgGrad = ctx.createLinearGradient(0, 0, 0, 1920);
   bgGrad.addColorStop(0, "#FBF7ED");
   bgGrad.addColorStop(0.3, "#FAF4E8");
-  bgGrad.addColorStop(0.7, "#F4ECE0");
-  bgGrad.addColorStop(1, "#EFE5D5");
+  bgGrad.addColorStop(0.7, "#F5EDE0");
+  bgGrad.addColorStop(1, "#EFE4D2");
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, 1080, 1920);
 
-  // Subtle paper speckles for artisanal paper effect
-  ctx.fillStyle = "rgba(180, 150, 110, 0.08)";
-  for (let i = 0; i < 180; i++) {
-    const rx = (Math.sin(i * 997) * 0.5 + 0.5) * 1080;
-    const ry = (Math.cos(i * 613) * 0.5 + 0.5) * 1920;
-    const size = ((i % 3) + 1) * 1.5;
-    ctx.fillRect(rx, ry, size, size);
-  }
+  // Soft watercolor botanical washes in four corners
+  const drawCornerLeaves = (x: number, y: number, rot: number) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = "rgba(163, 197, 155, 0.25)";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 70, 35, Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(189, 219, 180, 0.3)";
+    ctx.beginPath();
+    ctx.ellipse(30, -20, 50, 25, -Math.PI / 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+  drawCornerLeaves(80, 80, 0);
+  drawCornerLeaves(1000, 80, Math.PI / 2);
+  drawCornerLeaves(80, 1840, -Math.PI / 2);
+  drawCornerLeaves(1000, 1840, Math.PI);
 
-  // Double dashed border (Paper sewing stitch effect)
+  // Paper sewing stitch dashed border
   ctx.strokeStyle = "#8EB88B";
   ctx.lineWidth = 3.5;
   ctx.setLineDash([16, 12]);
   ctx.strokeRect(42, 42, 996, 1836);
 
-  ctx.strokeStyle = "#E8DCBA";
+  ctx.strokeStyle = "#E2D3B8";
   ctx.lineWidth = 1.5;
   ctx.setLineDash([8, 8]);
   ctx.strokeRect(54, 54, 972, 1812);
@@ -87,30 +98,49 @@ export async function generateThankYouCardCanvas(
   ctx.save();
   ctx.translate(90, 95);
   ctx.rotate(-0.035); // -2 deg
-  // Washi tape background
-  ctx.fillStyle = "rgba(163, 203, 160, 0.85)";
+  // Washi tape body
+  ctx.fillStyle = "rgba(163, 203, 160, 0.9)";
   ctx.beginPath();
-  ctx.roundRect(0, 0, 390, 52, 6);
+  ctx.roundRect(0, 0, 390, 54, 6);
   ctx.fill();
-  // Washi jagged edges
   ctx.strokeStyle = "#7CA679";
   ctx.lineWidth = 1.5;
   ctx.stroke();
+
+  // Jagged tape corners
+  ctx.fillStyle = "#FAF4E8";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(8, 12);
+  ctx.lineTo(0, 24);
+  ctx.lineTo(8, 36);
+  ctx.lineTo(0, 54);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(390, 0);
+  ctx.lineTo(382, 12);
+  ctx.lineTo(390, 24);
+  ctx.lineTo(382, 36);
+  ctx.lineTo(390, 54);
+  ctx.closePath();
+  ctx.fill();
 
   // Washi text
   ctx.fillStyle = "#16381D";
   ctx.font = "bold 24px 'Montserrat', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("🌿  TẠP HÓA GIEO MƠ", 195, 36);
+  ctx.fillText("🌱  TẠP HÓA GIEO MƠ", 195, 37);
   ctx.restore();
 
   // Subtitle directly under washi tape
   ctx.fillStyle = "#5C4D44";
   ctx.font = "italic 20px 'Montserrat', sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ,  🏷️", 92, 178);
+  ctx.fillText("Dự án bán hàng gây quỹ của Mầm Mơ,  🌱", 92, 180);
 
-  // 3. TOP RIGHT: OFFICIAL DARK GREEN STAMP BADGE
+  // 3. TOP RIGHT: OFFICIAL ROUND SEAL BADGE
   ctx.save();
   ctx.translate(890, 145);
   // Outer circle
@@ -118,14 +148,14 @@ export async function generateThankYouCardCanvas(
   ctx.beginPath();
   ctx.arc(0, 0, 72, 0, Math.PI * 2);
   ctx.fill();
-  // Double gold/white rings
+  // Gold ring
   ctx.strokeStyle = "#D4AF37";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(0, 0, 64, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(0, 0, 58, 0, Math.PI * 2);
@@ -149,17 +179,16 @@ export async function generateThankYouCardCanvas(
   ctx.font = "bold 48px 'Playfair Display', Georgia, serif";
   ctx.fillText("Cảm ơn người", 540, 270);
 
-  // Line 2: Gieo Mầm (With soft 3D shadow)
+  // Line 2: Gieo Mầm (With warm green shadow)
   ctx.font = "900 78px 'Playfair Display', Georgia, serif";
   ctx.fillStyle = "rgba(101, 179, 116, 0.35)";
   ctx.fillText("Gieo Mầm", 544, 354);
   ctx.fillStyle = "#1E4B27";
   ctx.fillText("Gieo Mầm", 540, 350);
 
-  // Little sprout growing in soil on right
+  // Sprout growing on right + Yellow heart
   ctx.font = "34px sans-serif";
   ctx.fillText("🌱", 745, 345);
-  // Yellow heart & leaves
   ctx.font = "26px sans-serif";
   ctx.fillText("💛", 335, 340);
   ctx.fillText("🌿", 710, 270);
@@ -192,11 +221,11 @@ export async function generateThankYouCardCanvas(
   ctx.textAlign = "center";
   ctx.fillText("GỬI TẶNG BẠN", 540, box1Y + 7);
 
-  // Customer Name (Large Organic Display)
+  // Customer Name in Cursive Handwritten Display
   ctx.fillStyle = "#16381D";
   const nameLen = customerName.length;
   const nameSize = nameLen > 24 ? 54 : nameLen > 16 ? 66 : 76;
-  ctx.font = `bold ${nameSize}px 'Caveat', cursive, sans-serif`;
+  ctx.font = `bold ${nameSize}px 'Caveat', 'Playfair Display', cursive, sans-serif`;
   ctx.fillText(`✨  ${customerName}  ✨`, 540, box1Y + 95);
 
   // Quote
@@ -230,7 +259,7 @@ export async function generateThankYouCardCanvas(
   ctx.textAlign = "left";
   ctx.fillStyle = "#5C4D44";
   ctx.font = "bold 23px 'Montserrat', sans-serif";
-  ctx.fillText("🌿 GÓI QUÀ BẠN ĐÃ CHỌN:", 135, box2Y + 60);
+  ctx.fillText("🌱 GÓI QUÀ BẠN ĐÃ CHỌN:", 135, box2Y + 60);
 
   // Items list
   ctx.fillStyle = "#231B16";
@@ -265,13 +294,12 @@ export async function generateThankYouCardCanvas(
   ctx.save();
   ctx.translate(805, box2Y + 165);
   ctx.rotate(-0.1);
-  // Outer circle
   ctx.strokeStyle = "rgba(38, 82, 46, 0.75)";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(0, 0, 72, 0, Math.PI * 2);
   ctx.stroke();
-  // Inner circle
+
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(0, 0, 56, 0, Math.PI * 2);
@@ -283,7 +311,7 @@ export async function generateThankYouCardCanvas(
   ctx.textAlign = "center";
   ctx.fillText("🌱", 0, 8);
 
-  // Curved text
+  // Curved stamp text
   ctx.font = "bold 13px 'Montserrat', sans-serif";
   ctx.fillText("GIEO MƠ", 0, -32);
   ctx.font = "bold 9.5px 'Montserrat', sans-serif";
@@ -341,9 +369,9 @@ export async function generateThankYouCardCanvas(
   ctx.roundRect(220, 240, 60, 45, 8);
   ctx.fill();
   ctx.fillStyle = "#5C9B66";
-  ctx.fillRect(230, 244, 40, 37); // green thread wound on spool
+  ctx.fillRect(230, 244, 40, 37);
 
-  // 2) The Pouch Bag (Warm tan canvas fabric)
+  // 2) Pouch Bag (Handmade linen fabric)
   ctx.fillStyle = "#E5D4BE";
   ctx.beginPath();
   ctx.moveTo(30, 150);
@@ -367,7 +395,7 @@ export async function generateThankYouCardCanvas(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Pouch drawstring bow and leather patch tag
+  // Pouch label tag
   ctx.fillStyle = "#FFF9F0";
   ctx.beginPath();
   ctx.roundRect(90, 205, 52, 50, 6);
@@ -388,7 +416,6 @@ export async function generateThankYouCardCanvas(
   ctx.fillText("💛", 195, 235);
 
   // 3) Cute Mầm Mascot Peeking Out
-  // Mascot Head/Body
   ctx.fillStyle = "#BCE58E";
   ctx.beginPath();
   ctx.arc(145, 120, 75, 0, Math.PI * 2);
@@ -422,7 +449,7 @@ export async function generateThankYouCardCanvas(
   ctx.arc(165, 115, 10, Math.PI, 0, false);
   ctx.stroke();
 
-  // Cute Rosy Blushing Cheeks
+  // Rosy Blushing Cheeks
   ctx.fillStyle = "rgba(255, 145, 145, 0.75)";
   ctx.beginPath();
   ctx.arc(108, 130, 13, 0, Math.PI * 2);
@@ -480,30 +507,30 @@ export async function generateThankYouCardCanvas(
     ctx.fillText("gieomo.store", 830, btmBoxY + 165);
   }
 
-  // Bottom-Right Slanted Paper Slogan Tag
+  // Bottom-Right Artisanal Tag: "Gom từng mảnh nhỏ, dệt thành ước mơ 💛"
   ctx.save();
-  ctx.translate(620, btmBoxY + 355);
+  ctx.translate(615, btmBoxY + 348);
   ctx.rotate(-0.04);
   // Tag shadow
   ctx.fillStyle = "rgba(0, 0, 0, 0.04)";
   ctx.beginPath();
-  ctx.roundRect(2, 4, 320, 60, 12);
+  ctx.roundRect(2, 4, 330, 64, 14);
   ctx.fill();
   // Tag background
   ctx.fillStyle = "#FFFBF2";
   ctx.beginPath();
-  ctx.roundRect(0, 0, 320, 60, 12);
+  ctx.roundRect(0, 0, 330, 64, 14);
   ctx.fill();
   ctx.strokeStyle = "#DCCDB8";
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Tag Text: Gom từng mảnh nhỏ, dệt thành giấc mơ
+  // Tag Text: Gom từng mảnh nhỏ, dệt thành ước mơ 💛
   ctx.fillStyle = "#4A3B32";
   ctx.font = "italic bold 17px 'Playfair Display', Georgia, serif";
   ctx.textAlign = "center";
-  ctx.fillText("Gom từng mảnh nhỏ,", 160, 26);
-  ctx.fillText("dệt thành giấc mơ 💛", 160, 48);
+  ctx.fillText("Gom từng mảnh nhỏ,", 165, 27);
+  ctx.fillText("dệt thành ước mơ 💛", 165, 50);
   ctx.restore();
 
   ctx.restore();
@@ -525,7 +552,6 @@ export function ThankYouStoryCard({
 }: ThankYouStoryCardProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   const customerName = (order?.buyer_name || defaultCustomerName).trim();
   const orderDate = (() => {
@@ -536,10 +562,10 @@ export function ThankYouStoryCard({
   const orderItems =
     order?.items && order.items.length > 0
       ? order.items.map((it: any) => ({
-          name: it.item_name_snapshot || it.product_name_snapshot || "Sản phẩm Gieo Mơ",
+          name: it.item_name_snapshot || it.product_name_snapshot || "Pouch Gieo Mơ",
           quantity: it.quantity || 1,
         }))
-      : [{ name: "Pouch May Thủ Công Gieo Mơ", quantity: 1 }];
+      : [{ name: "Pouch Gieo Mơ", quantity: 1 }];
 
   // QR Code URL
   const qrUrl =
@@ -618,10 +644,10 @@ export function ThankYouStoryCard({
 
   return (
     <div className="w-full max-w-lg mx-auto space-y-4">
-      {/* 1:1 FAITHFUL VISUAL CARD PREVIEW (Artisanal Kraft Paper Style) */}
+      {/* 1:1 FAITHFUL ARTISANAL KRAFT/WATERCOLOR CARD PREVIEW */}
       <div
         id="gieomo-thankyou-card"
-        className="relative rounded-3xl overflow-hidden border-3 border-dashed border-[#8EB88B] bg-gradient-to-b from-[#FBF7ED] via-[#FAF4E8] to-[#EFE5D5] p-5 sm:p-7 text-center shadow-xl space-y-5"
+        className="relative rounded-3xl overflow-hidden border-3 border-dashed border-[#8EB88B] bg-gradient-to-b from-[#FBF7ED] via-[#FAF4E8] to-[#EFE4D2] p-5 sm:p-7 text-center shadow-xl space-y-5"
         style={{
           boxShadow: "0 10px 30px -5px rgba(50, 40, 30, 0.12), inset 0 0 40px rgba(180, 150, 110, 0.08)",
         }}
@@ -630,11 +656,11 @@ export function ThankYouStoryCard({
         <div className="flex items-start justify-between">
           <div className="text-left space-y-1">
             <div className="inline-flex items-center gap-1.5 px-4 py-1 rounded-sm bg-[#A3CBA0]/90 text-[#16381D] text-xs sm:text-sm font-extrabold shadow-2xs -rotate-2 border border-[#7CA679]/40">
-              <span>🌿</span>
+              <span>🌱</span>
               <span className="tracking-wide">TẠP HÓA GIEO MƠ</span>
             </div>
             <p className="text-[11px] text-[#5C4D44] italic font-medium pt-0.5">
-              Dự án bán hàng gây quỹ của Mầm Mơ, 🏷️
+              Dự án bán hàng gây quỹ của Mầm Mơ, 🌿
             </p>
           </div>
 
@@ -687,7 +713,7 @@ export function ThankYouStoryCard({
           </div>
 
           <div className="space-y-1.5 pr-20">
-            <span className="text-xs font-extrabold text-[#5C4D44] block">🌿 GÓI QUÀ BẠN ĐÃ CHỌN:</span>
+            <span className="text-xs font-extrabold text-[#5C4D44] block">🌱 GÓI QUÀ BẠN ĐÃ CHỌN:</span>
             <div className="space-y-1 text-xs text-[#231B16]">
               {orderItems.map((it, idx) => (
                 <div key={idx} className="flex items-center justify-between gap-2 font-bold">
@@ -719,7 +745,6 @@ export function ThankYouStoryCard({
         <div className="p-3.5 rounded-2xl bg-[#FFFEFB] border border-[#E8D8C3] flex items-center justify-between gap-3 text-left">
           {/* Mascot in Pouch graphic */}
           <div className="relative w-24 h-24 shrink-0 flex items-center justify-center">
-            {/* SVG cute Mầm mascot */}
             <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xs">
               {/* Spool */}
               <rect x="70" y="70" width="20" height="15" rx="3" fill="#D4AF85" />
@@ -744,11 +769,11 @@ export function ThankYouStoryCard({
               <text x="47" y="83" fontSize="4" textAnchor="middle" fill="#2D6338" fontWeight="bold">GIEO MƠ</text>
               {/* Mầm Body */}
               <circle cx="50" cy="38" r="24" fill="#BCE58E" stroke="#86B758" strokeWidth="1.5" />
-              {/* Sprout Ear */}
+              {/* Sprout Head Antenna */}
               <circle cx="45" cy="12" r="5" fill="#46883F" />
               <circle cx="55" cy="12" r="5" fill="#46883F" />
               <path d="M50,18 Q50,14 50,11" stroke="#2D6338" strokeWidth="1.5" fill="none" />
-              {/* Eyes */}
+              {/* Smiling Eyes */}
               <path d="M42,36 Q46,32 50,36" stroke="#1E3B1E" strokeWidth="1.5" fill="none" />
               <path d="M54,36 Q58,32 62,36" stroke="#1E3B1E" strokeWidth="1.5" fill="none" />
               {/* Cheeks */}
@@ -766,10 +791,10 @@ export function ThankYouStoryCard({
               Cùng lan tỏa mầm xanh! 💛
             </span>
             <span className="text-[10.5px] text-[#5C4D44] leading-tight block">
-              Quét mã để cùng <strong>{customerName}</strong> gieo thêm mầm xanh mới nhé! 🌱
+              Quét mã để cùng <strong>{customerName}</strong> gieo thêm những mầm xanh mới nhé! 🌱
             </span>
             <div className="inline-block mt-1 px-2.5 py-0.5 rounded-md bg-[#FFFBF2] border border-[#DCCDB8] text-[9.5px] text-[#4A3B32] font-serif italic -rotate-1">
-              Gom từng mảnh nhỏ, dệt thành giấc mơ 💛
+              Gom từng mảnh nhỏ, dệt thành ước mơ 💛
             </div>
           </div>
 

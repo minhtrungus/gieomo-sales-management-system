@@ -35,6 +35,8 @@ function OrderSuccessContent() {
   const [hasSubmittedProof, setHasSubmittedProof] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [proofImage, setProofImage] = useState<string | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [zoomedProof, setZoomedProof] = useState<string | null>(null);
 
   // Social Share Card states
@@ -48,7 +50,11 @@ function OrderSuccessContent() {
     return () => window.removeEventListener("gieomo_settings_updated", handleUpdate);
   }, []);
 
+  // Fetch order from DB and local cache on mount
   useEffect(() => {
+    if (!orderCode) return;
+
+    // 1. Check local cache first
     const orders = getStoredOrders();
     const found = orders.find((o) => o.order_code === orderCode || o.order_id === orderCode);
     if (found) {
@@ -63,7 +69,6 @@ function OrderSuccessContent() {
       }
     }
 
-    // Also restore cached confirmation state
     try {
       const localSubmitted = localStorage.getItem(`gieomo_proof_submitted_${orderCode}`) === "true";
       const localProof = localStorage.getItem(`gieomo_proof_${orderCode}`);
@@ -72,6 +77,26 @@ function OrderSuccessContent() {
     } catch {
       // ignore
     }
+
+    // 2. Fetch directly from server API (ensures cross-device sync on mobile/PC)
+    fetch(`/api/orders?code=${encodeURIComponent(orderCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
+          const dbOrder = data.orders[0];
+          setOrder((prev) => ({ ...(prev || {}), ...dbOrder }));
+          if (
+            dbOrder.payment_proof ||
+            dbOrder.payment_status === "paid" ||
+            dbOrder.internal_note?.includes("[Khách đã nộp ảnh biên lai CK") ||
+            dbOrder.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
+          ) {
+            setHasSubmittedProof(true);
+            if (dbOrder.payment_proof) setProofImage(dbOrder.payment_proof);
+          }
+        }
+      })
+      .catch((err) => console.warn("[OrderSuccess] Error fetching order from API:", err));
   }, [orderCode]);
 
   // isPaid is ONLY true if backend genuinely marked payment_status as "paid" or if COD
@@ -132,6 +157,7 @@ function OrderSuccessContent() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setProofFile(file);
     try {
       const compressed = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.8 });
       const reader = new FileReader();
@@ -149,15 +175,28 @@ function OrderSuccessContent() {
   };
 
   const handleConfirmPaymentSubmit = async () => {
+    setIsUploadingProof(true);
     setHasSubmittedProof(true);
     setIsConfirmModalOpen(false);
 
     if (orderCode) {
       try {
+        let uploadedUrl = proofImage;
+
+        // Try uploading to Supabase Storage if a real file is selected
+        if (proofFile) {
+          const { uploadAsset } = await import("@/lib/services/uploadService");
+          const uploadRes = await uploadAsset(proofFile, "content-media", `payment-proof-${orderCode}-${Date.now()}.jpg`);
+          if (uploadRes.success && uploadRes.url) {
+            uploadedUrl = uploadRes.url;
+            setProofImage(uploadedUrl);
+          }
+        }
+
         localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
-        if (proofImage) {
-          localStorage.setItem(`gieomo_proof_${orderCode}`, proofImage);
-          updateStoredPaymentProof(orderCode, proofImage);
+        if (uploadedUrl) {
+          localStorage.setItem(`gieomo_proof_${orderCode}`, uploadedUrl);
+          updateStoredPaymentProof(orderCode, uploadedUrl);
         }
 
         const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
@@ -165,19 +204,19 @@ function OrderSuccessContent() {
           prev
             ? {
                 ...prev,
-                payment_proof: proofImage || prev.payment_proof,
+                payment_proof: uploadedUrl || prev.payment_proof,
                 internal_note: note,
               }
             : prev
         );
 
-        // Send proof and note to server WITHOUT changing payment_status to paid (keeps pending)
+        // Send proof and note to server to persist across all devices
         const payload: any = {
           orderCode,
           internalNote: note,
         };
-        if (proofImage) {
-          payload.paymentProof = proofImage;
+        if (uploadedUrl) {
+          payload.paymentProof = uploadedUrl;
         }
         await fetch("/api/orders", {
           method: "PATCH",
@@ -186,6 +225,8 @@ function OrderSuccessContent() {
         });
       } catch (err) {
         console.warn("Error updating payment confirmation:", err);
+      } finally {
+        setIsUploadingProof(false);
       }
     }
   };

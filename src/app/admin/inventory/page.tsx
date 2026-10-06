@@ -307,10 +307,12 @@ export default function AdminInventoryPage() {
   // MODALS FOR INFLOW & TRANSFER
   // ==========================================
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkImportMode, setBulkImportMode] = useState<"single" | "batch_all">("single");
+  const [bulkBatchCondition, setBulkBatchCondition] = useState<"out_of_stock_only" | "add_to_all">("out_of_stock_only");
   const [importWarehouseId, setImportWarehouseId] = useState<string>("");
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.product_id || "");
   const [selectedVariantId, setSelectedVariantId] = useState(products[0]?.variants?.[0]?.variant_id || "");
-  const [importQty, setImportQty] = useState<number>(50);
+  const [importQty, setImportQty] = useState<number>(1);
   const [unitCost, setUnitCost] = useState<number>(35000);
   const [approvedBy, setApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
   const [sourceNote, setSourceNote] = useState("Xưởng may tình nguyện viên Mầm Mơ đợt 2");
@@ -481,24 +483,94 @@ export default function AdminInventoryPage() {
     setAdjustDelta(0);
   };
 
-  // Submit Bulk Inflow
+  // Submit Bulk / Batch Inflow
   const handleBulkImportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (importQty <= 0) return;
 
     const prod = products.find((p) => p.product_id === selectedProductId);
-    const variant = prod?.variants?.find((v) => v.variant_id === selectedVariantId);
-
-    if (!prod || !variant) return;
+    if (!prod) return;
 
     const targetWhId =
       importWarehouseId ||
       warehouses.find((w) => w.is_default)?.warehouse_id ||
-      warehouses[0]?.warehouse_id;
-    if (!targetWhId) return;
+      warehouses[0]?.warehouse_id ||
+      "wh-ufm";
 
     const targetWhObj = warehouses.find((w) => w.warehouse_id === targetWhId);
     const whName = targetWhObj ? targetWhObj.name : "KHO UFM";
+
+    const today = new Date();
+    const hours = String(today.getHours()).padStart(2, "0");
+    const minutes = String(today.getMinutes()).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const year = today.getFullYear();
+    const timeStr = `${hours}:${minutes} ${day}/${month}/${year}`;
+
+    if (bulkImportMode === "batch_all" && prod.variants && prod.variants.length > 0) {
+      // BATCH ALL VARIANTS MODE (e.g. 30 Pouch variants)
+      let totalRestockedCount = 0;
+      const updatedVariants = prod.variants.map((v) => {
+        const curStock = Number(v.stock ?? 0);
+        const shouldRestock = bulkBatchCondition === "add_to_all" || curStock === 0;
+
+        if (shouldRestock) {
+          const stocks = { ...(v.warehouse_stocks || {}) };
+          const curWhStock = Number(stocks[targetWhId] ?? (targetWhId === "wh-1" ? v.stock_warehouse_1 : targetWhId === "wh-2" ? v.stock_warehouse_2 : 0) ?? 0);
+          const addAmount = bulkBatchCondition === "out_of_stock_only" ? 1 : importQty;
+          const newWhStock = bulkBatchCondition === "out_of_stock_only" ? 1 : curWhStock + addAmount;
+          stocks[targetWhId] = newWhStock;
+          totalRestockedCount += addAmount;
+          return {
+            ...v,
+            warehouse_stocks: stocks,
+            stock: Object.values(stocks).reduce((sum, n) => sum + Number(n || 0), 0) || newWhStock,
+          };
+        }
+        return v;
+      });
+
+      const totalProdStock = updatedVariants.reduce((sum, vr) => sum + (Number(vr.stock) || 0), 0);
+      const updatedProd: ExtendedProduct = {
+        ...prod,
+        variants: updatedVariants,
+        stock: totalProdStock,
+      };
+
+      setProducts((prev) => prev.map((p) => (p.product_id === prod.product_id ? updatedProd : p)));
+      updateStoredProduct(updatedProd);
+
+      // Record Inflow Log for Batch Restock
+      const newLog: InflowLog = {
+        logId: `log-${Date.now()}`,
+        receiptCode: `PNK-${Math.floor(100000 + Math.random() * 900000)}`,
+        warehouseId: targetWhId,
+        warehouseName: whName,
+        productName: prod.name,
+        variantName: `Nhập hàng loạt (${totalRestockedCount} cái cho ${updatedVariants.length} mẫu)`,
+        quantityAdded: totalRestockedCount,
+        stockBefore: prod.stock ?? 0,
+        stockAfter: totalProdStock,
+        unitCost,
+        approvedBy,
+        sourceNote: sourceNote || "Nhập hàng loạt thành phẩm độc bản",
+        createdAt: timeStr,
+      };
+
+      const updatedInflows = [newLog, ...inflowLogs];
+      setInflowLogs(updatedInflows);
+      saveStoredInflowLogs(updatedInflows);
+      setIsBulkImportOpen(false);
+      setMainTab("logs");
+      setActiveLogTab("inflow");
+      return;
+    }
+
+    // SINGLE VARIANT MODE
+    const variant = prod.variants?.find((v) => v.variant_id === selectedVariantId);
+    if (!variant) return;
+
     const currentWhStock = Number(
       variant.warehouse_stocks?.[targetWhId] ??
         (targetWhId === "wh-1" || targetWhId === "wh-ufm"
@@ -513,15 +585,6 @@ export default function AdminInventoryPage() {
 
     // Update specific warehouse stock
     handleStockUpdate(selectedProductId, selectedVariantId, targetWhId, importQty);
-
-    // Record Inflow Log
-    const today = new Date();
-    const hours = String(today.getHours()).padStart(2, "0");
-    const minutes = String(today.getMinutes()).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const year = today.getFullYear();
-    const timeStr = `${hours}:${minutes} ${day}/${month}/${year}`;
 
     const newLog: InflowLog = {
       logId: `log-${Date.now()}`,
@@ -2666,6 +2729,67 @@ export default function AdminInventoryPage() {
                 </select>
               </div>
 
+              {/* Mode Toggle: Nhập lẻ 1 mẫu vs Nhập hàng loạt toàn bộ mẫu */}
+              <div className="p-3 rounded-2xl bg-cream/70 border border-[#F0E5D8] space-y-2">
+                <label className="font-bold text-[#342A24] block text-[11px] uppercase tracking-wider">
+                  Chế độ nhập kho:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkImportMode("single")}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      bulkImportMode === "single"
+                        ? "bg-[#16381D] text-white shadow-xs"
+                        : "bg-white text-gray-700 hover:bg-gray-50 border border-[#F0E5D8]"
+                    }`}
+                  >
+                    <span>🎯 Nhập 1 phân loại</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkImportMode("batch_all")}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      bulkImportMode === "batch_all"
+                        ? "bg-emerald-800 text-white shadow-xs"
+                        : "bg-white text-emerald-900 hover:bg-emerald-50 border border-emerald-300"
+                    }`}
+                  >
+                    <span>⚡ Nhập hàng loạt tất cả mẫu</span>
+                  </button>
+                </div>
+
+                {bulkImportMode === "batch_all" && (
+                  <div className="pt-2 border-t border-[#F0E5D8] space-y-2 text-[11.5px]">
+                    <span className="font-bold text-emerald-950 block">
+                      ⚡ Quy tắc nhập nhanh cho {selectedProductVariants.length} mẫu của sản phẩm:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-emerald-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="batchCond"
+                          checked={bulkBatchCondition === "out_of_stock_only"}
+                          onChange={() => setBulkBatchCondition("out_of_stock_only")}
+                          className="accent-emerald-700"
+                        />
+                        <span className="text-gray-800 font-medium">Bù kho mẫu hết hàng (=0 ➔ 1)</span>
+                      </label>
+                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-emerald-200 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="batchCond"
+                          checked={bulkBatchCondition === "add_to_all"}
+                          onChange={() => setBulkBatchCondition("add_to_all")}
+                          className="accent-emerald-700"
+                        />
+                        <span className="text-gray-800 font-medium">Cộng thêm (+N) cho tất cả mẫu</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="font-bold text-[#342A24] block">Sản phẩm nhập *</label>
@@ -2682,37 +2806,51 @@ export default function AdminInventoryPage() {
                   >
                     {products.map((p) => (
                       <option key={p.product_id} value={p.product_id}>
-                        {p.name}
+                        {p.name} ({p.variants?.length || 0} mẫu)
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Phân loại (Variant) *</label>
-                  <select
-                    value={selectedVariantId}
-                    onChange={(e) => setSelectedVariantId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
-                  >
-                    {selectedProductVariants.map((v) => (
-                      <option key={v.variant_id} value={v.variant_id}>
-                        {v.name} (Tồn hiện tại: {v.stock})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {bulkImportMode === "single" ? (
+                  <div className="space-y-1">
+                    <label className="font-bold text-[#342A24] block">Phân loại (Variant) *</label>
+                    <select
+                      value={selectedVariantId}
+                      onChange={(e) => setSelectedVariantId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
+                    >
+                      {selectedProductVariants.map((v) => (
+                        <option key={v.variant_id} value={v.variant_id}>
+                          {v.name} (Tồn hiện tại: {v.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="font-bold text-emerald-900 block">Số lượng phân loại áp dụng</label>
+                    <div className="w-full px-3.5 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 text-emerald-950 font-bold text-xs">
+                      Áp dụng cho toàn bộ {selectedProductVariants.length} mẫu
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-[#342A24] block">Số lượng nhập thêm *</label>
+                  <label className="font-bold text-[#342A24] block">
+                    {bulkImportMode === "batch_all" && bulkBatchCondition === "out_of_stock_only"
+                      ? "Số lượng nạp mỗi mẫu hết hàng"
+                      : "Số lượng nhập thêm *"}
+                  </label>
                   <input
                     type="number"
                     min={1}
                     value={importQty}
                     onChange={(e) => setImportQty(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
+                    disabled={bulkImportMode === "batch_all" && bulkBatchCondition === "out_of_stock_only"}
+                    className="w-full px-3.5 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold disabled:bg-gray-100 disabled:text-gray-500"
                   />
                 </div>
 
