@@ -29,12 +29,53 @@ function OrderSuccessContent() {
   const paymentMethod = searchParams.get("payment") || "banking";
   const urlAmount = Number(searchParams.get("amount") || "110000");
 
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
-  const [order, setOrder] = useState<Order | null>(null);
+  const [settings, setSettings] = useState<SiteSettings>(() => {
+    return typeof window !== "undefined" ? getStoredSettings() : DEFAULT_SETTINGS;
+  });
+
+  const [order, setOrder] = useState<Order | null>(() => {
+    if (typeof window === "undefined" || !orderCode) return null;
+    try {
+      const orders = getStoredOrders();
+      return orders.find((o) => o.order_code === orderCode || o.order_id === orderCode) || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
-  const [hasSubmittedProof, setHasSubmittedProof] = useState(false);
+  
+  const [hasSubmittedProof, setHasSubmittedProof] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !orderCode) return false;
+    try {
+      const localSubmitted = localStorage.getItem(`gieomo_proof_submitted_${orderCode}`) === "true";
+      const orders = getStoredOrders();
+      const found = orders.find((o) => o.order_code === orderCode || o.order_id === orderCode);
+      return (
+        localSubmitted ||
+        Boolean(found?.payment_proof) ||
+        Boolean(found?.internal_note?.includes("[Khách đã nộp ảnh biên lai CK"))
+      );
+    } catch {
+      return false;
+    }
+  });
+
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [proofImage, setProofImage] = useState<string | null>(null);
+  
+  const [proofImage, setProofImage] = useState<string | null>(() => {
+    if (typeof window === "undefined" || !orderCode) return null;
+    try {
+      const localProof = localStorage.getItem(`gieomo_proof_${orderCode}`);
+      if (localProof) return localProof;
+      const orders = getStoredOrders();
+      const found = orders.find((o) => o.order_code === orderCode || o.order_id === orderCode);
+      return found?.payment_proof || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [zoomedProof, setZoomedProof] = useState<string | null>(null);
@@ -55,31 +96,7 @@ function OrderSuccessContent() {
   useEffect(() => {
     if (!orderCode) return;
 
-    // 1. Check local cache first
-    const orders = getStoredOrders();
-    const found = orders.find((o) => o.order_code === orderCode || o.order_id === orderCode);
-    if (found) {
-      setOrder(found);
-      if (
-        found.payment_proof ||
-        found.internal_note?.includes("[Khách đã nộp ảnh biên lai CK") ||
-        found.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
-      ) {
-        setHasSubmittedProof(true);
-        if (found.payment_proof) setProofImage(found.payment_proof);
-      }
-    }
-
-    try {
-      const localSubmitted = localStorage.getItem(`gieomo_proof_submitted_${orderCode}`) === "true";
-      const localProof = localStorage.getItem(`gieomo_proof_${orderCode}`);
-      if (localSubmitted) setHasSubmittedProof(true);
-      if (localProof && !proofImage) setProofImage(localProof);
-    } catch {
-      // ignore
-    }
-
-    // 2. Fetch directly from server API (ensures cross-device sync on mobile/PC)
+    // Fetch directly from server API (ensures cross-device sync on mobile/PC)
     fetch(`/api/orders?code=${encodeURIComponent(orderCode)}`)
       .then((r) => r.json())
       .then((data) => {
@@ -242,21 +259,21 @@ function OrderSuccessContent() {
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-center">
       {/* Status Header with stable min-height to prevent CLS */}
-      <div className="min-h-[160px] flex flex-col items-center justify-center space-y-2">
+      <div className="min-h-[220px] flex flex-col items-center justify-center space-y-2">
       {paymentMethod === "banking" && !isPaid ? (
         hasSubmittedProof ? (
           <>
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
               🧾
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 text-center">
               <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap border border-amber-300">
                 ⏳ ĐÃ NỘP BIÊN LAI — CHỜ BTC ĐỐI SOÁT
               </div>
-              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
+              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
                 Đã tiếp nhận biên lai chuyển khoản!
               </h1>
-              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
+              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
                 BTC Mầm Mơ đang kiểm tra đối soát với tài khoản ngân hàng. Đơn hàng sẽ tự động cập nhật ngay khi tài khoản nhận được tiền!
               </p>
             </div>
@@ -266,14 +283,14 @@ function OrderSuccessContent() {
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
               💳
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 text-center">
               <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-extrabold mb-1 whitespace-nowrap">
                 ⏳ ĐANG CHỜ CHUYỂN KHOẢN VIETQR
               </div>
-              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
+              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
                 Đơn hàng đang chờ thanh toán
               </h1>
-              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto text-balance">
+              <p className="text-gray-600 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
                 Vui lòng quét mã VietQR bên dưới để hoàn tất giao dịch. Sau khi nhận được chuyển khoản, hệ thống sẽ tự động xác nhận đặt hàng thành công!
               </p>
             </div>
@@ -284,14 +301,14 @@ function OrderSuccessContent() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
             🎉
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 text-center">
             <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1 whitespace-nowrap border border-[#A5D6A7]">
               ✓ ĐÃ XÁC NHẬN THANH TOÁN
             </div>
-            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950 text-balance">
+            <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
               Đặt hàng thành công!
             </h1>
-            <p className="text-gray-600 text-sm sm:text-base text-balance">
+            <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
               Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!
             </p>
           </div>
@@ -727,13 +744,45 @@ function OrderSuccessContent() {
   );
 }
 
+function OrderSuccessSkeleton() {
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 text-center animate-pulse">
+      <div className="min-h-[220px] flex flex-col items-center justify-center space-y-3">
+        <div className="w-20 h-20 rounded-3xl bg-amber-100/70" />
+        <div className="w-48 h-6 rounded-full bg-amber-100/60" />
+        <div className="w-72 h-8 rounded-2xl bg-gray-200" />
+        <div className="w-96 max-w-full h-4 rounded-lg bg-gray-100" />
+      </div>
+
+      <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs text-left space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-gray-100 gap-2">
+          <div className="space-y-1">
+            <div className="w-32 h-3 bg-gray-100 rounded" />
+            <div className="w-40 h-8 bg-gray-200 rounded-lg" />
+          </div>
+          <div className="space-y-1 sm:text-right">
+            <div className="w-32 h-3 bg-gray-100 rounded" />
+            <div className="w-32 h-8 bg-gray-200 rounded-lg" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#FFFDF9] border border-[#F0E5D8] h-32 bg-gray-50/50" />
+
+        <div className="p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] flex flex-col items-center justify-center space-y-3">
+          <div className="w-56 sm:w-64 h-56 sm:h-64 rounded-xl bg-gray-100 aspect-square" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OrderSuccessPage() {
   return (
     <div className="min-h-screen flex flex-col bg-cream/60">
       <Navbar />
 
       <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl py-12 md:py-16">
-        <Suspense fallback={<div className="text-center py-12">Đang tải thông tin đơn hàng...</div>}>
+        <Suspense fallback={<OrderSuccessSkeleton />}>
           <OrderSuccessContent />
         </Suspense>
       </main>
