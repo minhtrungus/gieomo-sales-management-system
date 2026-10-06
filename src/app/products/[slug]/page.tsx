@@ -115,9 +115,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const product = await getProductBySlugServer(slug);
+  const decodedSlug = decodeURIComponent(slug);
 
+  // Single roundtrip to fetch all active products
   const allProducts = await getProductsServer(false);
+  let product = allProducts.find(
+    (p) =>
+      p.slug === slug ||
+      p.slug === decodedSlug ||
+      p.product_id === slug ||
+      p.product_id === decodedSlug
+  );
+
+  // Fallback if product is a draft or unlisted
+  if (!product) {
+    product = (await getProductBySlugServer(slug)) ?? undefined;
+  }
+
   const relatedProducts = allProducts
     .filter((p) => p.status === "active" && (!product || p.product_id !== product.product_id))
     .slice(0, 3);

@@ -161,23 +161,16 @@ function OrderSuccessContent() {
     setProofFile(file);
     try {
       const compressed = await compressImage(file, { maxWidth: 900, maxHeight: 900, quality: 0.7 });
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const res = event.target?.result as string;
-        startTransition(() => {
-          setProofImage(res);
-        });
-      };
-      reader.readAsDataURL(compressed);
+      setProofFile(compressed);
+      const previewUrl = URL.createObjectURL(compressed);
+      startTransition(() => {
+        setProofImage(previewUrl);
+      });
     } catch {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const res = event.target?.result as string;
-        startTransition(() => {
-          setProofImage(res);
-        });
-      };
-      reader.readAsDataURL(file);
+      const previewUrl = URL.createObjectURL(file);
+      startTransition(() => {
+        setProofImage(previewUrl);
+      });
     }
   };
 

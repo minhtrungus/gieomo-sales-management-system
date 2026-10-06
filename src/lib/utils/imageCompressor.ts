@@ -33,86 +33,123 @@ export async function compressImage(
   const maxWidth = options.maxWidth || 1600;
   const maxHeight = options.maxHeight || 1600;
   const quality = options.quality ?? 0.85;
+  const preferredType = options.targetFormat || "image/webp";
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
+  // Fast path: use browser-native asynchronous createImageBitmap (off-main-thread decode)
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file);
+      let { width, height } = bitmap;
 
-    reader.onload = (e) => {
-      const img = new window.Image();
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
 
-      img.onload = () => {
-        try {
-          let { width, height } = img;
-
-          // Calculate scaled dimensions while preserving aspect ratio
-          if (width > maxWidth || height > maxHeight) {
-            const ratio = Math.min(maxWidth / width, maxHeight / height);
-            width = Math.round(width * ratio);
-            height = Math.round(height * ratio);
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-
-          const ctx = canvas.getContext("2d", { alpha: true });
-          if (!ctx) {
-            resolve(file); // Fallback to original
-            return;
-          }
-
-          // Use high quality image smoothing
+      // Check OffscreenCanvas support for zero main-thread impact
+      if (typeof OffscreenCanvas !== "undefined") {
+        const offCanvas = new OffscreenCanvas(width, height);
+        const ctx = offCanvas.getContext("2d");
+        if (ctx) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
-          ctx.drawImage(img, 0, 0, width, height);
+          ctx.drawImage(bitmap, 0, 0, width, height);
+          bitmap.close();
 
-          // Determine preferred MIME type: prefer webp if supported, otherwise jpeg
-          const preferredType = options.targetFormat || "image/webp";
-
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                resolve(file); // Fallback
-                return;
-              }
-
-              // If compressed blob is somehow larger than original, return original
-              if (blob.size >= file.size) {
-                resolve(file);
-                return;
-              }
-
-              // Determine extension
-              const ext = preferredType === "image/webp" ? "webp" : "jpg";
-              const cleanBaseName = file.name.replace(/\.[^/.]+$/, "");
-              const compressedFile = new File([blob], `${cleanBaseName}.${ext}`, {
-                type: preferredType,
-                lastModified: Date.now(),
-              });
-
-              resolve(compressedFile);
-            },
-            preferredType,
-            quality
-          );
-        } catch (err) {
-          console.warn("[compressImage] Compression failed, using original file:", err);
-          resolve(file);
+          const blob = await offCanvas.convertToBlob({ type: preferredType, quality });
+          if (blob && blob.size < file.size) {
+            const ext = preferredType === "image/webp" ? "webp" : "jpg";
+            const cleanBaseName = file.name.replace(/\.[^/.]+$/, "");
+            return new File([blob], `${cleanBaseName}.${ext}`, {
+              type: preferredType,
+              lastModified: Date.now(),
+            });
+          }
         }
-      };
+      }
 
-      img.onerror = () => {
-        resolve(file); // Fallback
-      };
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { alpha: true });
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close();
 
-      img.src = e.target?.result as string;
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, preferredType, quality));
+        if (blob && blob.size < file.size) {
+          const ext = preferredType === "image/webp" ? "webp" : "jpg";
+          const cleanBaseName = file.name.replace(/\.[^/.]+$/, "");
+          return new File([blob], `${cleanBaseName}.${ext}`, {
+            type: preferredType,
+            lastModified: Date.now(),
+          });
+        }
+      }
+    } catch {
+      // Fallback to Image element with object URL
+    }
+  }
+
+  // Fallback: Use ObjectURL (much faster and lighter than FileReader base64)
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new window.Image();
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        let { width, height } = img;
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { alpha: true });
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+              return;
+            }
+            const ext = preferredType === "image/webp" ? "webp" : "jpg";
+            const cleanBaseName = file.name.replace(/\.[^/.]+$/, "");
+            resolve(new File([blob], `${cleanBaseName}.${ext}`, {
+              type: preferredType,
+              lastModified: Date.now(),
+            }));
+          },
+          preferredType,
+          quality
+        );
+      } catch {
+        resolve(file);
+      }
     };
 
-    reader.onerror = () => {
-      resolve(file); // Fallback
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
     };
 
-    reader.readAsDataURL(file);
+    img.src = objectUrl;
   });
 }
 

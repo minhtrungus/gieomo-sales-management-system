@@ -87,25 +87,28 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  // Sync with server on mount, when orders/messages update, and window focus
+  // Sync with server on mount, when orders/messages update, and window focus (debounced to avoid re-render cascades)
   useEffect(() => {
     refreshNotifications();
 
-    const handleEvent = () => {
-      refreshNotifications();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleDebouncedEvent = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        refreshNotifications();
+      }, 1000);
     };
 
-    window.addEventListener("gieomo_orders_updated", handleEvent);
-    window.addEventListener("gieomo_messages_updated", handleEvent);
-    window.addEventListener("focus", handleEvent);
+    window.addEventListener("gieomo_orders_updated", handleDebouncedEvent);
+    window.addEventListener("gieomo_messages_updated", handleDebouncedEvent);
 
-    // Periodic poll every 45s while admin is active
-    const timer = setInterval(refreshNotifications, 45000);
+    // Periodic poll every 60s while admin is active
+    const timer = setInterval(refreshNotifications, 60000);
 
     return () => {
-      window.removeEventListener("gieomo_orders_updated", handleEvent);
-      window.removeEventListener("gieomo_messages_updated", handleEvent);
-      window.removeEventListener("focus", handleEvent);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      window.removeEventListener("gieomo_orders_updated", handleDebouncedEvent);
+      window.removeEventListener("gieomo_messages_updated", handleDebouncedEvent);
       clearInterval(timer);
     };
   }, [refreshNotifications]);

@@ -60,7 +60,7 @@ export async function GET() {
     const deletedSet = new Set(state.deletedIds);
 
     // 2. Fetch live data concurrently from Supabase
-    const [ordersRes, messagesRes, variantsRes] = await Promise.all([
+    const [ordersRes, messagesRes, productsRes] = await Promise.all([
       supabase
         .from("orders")
         .select("order_id, order_code, receiver_name, final_amount, order_status, payment_status, created_at")
@@ -72,11 +72,10 @@ export async function GET() {
         .order("created_at", { ascending: false })
         .limit(20),
       supabase
-        .from("product_variants")
-        .select("variant_id, name, sku, stock, product_id, products(name)")
-        .lte("stock", 10)
-        .gt("stock", 0)
-        .limit(10),
+        .from("products")
+        .select("product_id, name, status, product_variants(stock)")
+        .eq("status", "active")
+        .limit(30),
     ]);
 
     const notifications: NotificationItem[] = [];
@@ -141,29 +140,34 @@ export async function GET() {
       }
     }
 
-    // Map Low Stock Alerts
-    if (variantsRes.data && Array.isArray(variantsRes.data)) {
-      for (const v of variantsRes.data) {
-        const id = `stock-${v.variant_id}`;
-        if (deletedSet.has(id)) continue;
+    // Map Stock Alerts (Only alert if the ENTIRE product has 0 stock across all variants)
+    if (productsRes.data && Array.isArray(productsRes.data)) {
+      for (const prod of productsRes.data) {
+        const variants = (prod as any).product_variants || [];
+        const totalStock = variants.reduce((sum: number, v: any) => sum + (Number(v.stock) || 0), 0);
 
-        const prodName = (v.products as any)?.name || "Sản phẩm";
-        const isRead = readSet.has(id);
+        // Only notify if product has variants and total stock is 0
+        if (variants.length > 0 && totalStock <= 0) {
+          const id = `stock-prod-${prod.product_id}`;
+          if (deletedSet.has(id)) continue;
 
-        notifications.push({
-          id,
-          type: "stock" as NotificationType,
-          title: `Sắp hết hàng: ${prodName}`,
-          desc: `Biến thể "${v.name}" chỉ còn ${v.stock} sản phẩm trong kho!`,
-          created_at: new Date().toISOString(),
-          read: isRead,
-          starred: starredSet.has(id),
-          link: `/admin/inventory`,
-          meta: {
-            product_name: prodName,
-            stock: v.stock,
-          },
-        });
+          const isRead = readSet.has(id);
+
+          notifications.push({
+            id,
+            type: "stock" as NotificationType,
+            title: `Hết hàng: ${prod.name}`,
+            desc: `Sản phẩm "${prod.name}" đã hết sạch toàn bộ tồn kho. Vui lòng nhập thêm hàng!`,
+            created_at: new Date().toISOString(),
+            read: isRead,
+            starred: starredSet.has(id),
+            link: `/admin/inventory`,
+            meta: {
+              product_name: prod.name,
+              stock: 0,
+            },
+          });
+        }
       }
     }
 

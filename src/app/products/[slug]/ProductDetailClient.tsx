@@ -69,9 +69,9 @@ export function ProductDetailClient({
           p.slug === decodedSlug ||
           p.product_id === slug ||
           p.product_id === decodedSlug
-      );
+      ) || initialProduct;
 
-      // If not in localStorage, fetch from API
+      // If not in localStorage or initialProduct, fallback to API
       if (!found) {
         try {
           const res = await fetch("/api/products?includeDrafts=true");
