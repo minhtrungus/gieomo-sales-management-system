@@ -39,7 +39,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
           category_id, name, slug, description, image_url, status, sort_order, created_at
         ),
         product_variants!product_id (
-          variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at
+          variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, image_url, status, sort_order, created_at, updated_at
         ),
         product_media!product_id (
           media_id, url, sort_order, alt_text
@@ -197,7 +197,7 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
             category_id, name, slug, description, image_url, status, sort_order, created_at
           ),
           product_variants!product_id (
-            variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, status, sort_order, created_at, updated_at
+            variant_id, product_id, sku, name, price, compare_at_price, cost_price, stock, weight_gram, image_url, status, sort_order, created_at, updated_at
           ),
           product_media!product_id (
             media_id, url, sort_order, alt_text
@@ -441,6 +441,7 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
           cost_price: v.cost_price || null,
           stock: v.stock || 0,
           weight_gram: v.weight_gram || 100,
+          image_url: v.image_url || (v as any).imageUrl || null,
           status: v.status || "active",
           sort_order: v.sort_order || i + 1,
           updated_at: new Date().toISOString(),

@@ -125,14 +125,19 @@ export default function SaleProductsPage() {
                       Phân loại ({p.variants.length})
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {p.variants.map((v) => (
+                      {p.variants.slice(0, 6).map((v) => (
                         <span
                           key={v.variant_id}
                           className="text-[11px] bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg text-gray-700 font-medium"
                         >
-                          {v.name} ({(v.price ?? p.price).toLocaleString("vi-VN")}đ)
+                          {v.name}
                         </span>
                       ))}
+                      {p.variants.length > 6 && (
+                        <span className="text-[11px] bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-lg font-bold">
+                          +{p.variants.length - 6} mẫu khác
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}

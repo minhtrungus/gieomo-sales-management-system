@@ -552,11 +552,14 @@ function SaleCreateOrderForm() {
                         value={item.variantId || ""}
                         onChange={(e) => handleVariantChange(idx, e.target.value)}
                       >
-                        {prod?.variants?.map((v) => (
-                          <option key={v.variant_id} value={v.variant_id}>
-                            {v.name} (Tồn: {v.stock ?? 0})
-                          </option>
-                        ))}
+                        {prod?.variants?.map((v) => {
+                          const isOutOfStock = (v.stock ?? 0) <= 0;
+                          return (
+                            <option key={v.variant_id} value={v.variant_id} disabled={isOutOfStock}>
+                              {v.name} {isOutOfStock ? "— [Đã hết hàng / Đã bán]" : `(Tồn: ${v.stock})`}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   )}
