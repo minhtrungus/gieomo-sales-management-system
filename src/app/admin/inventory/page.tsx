@@ -43,6 +43,10 @@ import {
   History,
   Eye,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 
 export default function AdminInventoryPage() {
@@ -211,6 +215,25 @@ export default function AdminInventoryPage() {
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>("all");
   const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all");
   const [activeLogTab, setActiveLogTab] = useState<"inflow" | "transfer">("inflow");
+  const [viewGrouping, setViewGrouping] = useState<"grouped" | "flattened">("grouped");
+  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set());
+
+  const toggleExpandProduct = (pId: string) => {
+    setExpandedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pId)) next.delete(pId);
+      else next.add(pId);
+      return next;
+    });
+  };
+
+  // Batch Restock modal for one-of-a-kind / numbered products
+  const [isBatchRestockOpen, setIsBatchRestockOpen] = useState(false);
+  const [batchRestockProductId, setBatchRestockProductId] = useState<string>("");
+  const [batchRestockWarehouseId, setBatchRestockWarehouseId] = useState<string>("");
+  const [batchRestockApprovedBy, setBatchRestockApprovedBy] = useState<string>("Trúc Hân");
+  const [batchRestockNote, setBatchRestockNote] = useState<string>("Nhập đợt mới - Bổ sung mẫu độc bản");
+  const [batchRestockMode, setBatchRestockMode] = useState<"out_of_stock_only" | "all">("out_of_stock_only");
 
   // ==========================================
   // WAREHOUSE CRUD STATE & HANDLERS
@@ -524,6 +547,83 @@ export default function AdminInventoryPage() {
     setActiveLogTab("inflow");
   };
 
+  // Submit Batch Inflow for One-of-a-kind / Numbered products
+  const handleBatchRestockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!batchRestockProductId) return;
+
+    const prod = products.find((p) => p.product_id === batchRestockProductId);
+    if (!prod || !prod.variants || prod.variants.length === 0) return;
+
+    const targetWhId =
+      batchRestockWarehouseId ||
+      warehouses.find((w) => w.is_default)?.warehouse_id ||
+      warehouses[0]?.warehouse_id ||
+      "wh-ufm";
+
+    const targetWhObj = warehouses.find((w) => w.warehouse_id === targetWhId);
+    const whName = targetWhObj ? targetWhObj.name : "Kho hàng";
+
+    let totalRestockedCount = 0;
+
+    const updatedVariants = prod.variants.map((v) => {
+      const curStock = Number(v.stock ?? 0);
+      const shouldRestock = batchRestockMode === "all" || curStock === 0;
+
+      if (shouldRestock) {
+        const stocks = { ...(v.warehouse_stocks || {}) };
+        stocks[targetWhId] = 1;
+        totalRestockedCount += 1;
+        return {
+          ...v,
+          warehouse_stocks: stocks,
+          stock: 1,
+        };
+      }
+      return v;
+    });
+
+    const totalProdStock = updatedVariants.reduce((sum, vr) => sum + (Number(vr.stock) || 0), 0);
+    const updatedProd: ExtendedProduct = {
+      ...prod,
+      variants: updatedVariants,
+      stock: totalProdStock,
+    };
+
+    updateStoredProduct(updatedProd);
+
+    // Record Inflow Log with official receipt code
+    const today = new Date();
+    const hours = String(today.getHours()).padStart(2, "0");
+    const minutes = String(today.getMinutes()).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const year = today.getFullYear();
+    const timeStr = `${hours}:${minutes} ${day}/${month}/${year}`;
+
+    const newLog: InflowLog = {
+      logId: `batch-inflow-${Date.now()}`,
+      receiptCode: `PNK-${Math.floor(100000 + Math.random() * 900000)}`,
+      warehouseId: targetWhId,
+      warehouseName: whName,
+      productName: prod.name,
+      variantName: `Nạp đợt mới (${totalRestockedCount} mẫu)`,
+      quantityAdded: totalRestockedCount,
+      stockBefore: prod.stock || 0,
+      stockAfter: totalProdStock,
+      unitCost: prod.cost_price || 0,
+      approvedBy: batchRestockApprovedBy || "Ban quản trị",
+      sourceNote: batchRestockNote || `Nhập đợt mới - Bổ sung mẫu độc bản (${batchRestockMode === "all" ? "Tất cả mẫu" : "Chỉ mẫu đã hết"})`,
+      createdAt: timeStr,
+    };
+
+    const updatedInflows = [newLog, ...inflowLogs];
+    setInflowLogs(updatedInflows);
+    saveStoredInflowLogs(updatedInflows);
+
+    setIsBatchRestockOpen(false);
+  };
+
   // Submit Inter-Warehouse Transfer
   const handleTransferSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -750,6 +850,45 @@ export default function AdminInventoryPage() {
       return true;
     });
   }, [allInventoryRows, selectedWarehouseFilter, stockAvailabilityFilter]);
+
+  // Grouped rows by Product for clean overview (especially products with 50-100 variants)
+  const groupedInventory = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        productId: string;
+        productName: string;
+        thumbnail?: string;
+        variants: typeof inventoryRows;
+        stockTotal: number;
+        stocks: Record<string, number>;
+        isNumberedBatch: boolean;
+      }
+    >();
+
+    for (const row of inventoryRows) {
+      const prod = products.find((p) => p.product_id === row.productId);
+      if (!map.has(row.productId)) {
+        map.set(row.productId, {
+          productId: row.productId,
+          productName: row.productName,
+          thumbnail: prod?.thumbnail || prod?.images?.[0] || "",
+          variants: [],
+          stockTotal: 0,
+          stocks: {},
+          isNumberedBatch: (prod?.variants?.length || 0) > 4,
+        });
+      }
+      const grp = map.get(row.productId)!;
+      grp.variants.push(row);
+      grp.stockTotal += row.stockTotal;
+      for (const [whId, s] of Object.entries(row.stocks)) {
+        grp.stocks[whId] = (grp.stocks[whId] || 0) + s;
+      }
+    }
+
+    return Array.from(map.values());
+  }, [inventoryRows, products]);
 
   const selectedWarehouseObj = useMemo(() => {
     return warehouses.find((w) => w.warehouse_id === selectedWarehouseFilter) || null;
@@ -1058,243 +1197,503 @@ export default function AdminInventoryPage() {
 
           {/* Inventory Table */}
           <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden space-y-2">
-            <div className="p-4 border-b border-[#F0E5D8] bg-[#FFF8EE] flex items-center justify-between">
+            {/* Header & View Mode Switcher */}
+            <div className="p-3 sm:p-4 border-b border-[#F0E5D8] bg-[#FFF8EE] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-base">📦</span>
-                <h2 className="font-heading font-extrabold text-sm text-[#231B16]">
-                  {selectedWarehouseFilter === "all"
-                    ? `Bảng kiểm kê tồn kho theo phân loại (${inventoryRows.length} mục)`
-                    : `Kiểm kê tồn kho tại ${selectedWarehouseObj?.name || selectedWarehouseFilter} (${inventoryRows.length} mục)`}
-                </h2>
+                <div>
+                  <h2 className="font-heading font-extrabold text-sm text-[#231B16]">
+                    {selectedWarehouseFilter === "all"
+                      ? `Kiểm kê tồn kho (${viewGrouping === "grouped" ? `${groupedInventory.length} sản phẩm` : `${inventoryRows.length} phân loại`})`
+                      : `Kiểm kê tồn kho tại ${selectedWarehouseObj?.name || selectedWarehouseFilter}`}
+                  </h2>
+                  <p className="text-[11px] text-[#7E7068]">
+                    {viewGrouping === "grouped"
+                      ? "Hiển thị gọn gàng theo từng sản phẩm, bấm mở rộng để xem chi tiết từng mẫu độc bản."
+                      : "Hiển thị danh sách phẳng từng phân loại & mã SKU."}
+                  </p>
+                </div>
+              </div>
+
+              {/* View Switcher */}
+              <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-[#F0E5D8] shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setViewGrouping("grouped")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewGrouping === "grouped"
+                      ? "bg-[#2D6338] text-white shadow-2xs"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Gộp theo sản phẩm ({groupedInventory.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewGrouping("flattened")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewGrouping === "flattened"
+                      ? "bg-[#2D6338] text-white shadow-2xs"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <span>Bảng chi tiết ({inventoryRows.length})</span>
+                </button>
               </div>
             </div>
 
-            {/* MOBILE CARD VIEW (< sm) */}
-            <div className="block sm:hidden p-3 space-y-3">
-              {inventoryRows.length === 0 ? (
-                <div className="py-8 text-center text-gray-500 text-xs">
-                  {selectedWarehouseFilter !== "all"
-                    ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
-                    : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
-                </div>
-              ) : (
-                inventoryRows.map((row) => (
-                  <div
-                    key={row.variantId}
-                    className="bg-[#FFFDF9] rounded-2xl p-3.5 border border-[#F0E5D8] shadow-2xs space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#F0E5D8]">
-                      <div>
-                        <span className="font-bold text-[#342A24] text-xs block">{row.productName}</span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
-                          <span className="text-gray-300">•</span>
-                          <span className="font-mono text-[10px] text-gray-500 font-bold">{row.sku}</span>
-                        </div>
-                      </div>
+            {/* ========================================================
+                VIEW MODE 1: GROUPED BY PRODUCT (DEFAULT)
+                ======================================================== */}
+            {viewGrouping === "grouped" ? (
+              <div className="divide-y divide-[#F0E5D8]">
+                {groupedInventory.length === 0 ? (
+                  <div className="py-12 text-center text-gray-500 text-xs">
+                    Không tìm thấy sản phẩm nào phù hợp với bộ lọc.
+                  </div>
+                ) : (
+                  groupedInventory.map((grp) => {
+                    const isExpanded = expandedProductIds.has(grp.productId);
+                    const isSingle = grp.variants.length <= 1;
 
-                      {row.stockTotal === 0 ? (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px] shrink-0">
-                          Hết hàng
-                        </span>
-                      ) : row.stockTotal < 20 ? (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px] shrink-0">
-                          Sắp hết ({row.stockTotal})
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10px] shrink-0">
-                          Đủ hàng ({row.stockTotal})
-                        </span>
-                      )}
-                    </div>
+                    return (
+                      <div key={grp.productId} className="hover:bg-[#FFFDF9]/60 transition-colors">
+                        {/* Main Product Row */}
+                        <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          {/* Product Info & Thumb */}
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {!isSingle && (
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandProduct(grp.productId)}
+                                className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
+                                  isExpanded
+                                    ? "bg-[#2D6338] text-white border-[#2D6338]"
+                                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                                }`}
+                                title={isExpanded ? "Thu gọn danh sách mẫu" : "Xem danh sách các mẫu"}
+                              >
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                            )}
 
-                    {/* Stock by Warehouse breakdown */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block">
-                        Tồn kho theo từng kho:
-                      </span>
-                      <div className="grid grid-cols-1 gap-1.5">
-                        {displayedWarehouses.map((wh) => {
-                          const curStock = row.stocks[wh.warehouse_id] ?? 0;
-                          return (
-                            <div
-                              key={wh.warehouse_id}
-                              className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#F0E5D8]"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-gray-700 text-[11px]">{wh.name}</span>
-                                {wh.is_default && (
-                                  <span className="text-emerald-700 font-bold text-[9px] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                    Kho chính
-                                  </span>
-                                )}
+                            {grp.thumbnail ? (
+                              <img
+                                src={grp.thumbnail}
+                                alt={grp.productName}
+                                className="w-11 h-11 rounded-xl object-contain bg-cream border border-[#F0E5D8] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-cream border border-[#F0E5D8] flex items-center justify-center text-base shrink-0">
+                                🎁
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`font-bold text-xs ${
-                                    curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"
-                                  }`}
-                                >
-                                  {curStock} cái
+                            )}
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-heading font-extrabold text-[#231B16] text-sm truncate">
+                                  {grp.productName}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAdjustingItem({
-                                      productId: row.productId,
-                                      variantId: row.variantId,
-                                      productName: row.productName,
-                                      variantName: row.variantName,
-                                      warehouseId: wh.warehouse_id,
-                                      warehouseName: wh.name,
-                                      currentStock: curStock,
-                                    });
-                                    setAdjustDelta(0);
-                                    setAdjustReason("Kiểm kê định kỳ");
-                                  }}
-                                  className="p-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer"
-                                  title="Điều chỉnh tồn kho"
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                </button>
+                                {grp.isNumberedBatch ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px] flex items-center gap-1 border border-amber-200">
+                                    <Sparkles className="w-2.5 h-2.5 text-amber-700" />
+                                    {grp.variants.length} mẫu độc bản
+                                  </span>
+                                ) : grp.variants.length > 1 ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-900 font-bold text-[10px] border border-emerald-200">
+                                    {grp.variants.length} phân loại
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {/* Warehouse Quick Breakdown */}
+                              <div className="flex items-center gap-2 mt-1 text-[11px] text-[#7E7068] flex-wrap">
+                                {displayedWarehouses.map((wh) => (
+                                  <span key={wh.warehouse_id} className="inline-flex items-center gap-1">
+                                    <span className="font-semibold text-gray-600">{wh.name}:</span>
+                                    <span className="font-bold text-emerald-900">{grp.stocks[wh.warehouse_id] ?? 0}</span>
+                                  </span>
+                                ))}
                               </div>
                             </div>
-                          );
-                        })}
+                          </div>
+
+                          {/* Total Stock & Quick Actions */}
+                          <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+                            <div className="text-right">
+                              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">
+                                Tổng tồn kho
+                              </span>
+                              <span
+                                className={`text-base font-extrabold ${
+                                  grp.stockTotal === 0
+                                    ? "text-red-600"
+                                    : grp.stockTotal < 20
+                                    ? "text-amber-600"
+                                    : "text-emerald-900"
+                                }`}
+                              >
+                                {grp.stockTotal} cái
+                              </span>
+                            </div>
+
+                            {/* Batch Restock Button */}
+                            {grp.isNumberedBatch && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBatchRestockProductId(grp.productId);
+                                  const defWh = warehouses.find((w) => w.is_default) || warehouses[0];
+                                  if (defWh) setBatchRestockWarehouseId(defWh.warehouse_id);
+                                  setBatchRestockNote(`Nhập đợt mới cho "${grp.productName}"`);
+                                  setIsBatchRestockOpen(true);
+                                }}
+                                className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold text-xs flex items-center gap-1.5 shadow-2xs border border-amber-300 active:scale-95 cursor-pointer transition-all"
+                                title="Nạp lại kho theo đợt và ghi nhận Phiếu nhập kho chính thức"
+                              >
+                                <PackagePlus className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Nhập đợt mới (Tạo PNK)</span>
+                              </button>
+                            )}
+
+                            {!isSingle && (
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandProduct(grp.productId)}
+                                className="px-3 py-2 rounded-xl bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs border border-gray-200 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <span>{isExpanded ? "Đóng" : `Xem ${grp.variants.length} mẫu`}</span>
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Accordion Sub-Rows: All Variants (#01, #02... #50) */}
+                        {isExpanded && !isSingle && (
+                          <div className="bg-[#FFFDF9] border-t border-[#F0E5D8] p-3 sm:p-4 animate-fade-in">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs">
+                                <thead>
+                                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold text-[10px] uppercase">
+                                    <th className="py-2 px-3">Mẫu / Phân loại</th>
+                                    <th className="py-2 px-2">Mã SKU</th>
+                                    {displayedWarehouses.map((wh) => (
+                                      <th key={wh.warehouse_id} className="py-2 px-2 text-center">
+                                        {wh.name}
+                                      </th>
+                                    ))}
+                                    <th className="py-2 px-2 text-center">Tổng tồn</th>
+                                    <th className="py-2 px-2 text-right">Trạng thái</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#F0E5D8]">
+                                  {grp.variants.map((v) => {
+                                    return (
+                                      <tr key={v.variantId} className="hover:bg-amber-50/40 transition-colors">
+                                        <td className="py-2.5 px-3">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-bold text-[#2D6338] text-xs">
+                                              {v.variantName}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="py-2.5 px-2 font-mono font-bold text-gray-500 text-[11px]">
+                                          {v.sku}
+                                        </td>
+                                        {displayedWarehouses.map((wh) => {
+                                          const curStock = v.stocks[wh.warehouse_id] ?? 0;
+                                          return (
+                                            <td key={wh.warehouse_id} className="py-2.5 px-2 text-center">
+                                              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white border border-gray-200">
+                                                <span className={`font-bold text-xs ${curStock < 1 ? "text-red-600 font-extrabold" : "text-emerald-950"}`}>
+                                                  {curStock}
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setAdjustingItem({
+                                                      productId: v.productId,
+                                                      variantId: v.variantId,
+                                                      productName: v.productName,
+                                                      variantName: v.variantName,
+                                                      warehouseId: wh.warehouse_id,
+                                                      warehouseName: wh.name,
+                                                      currentStock: curStock,
+                                                    });
+                                                    setAdjustDelta(0);
+                                                    setAdjustReason("Kiểm kê định kỳ");
+                                                  }}
+                                                  className="w-4 h-4 rounded bg-gray-50 hover:bg-emerald-50 text-gray-500 hover:text-emerald-800 flex items-center justify-center cursor-pointer transition-colors"
+                                                  title="Sửa số lượng mẫu này"
+                                                >
+                                                  <Edit3 className="w-2.5 h-2.5" />
+                                                </button>
+                                              </div>
+                                            </td>
+                                          );
+                                        })}
+                                        <td className="py-2.5 px-2 text-center font-extrabold text-xs text-[#231B16]">
+                                          {v.stockTotal}
+                                        </td>
+                                        <td className="py-2.5 px-2 text-right">
+                                          {v.stockTotal === 0 ? (
+                                            <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px]">
+                                              Hết hàng
+                                            </span>
+                                          ) : (
+                                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                                              Còn hàng ({v.stockTotal})
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* DESKTOP TABLE VIEW (>= sm) */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-xs">
-                <thead>
-                  <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
-                    <th className="py-2.5 px-4 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">Mã SKU</th>
-                    {displayedWarehouses.map((wh) => (
-                      <th key={wh.warehouse_id} className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {wh.name} {wh.is_default && <span className="text-emerald-700 font-bold text-[9px] block">(Mặc định)</span>}
-                      </th>
-                    ))}
-                    {selectedWarehouseFilter === "all" ? (
-                      <>
-                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Tổng tồn tất cả kho</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái kho tổng</th>
-                      </>
-                    ) : (
-                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái tại kho này</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0E5D8]">
+                    );
+                  })
+                )}
+              </div>
+            ) : (
+              /* ========================================================
+                  VIEW MODE 2: FLATTENED TABLE (FULL ROWS)
+                  ======================================================== */
+              <>
+                {/* MOBILE CARD VIEW (< sm) */}
+                <div className="block sm:hidden p-3 space-y-3">
                   {inventoryRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={3 + displayedWarehouses.length} className="py-12 text-center text-gray-500">
-                        {selectedWarehouseFilter !== "all"
-                          ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
-                          : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
-                      </td>
-                    </tr>
+                    <div className="py-8 text-center text-gray-500 text-xs">
+                      {selectedWarehouseFilter !== "all"
+                        ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
+                        : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
+                    </div>
                   ) : (
-                    inventoryRows.map((row) => {
-                      const curWhStock = selectedWarehouseFilter !== "all" ? (row.stocks[selectedWarehouseFilter] ?? 0) : row.stockTotal;
-                      return (
-                        <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
-                          <td className="py-3 px-4">
-                            <span className="font-bold text-[#342A24] block">{row.productName}</span>
-                            <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
-                          </td>
-                          <td className="py-3 px-3 font-mono font-bold text-gray-600 text-[11px]">
-                            {row.sku}
-                          </td>
+                    inventoryRows.map((row) => (
+                      <div
+                        key={row.variantId}
+                        className="bg-[#FFFDF9] rounded-2xl p-3.5 border border-[#F0E5D8] shadow-2xs space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#F0E5D8]">
+                          <div>
+                            <span className="font-bold text-[#342A24] text-xs block">{row.productName}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
+                              <span className="text-gray-300">•</span>
+                              <span className="font-mono text-[10px] text-gray-500 font-bold">{row.sku}</span>
+                            </div>
+                          </div>
 
-                          {/* Dynamic Warehouse Stocks */}
-                          {displayedWarehouses.map((wh) => {
-                            const curStock = row.stocks[wh.warehouse_id] ?? 0;
-                            return (
-                              <td key={wh.warehouse_id} className="py-3 px-3 text-center">
-                                <div className="inline-flex items-center justify-center gap-1.5 px-2 py-1 rounded-xl bg-gray-50 border border-gray-200">
-                                  <span className={`font-bold min-w-8 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
-                                    {curStock}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setAdjustingItem({
-                                        productId: row.productId,
-                                        variantId: row.variantId,
-                                        productName: row.productName,
-                                        variantName: row.variantName,
-                                        warehouseId: wh.warehouse_id,
-                                        warehouseName: wh.name,
-                                        currentStock: curStock,
-                                      });
-                                      setAdjustDelta(0);
-                                      setAdjustReason("Kiểm kê định kỳ");
-                                    }}
-                                    className="w-5 h-5 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer transition-colors"
-                                    title="Điều chỉnh tồn kho (cần lý do xác nhận)"
-                                  >
-                                    <Edit3 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </td>
-                            );
-                          })}
-
-                          {selectedWarehouseFilter === "all" ? (
-                            <>
-                              {/* Total Stock */}
-                              <td className="py-3 px-3 text-center font-extrabold text-sm text-[#231B16]">
-                                {row.stockTotal}
-                              </td>
-
-                              {/* Status */}
-                              <td className="py-3 px-3 text-right">
-                                {row.stockTotal === 0 ? (
-                                  <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
-                                    Hết hàng
-                                  </span>
-                                ) : row.stockTotal < 20 ? (
-                                  <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
-                                    Sắp hết ({row.stockTotal})
-                                  </span>
-                                ) : (
-                                  <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
-                                    Đủ hàng
-                                  </span>
-                                )}
-                              </td>
-                            </>
+                          {row.stockTotal === 0 ? (
+                            <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px] shrink-0">
+                              Hết hàng
+                            </span>
+                          ) : row.stockTotal < 20 ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px] shrink-0">
+                              Sắp hết ({row.stockTotal})
+                            </span>
                           ) : (
-                            /* Single Warehouse Status */
-                            <td className="py-3 px-3 text-right">
-                              {curWhStock === 0 ? (
-                                <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
-                                  Hết hàng tại kho
-                                </span>
-                              ) : curWhStock < 10 ? (
-                                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
-                                  Sắp hết ({curWhStock})
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
-                                  Đủ hàng ({curWhStock})
-                                </span>
-                              )}
-                            </td>
+                            <span className="px-2 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10px] shrink-0">
+                              Đủ hàng ({row.stockTotal})
+                            </span>
                           )}
-                        </tr>
-                      );
-                    })
+                        </div>
+
+                        {/* Stock by Warehouse breakdown */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block">
+                            Tồn kho theo từng kho:
+                          </span>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {displayedWarehouses.map((wh) => {
+                              const curStock = row.stocks[wh.warehouse_id] ?? 0;
+                              return (
+                                <div
+                                  key={wh.warehouse_id}
+                                  className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#F0E5D8]"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-medium text-gray-700 text-[11px]">{wh.name}</span>
+                                    {wh.is_default && (
+                                      <span className="text-emerald-700 font-bold text-[9px] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                        Kho chính
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`font-bold text-xs ${
+                                        curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"
+                                      }`}
+                                    >
+                                      {curStock} cái
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAdjustingItem({
+                                          productId: row.productId,
+                                          variantId: row.variantId,
+                                          productName: row.productName,
+                                          variantName: row.variantName,
+                                          warehouseId: wh.warehouse_id,
+                                          warehouseName: wh.name,
+                                          currentStock: curStock,
+                                        });
+                                        setAdjustDelta(0);
+                                        setAdjustReason("Kiểm kê định kỳ");
+                                      }}
+                                      className="p-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                      title="Điều chỉnh tồn kho"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                {/* DESKTOP TABLE VIEW (>= sm) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#F0E5D8] text-[#7E7068] font-bold uppercase tracking-wider bg-white text-[10px]">
+                        <th className="py-2.5 px-4 whitespace-nowrap">Sản phẩm &amp; Phân loại</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">Mã SKU</th>
+                        {displayedWarehouses.map((wh) => (
+                          <th key={wh.warehouse_id} className="py-2.5 px-3 text-center whitespace-nowrap">
+                            {wh.name} {wh.is_default && <span className="text-emerald-700 font-bold text-[9px] block">(Mặc định)</span>}
+                          </th>
+                        ))}
+                        {selectedWarehouseFilter === "all" ? (
+                          <>
+                            <th className="py-2.5 px-3 text-center whitespace-nowrap">Tổng tồn tất cả kho</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái kho tổng</th>
+                          </>
+                        ) : (
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">Trạng thái tại kho này</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0E5D8]">
+                      {inventoryRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={3 + displayedWarehouses.length} className="py-12 text-center text-gray-500">
+                            {selectedWarehouseFilter !== "all"
+                              ? `Không tìm thấy mặt hàng nào phù hợp với bộ lọc tại ${selectedWarehouseObj?.name}.`
+                              : "Không tìm thấy sản phẩm hoặc biến thể phù hợp."}
+                          </td>
+                        </tr>
+                      ) : (
+                        inventoryRows.map((row) => {
+                          const curWhStock = selectedWarehouseFilter !== "all" ? (row.stocks[selectedWarehouseFilter] ?? 0) : row.stockTotal;
+                          return (
+                            <tr key={row.variantId} className="hover:bg-[#FFFDF9] transition-colors">
+                              <td className="py-3 px-4">
+                                <span className="font-bold text-[#342A24] block">{row.productName}</span>
+                                <span className="text-[11px] text-[#2D6338] font-semibold">{row.variantName}</span>
+                              </td>
+                              <td className="py-3 px-3 font-mono font-bold text-gray-600 text-[11px]">
+                                {row.sku}
+                              </td>
+
+                              {/* Dynamic Warehouse Stocks */}
+                              {displayedWarehouses.map((wh) => {
+                                const curStock = row.stocks[wh.warehouse_id] ?? 0;
+                                return (
+                                  <td key={wh.warehouse_id} className="py-3 px-3 text-center">
+                                    <div className="inline-flex items-center justify-center gap-1.5 px-2 py-1 rounded-xl bg-gray-50 border border-gray-200">
+                                      <span className={`font-bold min-w-8 text-center ${curStock < 10 ? "text-amber-700 font-extrabold" : "text-emerald-950"}`}>
+                                        {curStock}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setAdjustingItem({
+                                            productId: row.productId,
+                                            variantId: row.variantId,
+                                            productName: row.productName,
+                                            variantName: row.variantName,
+                                            warehouseId: wh.warehouse_id,
+                                            warehouseName: wh.name,
+                                            currentStock: curStock,
+                                          });
+                                          setAdjustDelta(0);
+                                          setAdjustReason("Kiểm kê định kỳ");
+                                        }}
+                                        className="w-5 h-5 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer transition-colors"
+                                        title="Điều chỉnh tồn kho (cần lý do xác nhận)"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+
+                              {selectedWarehouseFilter === "all" ? (
+                                <>
+                                  {/* Total Stock */}
+                                  <td className="py-3 px-3 text-center font-extrabold text-sm text-[#231B16]">
+                                    {row.stockTotal}
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="py-3 px-3 text-right">
+                                    {row.stockTotal === 0 ? (
+                                      <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
+                                        Hết hàng
+                                      </span>
+                                    ) : row.stockTotal < 20 ? (
+                                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
+                                        Sắp hết ({row.stockTotal})
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
+                                        Đủ hàng
+                                      </span>
+                                    )}
+                                  </td>
+                                </>
+                              ) : (
+                                /* Single Warehouse Status */
+                                <td className="py-3 px-3 text-right">
+                                  {curWhStock === 0 ? (
+                                    <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10.5px]">
+                                      Hết hàng tại kho
+                                    </span>
+                                  ) : curWhStock < 10 ? (
+                                    <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10.5px]">
+                                      Sắp hết ({curWhStock})
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7ED] text-[#16381D] font-bold text-[10.5px]">
+                                      Đủ hàng ({curWhStock})
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2361,6 +2760,173 @@ export default function AdminInventoryPage() {
                   className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
                 >
                   Nhập kho &amp; Lưu nhật ký ➔
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 2.5: TẠO PHIẾU NHẬP HÀNG ĐỘC BẢN / LÔ MỚI (BATCH INFLOW)
+          ======================================================== */}
+      {isBatchRestockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#F0E5D8] shadow-2xl space-y-5 text-left">
+            <div className="flex items-center justify-between border-b border-[#F0E5D8] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-900">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#231B16]">
+                    Phiếu nhập hàng độc bản / Lô mới
+                  </h3>
+                  <span className="text-[11px] text-[#7E7068]">
+                    Tự động tạo phiếu nhập kho chính thức (PNK) và nạp lại tồn kho
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBatchRestockOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBatchRestockSubmit} className="space-y-4 text-xs">
+              {/* Target Product Summary */}
+              {(() => {
+                const p = products.find((prod) => prod.product_id === batchRestockProductId);
+                if (!p) return null;
+                const outOfStockCount = (p.variants || []).filter((v) => Number(v.stock || 0) === 0).length;
+                return (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center gap-3">
+                    {p.thumbnail ? (
+                      <img src={p.thumbnail} alt="" className="w-10 h-10 rounded-xl object-contain bg-white border border-amber-200" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-white border border-amber-200 flex items-center justify-center text-base">🎁</div>
+                    )}
+                    <div>
+                      <span className="font-extrabold text-[#231B16] text-xs block">{p.name}</span>
+                      <span className="text-[11px] text-amber-900 font-semibold">
+                        Tổng số mẫu: {p.variants?.length || 0} • Đã hết hàng: <b className="text-red-600">{outOfStockCount} mẫu</b>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Target Warehouse */}
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Kho hàng tiếp nhận *</label>
+                <select
+                  value={batchRestockWarehouseId || (warehouses.find((w) => w.is_default)?.warehouse_id || warehouses[0]?.warehouse_id || "")}
+                  onChange={(e) => setBatchRestockWarehouseId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold text-[#342A24]"
+                >
+                  {warehouses.map((wh) => (
+                    <option key={wh.warehouse_id} value={wh.warehouse_id}>
+                      {wh.name} {wh.is_default ? "(Kho chính mặc định)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Restock Mode Selection */}
+              <div className="space-y-2">
+                <label className="font-bold text-[#342A24] block">Chế độ nạp tồn kho *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      batchRestockMode === "out_of_stock_only"
+                        ? "bg-emerald-50/70 border-emerald-500 ring-1 ring-emerald-500"
+                        : "bg-white border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="batchRestockMode"
+                        checked={batchRestockMode === "out_of_stock_only"}
+                        onChange={() => setBatchRestockMode("out_of_stock_only")}
+                        className="accent-emerald-700"
+                      />
+                      <span className="font-bold text-xs text-[#16381D]">Chỉ nạp mẫu hết hàng</span>
+                    </div>
+                    <span className="text-[10.5px] text-gray-500 mt-1 pl-5">
+                      Chỉ đưa các mẫu đang có tồn = 0 về lại 1. Giữ nguyên các mẫu còn hàng.
+                    </span>
+                  </label>
+
+                  <label
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      batchRestockMode === "all"
+                        ? "bg-emerald-50/70 border-emerald-500 ring-1 ring-emerald-500"
+                        : "bg-white border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="batchRestockMode"
+                        checked={batchRestockMode === "all"}
+                        onChange={() => setBatchRestockMode("all")}
+                        className="accent-emerald-700"
+                      />
+                      <span className="font-bold text-xs text-[#16381D]">Nạp lại tất cả các mẫu</span>
+                    </div>
+                    <span className="text-[10.5px] text-gray-500 mt-1 pl-5">
+                      Đưa toàn bộ tất cả các mẫu về tồn = 1 (Đợt hàng mới 100%).
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Staff in charge */}
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Người lập / Phụ trách phiếu nhập *</label>
+                <input
+                  type="text"
+                  value={batchRestockApprovedBy}
+                  onChange={(e) => setBatchRestockApprovedBy(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold"
+                  placeholder="Ví dụ: Trúc Hân / Quản trị viên"
+                  required
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="font-bold text-[#342A24] block">Ghi chú đợt nhập hàng</label>
+                <input
+                  type="text"
+                  value={batchRestockNote}
+                  onChange={(e) => setBatchRestockNote(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A]"
+                  placeholder="Ví dụ: Đợt 2 - Làm mới 20 mẫu vòng tay thủ công"
+                />
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] leading-relaxed">
+                ℹ️ Khi bấm xác nhận, hệ thống sẽ sinh mã <b>PNK-xxxx</b> lưu vĩnh viễn vào tab <b>Lịch sử Nhập kho</b> với tên người phụ trách và ngày giờ cụ thể.
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchRestockOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#2D6338] hover:bg-[#1B3622] text-white font-extrabold text-xs shadow-xs cursor-pointer transition-all"
+                >
+                  Xác nhận Nhập Kho &amp; Tạo PNK ➔
                 </button>
               </div>
             </form>

@@ -11,7 +11,7 @@ import { ProductReviews } from "@/components/products/ProductReviews";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, X, RotateCcw } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -35,6 +35,27 @@ export function ProductDetailClient({
   const [selectedVariant, setSelectedVariant] = useState<any>(initialProduct?.variants?.[0] ?? null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
+
+  // Keyboard navigation for fullscreen Lightbox
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsLightboxOpen(false);
+        setLightboxZoom(1);
+      } else if (e.key === "ArrowLeft") {
+        setCustomActiveImage(null);
+        setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : (product?.images?.length || 1) - 1));
+      } else if (e.key === "ArrowRight") {
+        setCustomActiveImage(null);
+        setSelectedImageIndex((prev) => (prev < (product?.images?.length || 1) - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isLightboxOpen, product?.images?.length]);
 
   useEffect(() => {
     let isMounted = true;
@@ -284,17 +305,36 @@ export function ProductDetailClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft mb-12">
           {/* Gallery - Left 6 Cols */}
           <div className="lg:col-span-6 space-y-4">
-            <div className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none">
+            <div 
+              onClick={() => {
+                setIsLightboxOpen(true);
+                setLightboxZoom(1);
+              }}
+              className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none cursor-zoom-in"
+              title="Nhấp để phóng to ảnh xem chi tiết các mẫu"
+            >
+              {/* Ambient backdrop for non-square photos */}
+              {displayImages[selectedImageIndex] && (
+                <div 
+                  className="absolute inset-0 opacity-20 filter blur-xl scale-110 pointer-events-none"
+                  style={{
+                    backgroundImage: `url(${customActiveImage || displayImages[selectedImageIndex]})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
+              )}
+
               {/* Render all display images with smooth, gentle crossfade transition */}
               {displayImages.map((img, idx) => {
                 const isCurrent = !customActiveImage && selectedImageIndex === idx;
                 return (
                   <div
                     key={img + idx}
-                    className={`absolute inset-0 transition-all duration-700 ease-in-out ${
+                    className={`absolute inset-0 flex items-center justify-center p-2 transition-all duration-500 ease-out ${
                       isCurrent
                         ? "opacity-100 scale-100 z-10"
-                        : "opacity-0 scale-[1.03] pointer-events-none z-0"
+                        : "opacity-0 scale-[1.02] pointer-events-none z-0"
                     }`}
                   >
                     <Image
@@ -302,7 +342,7 @@ export function ProductDetailClient({
                       alt={`${product.name} - ${idx + 1}`}
                       fill
                       sizes="(max-width: 1024px) 100vw, 50vw"
-                      className="object-cover"
+                      className="object-contain"
                       priority={idx === 0}
                     />
                   </div>
@@ -311,16 +351,22 @@ export function ProductDetailClient({
 
               {/* Custom Variant Active Image (if selected directly) */}
               {customActiveImage && (
-                <div className="absolute inset-0 z-20 transition-all duration-700 ease-in-out opacity-100 scale-100">
+                <div className="absolute inset-0 z-20 flex items-center justify-center p-2 transition-all duration-500 ease-out opacity-100 scale-100">
                   <Image
                     src={customActiveImage}
                     alt={product.name}
                     fill
                     sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="object-cover"
+                    className="object-contain"
                   />
                 </div>
               )}
+
+              {/* Hover Zoom Badge */}
+              <div className="absolute top-3 right-3 z-30 px-2.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-xs flex items-center gap-1.5 transition-all shadow-md">
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Phóng to xem chi tiết</span>
+              </div>
 
               {/* Navigation Arrows if more than 1 image */}
               {displayImages.length > 1 && (
@@ -351,12 +397,13 @@ export function ProductDetailClient({
                   </button>
 
                   {/* Slide dots indicator */}
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-xs">
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-xs">
                     {displayImages.map((_, i) => (
                       <button
                         key={i}
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setSelectedImageIndex(i);
                           setCustomActiveImage(null);
                         }}
@@ -383,13 +430,13 @@ export function ProductDetailClient({
                         setSelectedImageIndex(idx);
                         setCustomActiveImage(null);
                       }}
-                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition-all duration-300 cursor-pointer ${
+                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition-all duration-300 cursor-pointer bg-[#FFF8EE] ${
                         isActive
                           ? "border-[#2D6338] ring-2 ring-[#2D6338]/20 shadow-soft scale-105"
                           : "border-[#F0E5D8] opacity-60 hover:opacity-100 hover:border-[#FFB98A]"
                       }`}
                     >
-                      <Image src={img} alt="" fill sizes="80px" className="object-cover transition-transform duration-500 hover:scale-105" />
+                      <Image src={img} alt="" fill sizes="80px" className="object-contain transition-transform duration-500 hover:scale-105" />
                     </button>
                   );
                 })}
@@ -730,6 +777,155 @@ export function ProductDetailClient({
           </button>
         </div>
       </aside>
+
+      {/* FULLSCREEN LIGHTBOX MODAL */}
+      {isLightboxOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-fade-in select-none"
+          onClick={() => {
+            setIsLightboxOpen(false);
+            setLightboxZoom(1);
+          }}
+        >
+          {/* Lightbox Top Header */}
+          <div 
+            className="flex items-center justify-between z-10 w-full max-w-5xl mx-auto text-white/90"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="font-heading font-extrabold text-sm sm:text-base text-white">
+                {product.name}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white font-mono text-xs font-bold">
+                {selectedImageIndex + 1} / {displayImages.length}
+              </span>
+            </div>
+
+            {/* Zoom & Close Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setLightboxZoom((prev) => Math.max(1, prev - 0.5))}
+                disabled={lightboxZoom <= 1}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/25 text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                title="Thu nhỏ"
+                aria-label="Thu nhỏ ảnh"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxZoom(1)}
+                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/25 text-white text-xs font-bold transition-all cursor-pointer"
+                title="Kích thước ban đầu"
+              >
+                {Math.round(lightboxZoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxZoom((prev) => Math.min(3, prev + 0.5))}
+                disabled={lightboxZoom >= 3}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/25 text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                title="Phóng to"
+                aria-label="Phóng to ảnh"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLightboxOpen(false);
+                  setLightboxZoom(1);
+                }}
+                className="p-2 rounded-xl bg-white/20 hover:bg-red-500 text-white transition-all ml-2 cursor-pointer"
+                title="Đóng (ESC)"
+                aria-label="Đóng cửa sổ phóng to"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Lightbox Main Active Image */}
+          <div 
+            className="relative flex-1 w-full max-w-5xl mx-auto flex items-center justify-center overflow-hidden my-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div 
+              className="relative w-full h-full flex items-center justify-center transition-transform duration-200 ease-out"
+              style={{ transform: `scale(${lightboxZoom})` }}
+            >
+              <Image
+                src={customActiveImage || displayImages[selectedImageIndex]}
+                alt={`${product.name} - Phóng to`}
+                fill
+                sizes="100vw"
+                className="object-contain"
+                priority
+              />
+            </div>
+
+            {/* Prev / Next Arrows */}
+            {displayImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCustomActiveImage(null);
+                    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : displayImages.length - 1));
+                  }}
+                  className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-lg transition-all active:scale-90 cursor-pointer"
+                  aria-label="Ảnh trước"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCustomActiveImage(null);
+                    setSelectedImageIndex((prev) => (prev < displayImages.length - 1 ? prev + 1 : 0));
+                  }}
+                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-lg transition-all active:scale-90 cursor-pointer"
+                  aria-label="Ảnh tiếp theo"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Lightbox Bottom Thumbnail Strip */}
+          {displayImages.length > 1 && (
+            <div 
+              className="z-10 w-full max-w-2xl mx-auto flex items-center justify-center gap-2 overflow-x-auto py-2 scrollbar-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {displayImages.map((img, idx) => {
+                const isActive = selectedImageIndex === idx && !customActiveImage;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setSelectedImageIndex(idx);
+                      setCustomActiveImage(null);
+                    }}
+                    className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer bg-white/5 ${
+                      isActive
+                        ? "border-emerald-400 ring-2 ring-emerald-400/50 scale-105"
+                        : "border-white/30 opacity-60 hover:opacity-100 hover:border-white"
+                    }`}
+                  >
+                    <Image src={img} alt="" fill sizes="64px" className="object-contain" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <Footer />
 
