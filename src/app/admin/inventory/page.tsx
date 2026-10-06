@@ -404,12 +404,6 @@ export default function AdminInventoryPage() {
             );
           }
 
-          if (totalStock < 20) {
-            setStockSyncWarning(
-              `⚠️ Cảnh báo tồn kho: "${p.name} (${v.name})" hiện chỉ còn ${totalStock} cái (< 20 cái). Vui lòng đồng bộ và kiểm tra kỹ số lượng đơn đặt!`
-            );
-          }
-
           return {
             ...v,
             stock_warehouse_1: wh1,
@@ -423,6 +417,12 @@ export default function AdminInventoryPage() {
           (sum, vr) => sum + (Number(vr.stock) || 0),
           0
         );
+
+        if (totalProdStock === 0) {
+          setStockSyncWarning(
+            `⚠️ Cảnh báo tồn kho: Sản phẩm "${p.name}" đã hết sạch toàn bộ hàng trong kho (Tổng tồn: 0)!`
+          );
+        }
 
         const updatedProd: ExtendedProduct = {
           ...p,

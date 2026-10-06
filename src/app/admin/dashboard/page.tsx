@@ -52,11 +52,20 @@ export default function AdminDashboardPage() {
 
   const lowStockItem = useMemo(() => {
     for (const p of products) {
-      if (p.variants) {
-        for (const v of p.variants) {
-          if ((v.stock || 0) <= 10 && (v.stock || 0) > 0) {
-            return { name: `${p.name} - ${v.name}`, stock: v.stock };
-          }
+      const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? (p.stock || 0);
+      const isNumbered = (p.variants?.length || 0) > 4;
+
+      // For numbered/one-of-a-kind products: only warn if total stock is 0 (all sold out) or <= 3
+      if (isNumbered) {
+        if (totalStock === 0) {
+          return { name: p.name, stock: 0 };
+        }
+      } else {
+        // For regular products (e.g. S/M/L): warn if total stock <= 5
+        if (totalStock <= 5 && totalStock > 0) {
+          return { name: p.name, stock: totalStock };
+        } else if (totalStock === 0) {
+          return { name: p.name, stock: 0 };
         }
       }
     }
