@@ -402,7 +402,7 @@ function CheckoutContent() {
       discount_amount: discountAmount,
       shipping_fee: shippingFee,
       final_amount: finalAmount,
-      total_cost: Math.round(finalAmount * 0.4),
+      total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
       seller_id: finalSellerId,
       introducer_info: finalIntroducerText,
       referral_code: finalReferralCode,

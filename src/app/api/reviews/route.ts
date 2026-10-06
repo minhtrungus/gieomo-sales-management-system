@@ -221,15 +221,22 @@ export async function DELETE(request: Request) {
 
     const supabase = createAdminClient();
 
-    // 1. Try deleting from native table if UUID
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    if (isUuid) {
-      await supabase.from("product_reviews").delete().eq("review_id", id);
+    // 1. Delete from native table if exists
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        await supabase.from("product_reviews").delete().eq("review_id", id);
+      } else {
+        // If non-UUID ID was stored or custom id, delete by matching comment or custom fields if any
+        await supabase.from("product_reviews").delete().or(`review_id.eq.${id}`);
+      }
+    } catch (e) {
+      console.warn("[DELETE /api/reviews] Note on deleting from product_reviews table:", e);
     }
 
-    // 2. Delete from system_configs backup
+    // 2. Delete from system_configs backup unconditionally
     const currentList = await getReviewsFromConfig(supabase);
-    const updated = currentList.filter((r) => r.review_id !== id);
+    const updated = currentList.filter((r) => r.review_id !== id && r.id !== id);
     await saveReviewsToConfig(supabase, updated);
 
     return NextResponse.json({ success: true });

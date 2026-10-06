@@ -41,35 +41,25 @@ export function syncOrdersFromServer(force = false): void {
         const localRaw = localStorage.getItem("gieomo_orders");
         const localOrders: Order[] = localRaw ? JSON.parse(localRaw) : (cachedOrders || []);
         
-        // Map keyed by uppercase code
+        // Server database is the authoritative source of truth
         const map = new Map<string, Order>();
         
-        // 1. Preserve existing local orders first
-        for (const o of localOrders) {
-          const code = (o.order_code || o.order_id || "").trim().toUpperCase();
-          if (code) map.set(code, o);
-        }
-
-        // 2. Merge server orders
         for (const sOrd of data.orders) {
           const code = (sOrd.order_code || sOrd.order_id || "").trim().toUpperCase();
           if (!code) continue;
-          const existing = map.get(code);
-          const sanitized: Order = {
-            ...existing,
-            ...sOrd,
-            buyer_name: sOrd.buyer_name || existing?.buyer_name || "Khách hàng",
-            buyer_phone: sOrd.buyer_phone || existing?.buyer_phone || "",
-            recipient_name: sOrd.recipient_name || sOrd.buyer_name || existing?.recipient_name || existing?.buyer_name || "Khách hàng",
-            recipient_phone: sOrd.recipient_phone || sOrd.buyer_phone || existing?.recipient_phone || existing?.buyer_phone || "",
-            address_detail: sOrd.address_detail || existing?.address_detail || "",
-            source_type: sOrd.source_type || existing?.source_type || "landing_page",
-            introducer_info: sOrd.introducer_info || existing?.introducer_info || null,
-            referral_code: sOrd.referral_code || existing?.referral_code || null,
-            payment_proof: sOrd.payment_proof || existing?.payment_proof || undefined,
-            items: (sOrd.items && sOrd.items.length > 0) ? sOrd.items : (existing?.items || []),
-          };
-          map.set(code, sanitized);
+          map.set(code, sOrd);
+        }
+
+        // Preserve only very fresh pending local orders (created < 10 mins ago) not yet in server list
+        const tenMinsAgo = Date.now() - 10 * 60 * 1000;
+        for (const o of localOrders) {
+          const code = (o.order_code || o.order_id || "").trim().toUpperCase();
+          if (code && !map.has(code)) {
+            const createdAtTime = new Date(o.created_at).getTime();
+            if (createdAtTime > tenMinsAgo) {
+              map.set(code, o);
+            }
+          }
         }
 
         const merged = Array.from(map.values()).sort(
@@ -681,19 +671,10 @@ export function syncPickupPointsFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedPickupPointsWithServer && !force)) return;
   safeFetchJson<{ success: boolean; pickup_points: PickupPoint[] }>("/api/pickup-points", 10000)
     .then((data) => {
-      if (data?.success && Array.isArray(data.pickup_points) && data.pickup_points.length > 0) {
+      if (data?.success && Array.isArray(data.pickup_points)) {
         hasSyncedPickupPointsWithServer = true;
-        const current = getStoredPickupPoints();
-        const merged = [...current];
-        for (const p of data.pickup_points) {
-          const idx = merged.findIndex((m) => m.pickup_point_id === p.pickup_point_id || m.name === p.name);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], ...p };
-          } else {
-            merged.push(p);
-          }
-        }
-        localStorage.setItem("gieomo_pickup_points", JSON.stringify(merged));
+        const finalPoints = data.pickup_points.length > 0 ? data.pickup_points : SEED_PICKUP_POINTS;
+        localStorage.setItem("gieomo_pickup_points", JSON.stringify(finalPoints));
         window.dispatchEvent(new Event("gieomo_pickup_points_updated"));
       }
     })
@@ -775,19 +756,9 @@ export function syncContactMessagesFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedContactMessagesWithServer && !force)) return;
   safeFetchJson<{ success: boolean; messages: ContactMessage[] }>("/api/contact/messages", 10000)
     .then((data) => {
-      if (data?.success && Array.isArray(data.messages) && data.messages.length > 0) {
+      if (data?.success && Array.isArray(data.messages)) {
         hasSyncedContactMessagesWithServer = true;
-        const current = getStoredContactMessages();
-        const merged = [...current];
-        for (const m of data.messages) {
-          const idx = merged.findIndex((c) => c.id === m.id);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], ...m };
-          } else {
-            merged.unshift(m);
-          }
-        }
-        localStorage.setItem("gieomo_contact_messages", JSON.stringify(merged));
+        localStorage.setItem("gieomo_contact_messages", JSON.stringify(data.messages));
         window.dispatchEvent(new Event("gieomo_messages_updated"));
       }
     })
@@ -2866,17 +2837,9 @@ export function syncReviewsFromServer(productId?: string, slug?: string, force =
       if (data?.success && Array.isArray(data.reviews)) {
         hasSyncedReviewsWithServer = true;
         const serverList: ProductReview[] = data.reviews;
-        const current = getStoredReviews();
-        // Merge server reviews with any local reviews
-        const map = new Map<string, ProductReview>();
-        for (const r of current) map.set(r.review_id, r);
-        for (const r of serverList) map.set(r.review_id, r);
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        cachedReviews = merged;
+        cachedReviews = serverList;
         try {
-          localStorage.setItem("gieomo_product_reviews", JSON.stringify(merged));
+          localStorage.setItem("gieomo_product_reviews", JSON.stringify(serverList));
         } catch {
           // ignore quota
         }

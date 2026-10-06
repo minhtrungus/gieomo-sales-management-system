@@ -399,8 +399,8 @@ function OrderSuccessContent() {
           </div>
         </div>
 
-        {/* Payment Instructions if Banking */}
-        {paymentMethod === "banking" ? (
+        {/* Payment Instructions if Banking and Not Paid Yet */}
+        {paymentMethod === "banking" && !isPaid ? (
           <div className="space-y-4 pt-2">
             {/* QR Code — Primary, Top, Large */}
             <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-soft">

@@ -17,13 +17,30 @@ export default function AdminReportsPage() {
   }, []);
 
   const activeOrders = orders.filter((o) => o.order_status !== "cancelled");
+  // Total cash collected from customers (both merchandise and shipping)
   const totalGrossRevenue = activeOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
+  
+  // Total shipping fees collected (passed to delivery/couriers, NOT profit)
+  const totalShipping = activeOrders.reduce((sum, o) => sum + (o.shipping_fee || 0), 0);
+  
+  // Total discounts applied via vouchers
+  const totalDiscounts = activeOrders.reduce((sum, o) => sum + (o.discount_amount || 0), 0);
+  
+  // Net merchandise revenue (Doanh thu thuần từ hàng hóa sau voucher, không gồm phí ship)
+  const netMerchandiseRevenue = Math.max(0, totalGrossRevenue - totalShipping);
+
+  // Total cost of production (Chi phí vốn sản xuất - tính trên giá trị hàng hóa thuần)
   const totalCost = activeOrders.reduce(
-    (sum, o) => sum + (o.total_cost || Math.round((o.final_amount || 0) * 0.4)),
+    (sum, o) => {
+      const merchandiseAmount = Math.max(0, (o.final_amount || 0) - (o.shipping_fee || 0));
+      return sum + (o.total_cost ?? Math.round(merchandiseAmount * 0.4));
+    },
     0
   );
-  const totalDiscounts = activeOrders.reduce((sum, o) => sum + (o.discount_amount || 0), 0);
-  const netProfit = Math.max(0, totalGrossRevenue - totalCost);
+
+  // Net fundraising profit (Lợi nhuận gây quỹ thực tế = Doanh thu thuần hàng hóa - Chi phí vốn)
+  // Phí vận chuyển 100% không tính vào lợi nhuận!
+  const netProfit = Math.max(0, netMerchandiseRevenue - totalCost);
 
   // Aggregate items
   const productMap: Record<string, { name: string; count: number; total: number }> = {};
@@ -50,7 +67,7 @@ export default function AdminReportsPage() {
           Báo cáo doanh thu & Lợi nhuận gây quỹ
         </h1>
         <p className="text-xs text-gray-500 mt-0.5">
-          Thống kê chi tiết doanh thu, chi phí vốn và lợi nhuận dòng đóng góp dự án Mầm Mơ.
+          Thống kê chi tiết doanh thu thuần, chi phí vốn và lợi nhuận dòng đóng góp dự án Mầm Mơ (tách biệt phí vận chuyển).
         </p>
       </div>
 
@@ -58,16 +75,19 @@ export default function AdminReportsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-2xs space-y-2">
           <div className="flex justify-between items-center text-xs font-semibold text-gray-500">
-            <span>Tổng doanh thu gộp</span>
+            <span>Tổng thực thu khách trả</span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
           <MoneyDisplay amount={totalGrossRevenue} className="text-2xl font-extrabold text-emerald-950 block" />
-          <span className="text-[11px] text-gray-400">{activeOrders.length} đơn hàng ghi nhận</span>
+          <div className="flex items-center justify-between text-[11px] text-gray-400">
+            <span>{activeOrders.length} đơn hàng</span>
+            <span>Tiền hàng: <MoneyDisplay amount={netMerchandiseRevenue} className="font-semibold text-gray-600" /></span>
+          </div>
         </div>
 
         <div className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-2xs space-y-2">
           <div className="flex justify-between items-center text-xs font-semibold text-gray-500">
-            <span>Tổng chi phí vốn (Cost)</span>
+            <span>Tổng chi phí vốn (COGS)</span>
             <Package className="w-4 h-4 text-blue-600" />
           </div>
           <MoneyDisplay amount={totalCost} className="text-2xl font-extrabold text-gray-900 block" />
@@ -76,11 +96,14 @@ export default function AdminReportsPage() {
 
         <div className="bg-white rounded-3xl p-5 border border-gray-200/80 shadow-2xs space-y-2">
           <div className="flex justify-between items-center text-xs font-semibold text-gray-500">
-            <span>Giảm giá & Freeship</span>
+            <span>Phí ship & Giảm giá</span>
             <TrendingUp className="w-4 h-4 text-amber-600" />
           </div>
-          <MoneyDisplay amount={totalDiscounts} className="text-2xl font-extrabold text-gray-900 block" />
-          <span className="text-[11px] text-gray-400">Áp dụng từ Voucher & Ưu đãi</span>
+          <MoneyDisplay amount={totalShipping + totalDiscounts} className="text-2xl font-extrabold text-gray-900 block" />
+          <div className="flex items-center justify-between text-[11px] text-gray-400">
+            <span>Ship: <MoneyDisplay amount={totalShipping} className="font-semibold text-gray-600" /></span>
+            <span>Voucher: <MoneyDisplay amount={totalDiscounts} className="font-semibold text-gray-600" /></span>
+          </div>
         </div>
 
         <div className="bg-soft-green/30 rounded-3xl p-5 border border-soft-green/60 shadow-2xs space-y-2">
@@ -89,7 +112,9 @@ export default function AdminReportsPage() {
             <BarChart3 className="w-4 h-4 text-emerald-900" />
           </div>
           <MoneyDisplay amount={netProfit} className="text-2xl font-extrabold text-emerald-950 block" />
-          <span className="text-[11px] font-semibold text-emerald-800">100% tài trợ các dự án Mầm Mơ</span>
+          <span className="text-[11px] font-semibold text-emerald-800">
+            100% tài trợ các dự án Mầm Mơ (Không tính phí ship)
+          </span>
         </div>
       </div>
 

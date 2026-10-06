@@ -200,7 +200,7 @@ export default function AdminCreateOrderPage() {
       discount_amount: 0,
       shipping_fee: shippingFee,
       final_amount: finalAmount,
-      total_cost: Math.round(finalAmount * 0.4),
+      total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
       seller_id: matchedMember ? matchedMember.memberId : null,
       introducer_info: matchedMember
         ? `${matchedMember.fullName} (${matchedMember.referralCode})`
