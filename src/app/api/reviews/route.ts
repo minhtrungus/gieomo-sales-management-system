@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin, getAuthenticatedUser } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
       let query = supabase
         .from("product_reviews")
         .select("*")
+        .eq("status", "approved")
         .order("created_at", { ascending: false });
 
       if (productId && slug) {
@@ -99,9 +101,9 @@ export async function GET(request: Request) {
 
     // 2. Fetch from system_configs backup
     const configList = await getReviewsFromConfig(supabase);
-    let filteredConfig = configList;
+    let filteredConfig = configList.filter((r) => r.status === "approved" || !r.status);
     if (productId || slug) {
-      filteredConfig = configList.filter((r) => {
+      filteredConfig = filteredConfig.filter((r) => {
         const matchesId = productId && (r.product_id === productId || r.product_slug === productId);
         const matchesSlug = slug && (r.product_slug === slug || r.product_id === slug);
         return matchesId || matchesSlug;
@@ -139,7 +141,6 @@ export async function POST(request: Request) {
       rating,
       comment,
       images = [],
-      is_verified_buyer = true,
     } = body;
 
     if (!product_id || !author_name?.trim() || !comment?.trim()) {
@@ -149,20 +150,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check if requester is authenticated admin for custom verified status
+    const user = await getAuthenticatedUser(request);
+    const isAdmin = Boolean(user && user.role === "admin");
+
     const numericRating = Math.min(5, Math.max(1, Number(rating) || 5));
     const supabase = createAdminClient();
 
+    // Server-enforced verification: default false unless admin verifies
+    const isVerifiedBuyer = isAdmin ? Boolean(body.is_verified_buyer) : false;
+    const reviewStatus = "approved";
+
     const newRecord = {
-      review_id: body.review_id || `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      review_id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       product_id: String(product_id),
       product_slug: product_slug ? String(product_slug) : null,
-      author_name: author_name.trim(),
-      phone_masked: phone_masked || null,
+      author_name: author_name.trim().slice(0, 80),
+      phone_masked: phone_masked ? String(phone_masked).slice(0, 20) : null,
       rating: numericRating,
-      comment: comment.trim(),
-      images: Array.isArray(images) ? images : [],
-      is_verified_buyer: Boolean(is_verified_buyer),
-      status: "approved",
+      comment: comment.trim().slice(0, 1000),
+      images: Array.isArray(images) ? images.slice(0, 5) : [],
+      is_verified_buyer: isVerifiedBuyer,
+      status: reviewStatus,
       created_at: new Date().toISOString(),
     };
 
@@ -179,7 +188,7 @@ export async function POST(request: Request) {
           comment: newRecord.comment,
           images: newRecord.images,
           is_verified_buyer: newRecord.is_verified_buyer,
-          status: "approved",
+          status: newRecord.status,
         },
       ])
       .select()
@@ -209,6 +218,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -227,7 +241,6 @@ export async function DELETE(request: Request) {
       if (isUuid) {
         await supabase.from("product_reviews").delete().eq("review_id", id);
       } else {
-        // If non-UUID ID was stored or custom id, delete by matching comment or custom fields if any
         await supabase.from("product_reviews").delete().or(`review_id.eq.${id}`);
       }
     } catch (e) {

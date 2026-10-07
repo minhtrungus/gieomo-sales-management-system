@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 const PRESENCE_CONFIG_KEY = "members_online_presence";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authCheck = await requireAuth(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const supabase = createAdminClient();
     const { data } = await supabase
       .from("system_configs")
@@ -34,9 +40,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAuth(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
-    const memberId = (body.memberId || body.member_id || "").trim();
-    const email = (body.email || "").trim().toLowerCase();
+    const memberId = (body.memberId || body.member_id || authCheck.user.memberId || "").trim();
+    const email = (body.email || authCheck.user.email || "").trim().toLowerCase();
 
     if (!memberId && !email) {
       return NextResponse.json({ success: false, error: "Missing memberId or email" }, { status: 400 });

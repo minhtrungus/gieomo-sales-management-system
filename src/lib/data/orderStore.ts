@@ -291,7 +291,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
     // Sync order status update to Supabase
     fetch("/api/orders", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         orderId,
         orderStatus: newStatus,
@@ -382,7 +382,7 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
     // Sync payment status to Supabase
     fetch("/api/orders", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         orderId: orderCodeOrId,
         paymentStatus,
@@ -425,7 +425,7 @@ export function updateStoredDeliveryStatus(orderCodeOrId: string, deliveryStatus
     // Sync delivery status to Supabase
     fetch("/api/orders", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         orderId: orderCodeOrId,
         deliveryStatus,
@@ -643,6 +643,17 @@ export const SEED_PICKUP_POINTS: PickupPoint[] = [
   },
 ];
 
+export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("gieomo_session_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
+
 /**
  * Safely fetches and parses JSON without throwing SyntaxError on empty, aborted, or non-JSON responses.
  * Especially crucial when search engine crawlers (like Googlebot) abort background fetches or block /api routes.
@@ -654,6 +665,7 @@ async function safeFetchJson<T = any>(url: string, timeoutMs = 10000): Promise<T
     const res = await fetch(url, {
       signal: controller ? controller.signal : undefined,
       cache: "no-store",
+      headers: getAuthHeaders(),
     });
     if (timeoutId) clearTimeout(timeoutId);
     if (!res.ok) return null;
@@ -717,7 +729,7 @@ export function saveStoredPickupPoint(point: PickupPoint): void {
     // Sync to Supabase DB in background
     fetch("/api/pickup-points", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(point),
     }).catch((err) => console.warn("Could not persist pickup point to server:", err));
   } catch (e) {
@@ -742,6 +754,7 @@ export function deleteStoredPickupPoint(pointId: string): void {
 
     fetch(`/api/pickup-points?${params.toString()}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).catch((err) => console.warn("Could not delete pickup point on server:", err));
   } catch (e) {
     console.error("Error deleting pickup point", e);
@@ -815,7 +828,7 @@ export function updateContactMessageStatus(id: string, status: "unread" | "read"
     // Sync to Supabase in background
     fetch("/api/contact/messages", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ id, status }),
     }).catch((err) => console.warn("Could not update contact message status on server:", err));
   } catch (e) {
@@ -833,6 +846,7 @@ export function deleteStoredContactMessage(id: string): void {
 
     fetch(`/api/contact/messages?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).catch((err) => console.warn("Could not delete contact message on server:", err));
   } catch (e) {
     console.error("Error deleting contact message", e);
@@ -948,7 +962,7 @@ export function syncMembersFromServer(force = false): void {
               totalRevenue: loc?.totalRevenue || 0,
               status: m.status || "active",
               joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : (loc?.joinedDate || "01/09/2026"),
-              password: m.password || m.password_hash || loc?.password || "MamMo@123",
+              password: m.password || loc?.password || "••••••••",
               lastActiveAt: finalLastActive,
               lastLoginAt: loc?.lastLoginAt || undefined,
             };
@@ -1069,7 +1083,7 @@ export function saveStoredMembers(members: StoredMember[], changedMember?: Store
       if (m.memberId !== "baotri-system") {
         fetch("/api/members", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             memberId: m.memberId,
             fullName: m.fullName,
@@ -1122,6 +1136,7 @@ export function deleteStoredMember(memberId: string): void {
 
     fetch(`/api/members?${params.toString()}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).catch((err) => console.warn("Could not delete member on server:", err));
   } catch (e) {
     console.error("Error deleting member from storage", e);
@@ -1371,7 +1386,7 @@ export function saveNewVoucher(voucher: Voucher): void {
     // Sync to Supabase in background
     fetch("/api/vouchers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(voucherToSave),
     }).catch((err) => console.warn("Could not persist voucher to server:", err));
   } catch (e) {
@@ -1394,7 +1409,7 @@ export function updateStoredVoucher(voucher: Voucher): void {
     // Sync to Supabase in background
     fetch("/api/vouchers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(voucherToSave),
     }).catch((err) => console.warn("Could not update voucher on server:", err));
   } catch (e) {
@@ -1416,6 +1431,7 @@ export function deleteStoredVoucher(voucherId: string): void {
     const idToDelete = target?.code || voucherId;
     fetch(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).catch((err) => console.warn("Could not delete voucher on server:", err));
   } catch (e) {
     console.error("Error deleting voucher", e);
@@ -1525,7 +1541,7 @@ export async function saveNewProduct(
     try {
       const res = await fetch("/api/products", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(productToSave),
       });
       const data = await res.json();
@@ -1600,7 +1616,7 @@ export async function updateStoredProduct(
       // Sync to Supabase DB
       const res = await fetch("/api/products", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ id: product.product_id, product }),
       });
       const data = await res.json();
@@ -1632,7 +1648,7 @@ export function toggleStoredProductStatus(productId: string, newStatus: "active"
     // Call dedicated PATCH endpoint
     fetch("/api/products", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ id: productId, status: newStatus }),
     }).catch((err) => console.warn("Could not toggle status on server:", err));
   } catch (e) {
@@ -1655,7 +1671,7 @@ export function toggleStoredProductFeatured(productId: string, newFeatured: bool
     // Call dedicated PATCH endpoint
     fetch("/api/products", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ id: productId, featured: newFeatured }),
     }).catch((err) => console.warn("Could not toggle featured on server:", err));
   } catch (e) {
@@ -1704,6 +1720,7 @@ export function deleteStoredProduct(productId: string): void {
 
     fetch(`/api/products?${params.toString()}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).catch((err) => console.warn("Could not delete product on server:", err));
   } catch (e) {
     console.error("Error deleting product", e);
@@ -2544,11 +2561,11 @@ export function deleteStoredCombo(comboId: string): void {
 // ADMIN AUTHENTICATION STORE
 // ==========================================
 export const DEFAULT_ADMIN_EMAIL = "baotri@gieomo.store";
-export const DEFAULT_ADMIN_PASSWORD = "GieoMo@2026";
+export const DEFAULT_ADMIN_PASSWORD = "";
 
 export function getStoredAdminPassword(): string {
-  if (typeof window === "undefined") return DEFAULT_ADMIN_PASSWORD;
-  return localStorage.getItem("gieomo_admin_pwd") || DEFAULT_ADMIN_PASSWORD;
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("gieomo_admin_pwd") || "";
 }
 
 export function saveAdminPassword(newPass: string): void {
@@ -2602,7 +2619,7 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
   // System maintenance account authentication (supports custom updated password & default GieoMo@2026)
   if (cleanLower === "baotri@gieomo.store" || cleanLower === "baotri" || matchedMember?.memberId === "baotri-system") {
     const isCustomPass = Boolean(matchedMember?.password && matchedMember.password !== "••••••••" && password === matchedMember.password);
-    if (password === "GieoMo@2026" || isCustomPass || password === currentPass) {
+    if (isCustomPass || password === currentPass) {
       if (typeof window !== "undefined") {
         if (matchedMember) {
           matchedMember.lastLoginAt = new Date().toISOString();
@@ -2628,22 +2645,13 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
 
   const isMasterMatch = password === currentPass;
   const isMemberMatch = matchedMember
-    ? (Boolean(matchedMember.password && matchedMember.password !== "••••••••" && matchedMember.password === password) ||
-       password === "MamMo@123" ||
-       password === "GieoMo@2026")
+    ? Boolean(matchedMember.password && matchedMember.password !== "••••••••" && matchedMember.password === password)
     : false;
 
-  // Fallback passwords (MamMo@123, admin123, GieoMo@2026) only work when the identifier
-  // belongs to a known member — prevents unknown actors from using default passwords.
-  const isFallbackMatch =
-    Boolean(matchedMember) &&
-    (password === "MamMo@123" || password === "admin123" || password === "GieoMo@2026");
-
   // Master password without a matched email: only allow generic (no-email) admin logins.
-  // If an unknown email is provided with master password, deny access.
   const masterAllowed = isMasterMatch && (!cleanInput || Boolean(matchedMember));
 
-  if (masterAllowed || isMemberMatch || isFallbackMatch) {
+  if (masterAllowed || isMemberMatch) {
     if (typeof window !== "undefined") {
       const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
       const name = matchedMember?.fullName || (cleanLower === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");
@@ -2774,18 +2782,9 @@ export function verifyMemberCurrentPassword(emailOrMemberId: string, inputPass: 
   const storedPass = matched.password;
   const adminPass = getStoredAdminPassword();
   if (storedPass && storedPass !== "••••••••") {
-    return (
-      inputPass === storedPass ||
-      inputPass === adminPass ||
-      inputPass === "MamMo@123" ||
-      inputPass === "GieoMo@2026"
-    );
+    return inputPass === storedPass || inputPass === adminPass;
   }
-  return (
-    inputPass === "MamMo@123" ||
-    inputPass === "GieoMo@2026" ||
-    inputPass === adminPass
-  );
+  return inputPass === adminPass;
 }
 
 export function updateMemberPassword(

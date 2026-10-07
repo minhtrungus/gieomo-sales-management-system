@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSystemSettingsServer, updateSystemSettingsServer, type SiteSettings } from "@/lib/services/configService";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    // Require Admin authentication to change banking or site settings
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     const result = await updateSystemSettingsServer(body as Partial<SiteSettings>);
     if (!result.success) {

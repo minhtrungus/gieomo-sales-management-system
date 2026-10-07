@@ -323,28 +323,8 @@ function CheckoutContent() {
       return;
     }
 
-    // Validated! Directly create order and go straight to QR / payment screen
+    // Validated! Send order to server and await confirmation
     setIsSubmitting(true);
-
-    // Generate Order Code
-    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
-    const newOrderId = `ord-${Date.now()}`;
-
-    // Build order items snapshot
-    const orderItemsSnapshot: OrderItem[] = items.map((it, idx) => ({
-      order_item_id: `item-${newOrderId}-${idx + 1}`,
-      order_id: newOrderId,
-      product_id: it.product_id,
-      variant_id: it.variant_id,
-      combo_id: it.combo_id || null,
-      product_name_snapshot: it.product_name || "Sản phẩm",
-      item_name_snapshot: it.product_name || "Sản phẩm",
-      variant_name_snapshot: it.variant_name || null,
-      price_snapshot: it.price,
-      quantity: it.quantity,
-      subtotal: it.price * it.quantity,
-      created_at: new Date().toISOString(),
-    }));
 
     const storedRef =
       (typeof window !== "undefined" ? localStorage.getItem("gieomo_referral_code") : null) ||
@@ -379,96 +359,126 @@ function CheckoutContent() {
       ? "Trực tiếp (Website)"
       : formData.introducer_info || "Trực tiếp (Website)";
 
-    const newOrderRecord: Order = {
-      order_id: newOrderId,
-      order_code: randomCode,
-      buyer_name: formData.buyer_name,
-      buyer_phone: formData.buyer_phone,
-      buyer_email: formData.buyer_email || "",
-      recipient_name: differentRecipient ? formData.recipient_name : formData.buyer_name,
-      recipient_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
+    const orderPayload = {
+      buyer_name: formData.buyer_name.trim(),
+      buyer_phone: formData.buyer_phone.trim(),
+      buyer_email: formData.buyer_email?.trim() || null,
+      recipient_name: (differentRecipient ? formData.recipient_name : formData.buyer_name).trim(),
+      recipient_phone: (differentRecipient ? formData.recipient_phone : formData.buyer_phone).trim(),
       delivery_type: deliveryType,
       address_detail:
         deliveryType === "home_delivery"
-          ? formData.address_detail
+          ? formData.address_detail.trim()
           : `Giao qua tay thành viên: ${finalIntroducerText}`,
-      district: "",
       province: formData.province || "TP. Hồ Chí Minh",
-      payment_method: "banking",
-      payment_status: "pending",
-      order_status: "pending",
-      delivery_status: "not_ready",
-      subtotal: subtotal,
-      discount_amount: discountAmount,
-      shipping_fee: shippingFee,
-      final_amount: finalAmount,
-      total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
+      voucher_code: voucherApplied || formData.voucher_code || null,
+      referral_code: finalReferralCode,
       seller_id: finalSellerId,
       introducer_info: finalIntroducerText,
-      referral_code: finalReferralCode,
       customer_note: formData.note || "",
-      items: orderItemsSnapshot,
-      created_at: new Date().toISOString(),
-      completed_at: null,
-      updated_at: new Date().toISOString(),
+      items: items.map((it) => ({
+        product_id: it.product_id,
+        variant_id: it.variant_id || null,
+        combo_id: it.combo_id || null,
+        quantity: it.quantity,
+      })),
     };
 
-    saveNewOrder(newOrderRecord);
-
-    // Send order confirmation email asynchronously only for non-banking orders (defer banking until paid)
-    if (paymentMethod !== "banking") {
+    (async () => {
       try {
-        fetch("/api/notify/email", {
+        const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "order_confirmation",
-            order: newOrderRecord,
-            toEmail: formData.buyer_email || undefined,
-          }),
-        }).catch(() => {});
-      } catch {
-        // ignore
-      }
-    }
-
-    // Save to local customer history and update customers store
-    try {
-      const myRaw = localStorage.getItem("gieomo_my_order_codes");
-      const myCodes = myRaw ? JSON.parse(myRaw) : [];
-      localStorage.setItem("gieomo_my_order_codes", JSON.stringify([randomCode, ...myCodes.filter((c: string) => c !== randomCode)]));
-      localStorage.setItem("gieomo_customer_profile", JSON.stringify({ name: formData.buyer_name, phone: formData.buyer_phone }));
-
-      // Auto-sync customer record
-      const custRaw = localStorage.getItem("gieomo_customers");
-      const custList = custRaw ? JSON.parse(custRaw) : [];
-      const cleanPhone = formData.buyer_phone.replace(/\s+/g, "");
-      const existingIdx = custList.findIndex((c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone);
-      if (existingIdx >= 0) {
-        custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 1) + 1;
-        custList[existingIdx].totalSpent = (custList[existingIdx].totalSpent || 0) + finalAmount;
-        if (formData.buyer_name) custList[existingIdx].fullName = formData.buyer_name;
-        if (formData.buyer_email) custList[existingIdx].email = formData.buyer_email;
-      } else {
-        custList.unshift({
-          customerId: `cust-${Date.now()}`,
-          fullName: formData.buyer_name,
-          phone: formData.buyer_phone,
-          email: formData.buyer_email || "",
-          address: deliveryType === "home_delivery" ? `${formData.address_detail}, ${formData.province}` : "Nhận tại điểm Mầm Mơ",
-          totalOrders: 1,
-          totalSpent: finalAmount,
-          createdAt: new Date().toISOString(),
+          body: JSON.stringify(orderPayload),
         });
-      }
-      localStorage.setItem("gieomo_customers", JSON.stringify(custList));
-    } catch {
-      // ignore
-    }
 
-    // Navigate straight to the payment / QR code screen without intermediate modals or delay
-    clearCart();
-    router.push(`/order/success?code=${randomCode}&payment=${paymentMethod}&amount=${finalAmount}`);
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.orderCode) {
+          throw new Error(result.error || "Không thể tạo đơn hàng. Vui lòng kiểm tra lại giỏ hàng!");
+        }
+
+        const serverOrderCode = result.orderCode;
+        const serverFinalAmount = result.finalAmount ?? finalAmount;
+
+        // Build local order snapshot for client cache
+        const newOrderRecord: Order = {
+          order_id: result.orderId || `ord-${Date.now()}`,
+          order_code: serverOrderCode,
+          buyer_name: formData.buyer_name,
+          buyer_phone: formData.buyer_phone,
+          buyer_email: formData.buyer_email || "",
+          recipient_name: differentRecipient ? formData.recipient_name : formData.buyer_name,
+          recipient_phone: differentRecipient ? formData.recipient_phone : formData.buyer_phone,
+          delivery_type: deliveryType,
+          address_detail:
+            deliveryType === "home_delivery"
+              ? formData.address_detail
+              : `Giao qua tay thành viên: ${finalIntroducerText}`,
+          district: "",
+          province: formData.province || "TP. Hồ Chí Minh",
+          payment_method: "banking",
+          payment_status: "pending",
+          order_status: "pending",
+          delivery_status: "not_ready",
+          subtotal: subtotal,
+          discount_amount: discountAmount,
+          shipping_fee: shippingFee,
+          final_amount: serverFinalAmount,
+          total_cost: Math.round(Math.max(0, serverFinalAmount - shippingFee) * 0.4),
+          seller_id: finalSellerId,
+          introducer_info: finalIntroducerText,
+          referral_code: finalReferralCode,
+          customer_note: formData.note || "",
+          items: items.map((it, idx) => ({
+            order_item_id: `item-${serverOrderCode}-${idx + 1}`,
+            order_id: result.orderId || serverOrderCode,
+            product_id: it.product_id,
+            variant_id: it.variant_id,
+            combo_id: it.combo_id || null,
+            product_name_snapshot: it.product_name || "Sản phẩm",
+            item_name_snapshot: it.product_name || "Sản phẩm",
+            variant_name_snapshot: it.variant_name || null,
+            price_snapshot: it.price,
+            quantity: it.quantity,
+            subtotal: it.price * it.quantity,
+            created_at: new Date().toISOString(),
+          })),
+          created_at: new Date().toISOString(),
+          completed_at: null,
+          updated_at: new Date().toISOString(),
+        };
+
+        // Cache order in local device storage
+        saveNewOrder(newOrderRecord);
+
+        // Update local customer profile
+        try {
+          const myRaw = localStorage.getItem("gieomo_my_order_codes");
+          const myCodes = myRaw ? JSON.parse(myRaw) : [];
+          localStorage.setItem(
+            "gieomo_my_order_codes",
+            JSON.stringify([serverOrderCode, ...myCodes.filter((c: string) => c !== serverOrderCode)])
+          );
+          localStorage.setItem(
+            "gieomo_customer_profile",
+            JSON.stringify({ name: formData.buyer_name, phone: formData.buyer_phone })
+          );
+        } catch {
+          // ignore
+        }
+
+        // Clear cart and redirect to success page
+        clearCart();
+        router.push(
+          `/order/success?code=${serverOrderCode}&payment=${paymentMethod}&amount=${serverFinalAmount}`
+        );
+      } catch (err: any) {
+        console.error("[Checkout] Order creation failed:", err);
+        setErrors({ submit: err.message || "Lỗi kết nối máy chủ. Vui lòng thử lại!" });
+        setIsSubmitting(false);
+      }
+    })();
   };
 
   if (items.length === 0) {

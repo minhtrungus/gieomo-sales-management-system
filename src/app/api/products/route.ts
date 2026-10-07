@@ -6,13 +6,20 @@ import {
   toggleProductFeaturedServer,
   deleteProductServer,
 } from "@/lib/services/productService";
+import { requireAdmin, getAuthenticatedUser } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const includeDrafts = searchParams.get("includeDrafts") === "true" || searchParams.get("admin") === "true";
+    const wantsDrafts = searchParams.get("includeDrafts") === "true" || searchParams.get("admin") === "true";
+
+    let includeDrafts = false;
+    if (wantsDrafts) {
+      const user = await getAuthenticatedUser(request);
+      includeDrafts = Boolean(user && (user.role === "admin" || user.role === "btc_sale"));
+    }
 
     const products = await getProductsServer(includeDrafts);
     return NextResponse.json({ success: true, products });
@@ -27,6 +34,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     if (!body || !body.name) {
       return NextResponse.json(
@@ -52,6 +64,11 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     const { id, status, featured, product } = body;
 
@@ -89,6 +106,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const slug = searchParams.get("slug") || undefined;

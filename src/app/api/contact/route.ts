@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { escapeHtml } from "@/lib/utils/emailService";
 
 export async function POST(request: Request) {
   try {
@@ -12,16 +13,21 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanName = String(name).trim().slice(0, 100);
+    const cleanEmail = String(email).trim().slice(0, 100);
+    const cleanPhone = phone ? String(phone).trim().slice(0, 20) : null;
+    const cleanMessage = String(message).trim().slice(0, 3000);
+
     // Save to Supabase
     try {
       const { createAdminClient } = await import("@/lib/supabase/admin");
       const supabase = createAdminClient();
       await supabase.from("contact_messages").insert([
         {
-          name,
-          email,
-          phone: phone || null,
-          message,
+          name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          message: cleanMessage,
           status: "unread",
         },
       ]);
@@ -33,7 +39,12 @@ export async function POST(request: Request) {
     if (process.env.RESEND_API_KEY) {
       try {
         const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "gieomo@mammo.vn";
-        const fromEmail = process.env.RESEND_FROM_EMAIL || "Gieo Mo Website <onboarding@resend.dev>";
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>";
+        const safeName = escapeHtml(cleanName);
+        const safeEmail = escapeHtml(cleanEmail);
+        const safePhone = escapeHtml(cleanPhone || "Không cung cấp");
+        const safeMessage = escapeHtml(cleanMessage).replace(/\n/g, "<br/>");
+
         await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -43,18 +54,18 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             from: fromEmail,
             to: [adminEmail],
-            subject: `[Gieo Mơ] Lời nhắn mới từ ${name}`,
+            subject: `[Gieo Mơ] Lời nhắn mới từ ${safeName}`,
             html: `
               <h2>Lời nhắn mới từ khách hàng website Gieo Mơ</h2>
-              <p><strong>Họ tên:</strong> ${name}</p>
-              <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
-              <p><strong>Số điện thoại:</strong> ${phone || "Không cung cấp"}</p>
+              <p><strong>Họ tên:</strong> ${safeName}</p>
+              <p><strong>Email:</strong> ${safeEmail}</p>
+              <p><strong>Số điện thoại:</strong> ${safePhone}</p>
               <hr />
               <p><strong>Nội dung:</strong></p>
               <blockquote style="background:#f4fbf5;padding:12px 16px;border-left:4px solid #2d6338;border-radius:6px;">
-                ${message.replace(/\n/g, "<br/>")}
+                ${safeMessage}
               </blockquote>
-              <p style="font-size:12px;color:#888;">Gửi từ form liên hệ gieomo.vn</p>
+              <p style="font-size:12px;color:#888;">Gửi từ form liên hệ gieomo.store</p>
             `,
           }),
         });

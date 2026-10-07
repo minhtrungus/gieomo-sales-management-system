@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("contact_messages")
@@ -12,7 +18,7 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn("[GET /api/contact/messages] DB error (table might not exist yet):", error);
+      console.warn("[GET /api/contact/messages] DB error:", error);
       return NextResponse.json({ success: true, messages: [] });
     }
 
@@ -25,6 +31,11 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     const { id, status, reply_note } = body;
 
@@ -37,7 +48,6 @@ export async function PATCH(request: Request) {
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     if (!isUuid) {
-      // Local seed or mock message without Supabase UUID
       return NextResponse.json({ success: true });
     }
 
@@ -72,6 +82,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProductCategory } from "@/types/database";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body: ProductCategory = await request.json();
     if (!body || !body.name || !body.slug) {
       return NextResponse.json({ success: false, error: "Tên và slug danh mục là bắt buộc" }, { status: 400 });
@@ -68,6 +74,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get("id");
 
@@ -76,8 +87,6 @@ export async function DELETE(request: Request) {
     }
 
     const supabase = createAdminClient();
-
-    // Delete by category_id if UUID, or delete by slug or category_id
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryId);
     let deleteQuery;
     if (isUuid) {
@@ -87,7 +96,6 @@ export async function DELETE(request: Request) {
     }
 
     const { error } = await deleteQuery;
-
     if (error) {
       console.error("[DELETE /api/categories] Error:", error);
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
@@ -99,4 +107,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa danh mục" }, { status: 500 });
   }
 }
-

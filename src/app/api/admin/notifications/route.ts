@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { NotificationItem, NotificationType } from "@/lib/notifications/NotificationContext";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +50,13 @@ async function saveNotificationState(supabase: any, state: NotificationState): P
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const supabase = createAdminClient();
 
     // 1. Fetch persistent read/starred/deleted state
@@ -195,6 +201,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     const { action, ids = [], id } = body;
 
@@ -226,7 +237,7 @@ export async function POST(request: Request) {
       targetIds.forEach((tId) => readSet.delete(tId));
     } else if (action === "markAllRead") {
       // Get all current notifications
-      const getRes = await GET();
+      const getRes = await GET(request);
       const data = await getRes.json();
       if (Array.isArray(data.notifications)) {
         data.notifications.forEach((n: NotificationItem) => readSet.add(n.id));

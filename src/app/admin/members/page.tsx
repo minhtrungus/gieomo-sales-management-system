@@ -197,7 +197,7 @@ const CreateMemberModal = memo(function CreateMemberModal({
   const [newPhone, setNewPhone] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "btc_sale">("btc_sale");
   const [newReferralCode, setNewReferralCode] = useState("");
-  const [newPassword, setNewPassword] = useState("MamMo@123");
+  const [newPassword, setNewPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   if (!isOpen) return null;

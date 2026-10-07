@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PickupPoint } from "@/types/database";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body: PickupPoint = await request.json();
     if (!body || !body.name || !body.address) {
       return NextResponse.json({ success: false, error: "Tên và địa chỉ điểm nhận là bắt buộc" }, { status: 400 });
@@ -64,42 +70,39 @@ export async function POST(request: Request) {
         .eq("pickup_point_id", existingPointId)
         .select()
         .single();
-      if (error) {
-        console.error("[POST /api/pickup-points] Update error:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-      }
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       savedPoint = data;
     } else {
+      payload.created_at = new Date().toISOString();
       const { data, error } = await supabase
         .from("pickup_points")
         .insert(payload)
         .select()
         .single();
-      if (error) {
-        console.error("[POST /api/pickup-points] Insert error:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-      }
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       savedPoint = data;
     }
 
     return NextResponse.json({ success: true, pickup_point: savedPoint });
   } catch (err: any) {
     console.error("[POST /api/pickup-points] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu điểm nhận" }, { status: 500 });
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu điểm nhận hàng" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const name = searchParams.get("name");
 
     if (!id && !name) {
-      return NextResponse.json(
-        { success: false, error: "Thiếu tham số id hoặc name điểm nhận cần xóa" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Thiếu id hoặc name của điểm nhận cần xóa" }, { status: 400 });
     }
 
     const supabase = createAdminClient();
@@ -110,22 +113,18 @@ export async function DELETE(request: Request) {
       query = query.eq("pickup_point_id", id);
     } else if (name) {
       query = query.eq("name", name);
-    } else if (id) {
-      query = query.or(`pickup_point_id.eq.${id},name.eq.${id}`);
+    } else {
+      query = query.eq("pickup_point_id", id);
     }
 
     const { error } = await query;
     if (error) {
-      console.error("[DELETE /api/pickup-points] Error:", error);
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[DELETE /api/pickup-points] Exception:", err);
-    return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi xóa điểm nhận" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa điểm nhận hàng" }, { status: 500 });
   }
 }

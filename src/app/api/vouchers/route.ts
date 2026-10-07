@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Voucher } from "@/types/database";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("vouchers")
       .select("*")
+      .eq("status", "active")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -26,6 +28,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body: Voucher = await request.json();
     if (!body || !body.code) {
       return NextResponse.json({ success: false, error: "Mã giảm giá là bắt buộc" }, { status: 400 });
@@ -73,6 +80,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 

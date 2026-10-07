@@ -1,15 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
-import {
-  verifyAdminLogin,
-  getAdminSession,
-  syncMembersFromServer,
-  SYSTEM_MAINTENANCE_ACCOUNT,
-} from "@/lib/data/orderStore";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -17,10 +11,6 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    syncMembersFromServer();
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,49 +26,49 @@ export default function AdminLoginPage() {
       return;
     }
 
-    // 1. First attempt with local cache
-    let result = verifyAdminLogin(cleanPass, cleanInput);
+    try {
+      // Authenticate directly with the secure server-side login endpoint
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: cleanInput, password: cleanPass }),
+      });
 
-    // 2. If failed, fetch latest members from server and retry immediately (handles new device cold-cache)
-    if (!result.success) {
-      try {
-        const res = await fetch("/api/members");
-        const data = await res.json();
-        if (data?.success && Array.isArray(data.members)) {
-          const mapped = data.members.map((m: any) => ({
-            memberId: m.member_id,
-            fullName: m.full_name,
-            email: m.email || "",
-            role: m.role || "btc_sale",
-            referralCode: m.referral_code || "",
-            phone: m.phone || "Chưa cập nhật",
-            totalOrders: 0,
-            totalRevenue: 0,
-            status: m.status || "active",
-            joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : "01/09/2026",
-            password: m.password || m.password_hash || "MamMo@123",
-          }));
-          const finalMembers = [
-            SYSTEM_MAINTENANCE_ACCOUNT,
-            ...mapped.filter((m: any) => m.memberId !== "baotri-system"),
-          ];
-          localStorage.setItem("gieomo_members", JSON.stringify(finalMembers));
-          result = verifyAdminLogin(cleanPass, cleanInput);
-        }
-      } catch {
-        // Fall through
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data?.error || "Tài khoản hoặc mật khẩu không chính xác!");
+        setLoading(false);
+        return;
       }
-    }
 
-    if (result.success) {
-      const session = getAdminSession();
-      if (session?.role === "btc_sale") {
+      // Save local UI session for client components and dispatch auth event
+      if (typeof window !== "undefined" && data.user) {
+        const sessionPayload = {
+          authenticated: true,
+          email: data.user.email,
+          name: data.user.fullName,
+          role: data.user.role,
+          referralCode: data.user.referralCode || "",
+          memberId: data.user.memberId,
+          phone: data.user.phone || "",
+          loginAt: new Date().toISOString(),
+        };
+        localStorage.setItem("gieomo_admin_session", JSON.stringify(sessionPayload));
+        if (data.token) {
+          localStorage.setItem("gieomo_session_token", data.token);
+        }
+        window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+      }
+
+      if (data.user?.role === "btc_sale") {
         router.push("/sale");
       } else {
         router.push("/admin/dashboard");
       }
-    } else {
-      setError(result.error || "Tài khoản hoặc mật khẩu không chính xác!");
+    } catch (err: any) {
+      console.error("[Login] Exception:", err);
+      setError("Lỗi kết nối máy chủ khi đăng nhập. Vui lòng thử lại!");
       setLoading(false);
     }
   };
@@ -123,30 +113,33 @@ export default function AdminLoginPage() {
         />
 
         {error && (
-          <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-xs text-red-600 font-medium text-center">
-            {error}
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold leading-relaxed animate-in fade-in flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full h-11 inline-flex items-center justify-center font-bold text-xs sm:text-sm text-white bg-[#342A24] hover:bg-[#231B16] rounded-full shadow-xs transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer touch-manipulation"
+          className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {loading ? "Đang xử lý..." : "Đăng nhập"}
+          {loading ? (
+            <>
+              <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              <span>Đang kiểm tra bảo mật...</span>
+            </>
+          ) : (
+            <span>Đăng nhập hệ thống</span>
+          )}
         </button>
       </form>
 
-      <div className="p-3 rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] text-[11px] text-[#7E7068] space-y-1">
-        <p className="font-bold text-[#231B16]">💡 Hướng dẫn đăng nhập:</p>
-        <p>• Đăng nhập bằng <strong>Email</strong> hoặc <strong>Số điện thoại</strong> đã được cấp quyền.</p>
-        <p>• Nếu quên mật khẩu hoặc cần tạo tài khoản mới, vui lòng liên hệ Ban Quản Trị Mầm Mơ.</p>
-      </div>
-
-      <div className="text-center pt-2 border-t border-gray-100">
-        <Link href="/" className="text-xs text-emerald-800 font-semibold hover:underline">
-          ← Quay lại Trang bán hàng
+      <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+        <Link href="/" className="hover:text-emerald-700 transition-colors">
+          ← Về trang chủ Gieo Mơ
         </Link>
+        <span>Gieo Mơ Admin v2.0</span>
       </div>
     </div>
   );

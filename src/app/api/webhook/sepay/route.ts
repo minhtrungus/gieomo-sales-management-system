@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   try {
@@ -7,34 +8,27 @@ export async function POST(request: Request) {
     const configuredApiKey = (process.env.SEPAY_API_KEY || "").trim();
 
     if (configuredApiKey) {
-      // Extract token from "Apikey <token>", "Bearer <token>", or raw "<token>"
       const token = authHeader.replace(/^(Apikey|Bearer|apikey)\s+/i, "").trim();
       if (!token || token !== configuredApiKey) {
-        console.warn(`[SePay Webhook] 401 Unauthorized: Received token '${token}', expected '${configuredApiKey}'`);
+        console.warn(`[SePay Webhook] 401 Unauthorized: Received token '${token}'`);
         return NextResponse.json(
           {
             success: false,
             error: "Unauthorized: Invalid or missing SePay API Key",
-            hint: "Please ensure the API Key in SePay exactly matches SEPAY_API_KEY in Vercel environment variables",
           },
           { status: 401 }
         );
       }
+    } else if (process.env.NODE_ENV === "production") {
+      console.error("[SePay Webhook] SEPAY_API_KEY environment variable is missing in production.");
+      return NextResponse.json(
+        { success: false, error: "Server Misconfiguration: SEPAY_API_KEY not configured" },
+        { status: 500 }
+      );
     }
 
     const payload = await request.json();
 
-    /**
-     * SePay Payload Structure:
-     * id: number
-     * gateway: string (MBBank, VCB, TPBank, etc.)
-     * transactionDate: string
-     * accountNumber: string
-     * amountIn: number
-     * amountOut: number
-     * transactionContent: string (e.g. "GM-369817 ung ho du an mam mo")
-     * referenceNumber: string
-     */
     const transactionContent: string =
       payload.transactionContent ||
       payload.content ||
@@ -56,7 +50,7 @@ export async function POST(request: Request) {
       0;
     const amountIn = typeof rawAmount === "string" ? parseFloat(rawAmount) || 0 : Number(rawAmount) || 0;
 
-    // Handle test pings from SePay (when test payload is empty or has zero amount)
+    // Handle test pings from SePay
     if (!transactionContent && amountIn <= 0) {
       return NextResponse.json(
         {
@@ -68,13 +62,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Extract Order Code from transactionContent
-    // Matches GM-123456 or GM123456 or GM-XXXXXX
+    // 2. Extract Order Code from transactionContent (GM-XXXXXX)
     const codeMatch = transactionContent.match(/GM[-_]?([0-9]{4,8}|[A-Z0-9]{4,8})/i);
     let matchedOrderCode: string | null = null;
 
     if (codeMatch) {
-      // Normalize to GM-XXXXXX format
       const rawCode = codeMatch[0].toUpperCase();
       matchedOrderCode = rawCode.includes("-") ? rawCode : `GM-${rawCode.replace("GM", "")}`;
     }
@@ -90,75 +82,115 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Update Order & Payment Status in Supabase (if configured)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // 3. Update Order & Payment Status in Supabase
+    const supabase = createAdminClient();
 
-    if (supabaseUrl && supabaseKey) {
+    // Find matching order
+    const { data: order, error: findError } = await supabase
+      .from("orders")
+      .select("order_id, order_code, final_amount, order_status, payment_status, internal_note")
+      .eq("order_code", matchedOrderCode)
+      .maybeSingle();
+
+    if (findError || !order) {
+      console.warn(`SePay Webhook: Order #${matchedOrderCode} not found in database.`);
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Order #${matchedOrderCode} not found in database.`,
+        },
+        { status: 200 }
+      );
+    }
+
+    // Check Idempotency: If already paid, return early to prevent duplicate records
+    if (order.payment_status === "paid") {
+      return NextResponse.json({
+        success: true,
+        message: `Order #${matchedOrderCode} was already marked as paid.`,
+        matched_order_code: matchedOrderCode,
+      });
+    }
+
+    // 4. Verify Amount: Ensure amount received meets or exceeds order final_amount
+    const isAmountSufficient = amountIn >= (order.final_amount || 0);
+
+    if (!isAmountSufficient) {
+      const note = `[CẢNH BÁO SEPAY] Khách chuyển thiếu tiền. Cần: ${(order.final_amount || 0).toLocaleString("vi-VN")}đ, Nhận: ${amountIn.toLocaleString("vi-VN")}đ. Mã GD: ${id || referenceNumber}.`;
+      await supabase
+        .from("orders")
+        .update({
+          internal_note: order.internal_note ? `${order.internal_note} | ${note}` : note,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("order_id", order.order_id);
+
+      return NextResponse.json({
+        success: false,
+        message: `Số tiền chuyển (${amountIn}đ) nhỏ hơn tổng đơn (${order.final_amount}đ). Ghi chú đơn đã được cập nhật để đối soát thủ công.`,
+        matched_order_code: matchedOrderCode,
+        amount_received: amountIn,
+        amount_required: order.final_amount,
+      });
+    }
+
+    // Confirm payment & advance order status
+    const newOrderStatus = order.order_status === "pending" ? "confirmed" : order.order_status;
+    const paymentNote = `Tự động duyệt thanh toán qua SePay Webhook (Mã GD: ${id || referenceNumber}, Ngân hàng: ${gateway}). Số tiền nhận: ${amountIn.toLocaleString("vi-VN")}đ.`;
+
+    await supabase
+      .from("orders")
+      .update({
+        payment_status: "paid",
+        order_status: newOrderStatus,
+        confirmed_at: order.order_status === "pending" ? new Date().toISOString() : undefined,
+        internal_note: order.internal_note ? `${order.internal_note} | ${paymentNote}` : paymentNote,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order.order_id);
+
+    // Insert payment record
+    await supabase.from("payments").insert([
+      {
+        order_id: order.order_id,
+        amount: amountIn,
+        payment_method: "banking",
+        transaction_code: referenceNumber || `SEPAY-${id}`,
+        status: "paid",
+        confirmed_at: new Date().toISOString(),
+      },
+    ]);
+
+    // Send payment confirmation email via Resend if configured
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const { data: customerData } = await supabase
+      .from("customers")
+      .select("email, full_name")
+      .eq("customer_id", (order as any).customer_id || "")
+      .maybeSingle();
+
+    if (resendApiKey && customerData?.email) {
       try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(supabaseUrl, supabaseKey);
-
-        // Find matching order
-        const { data: order, error: findError } = await supabase
-          .from("orders")
-          .select("order_id, order_code, final_amount, order_status, payment_status")
-          .eq("order_code", matchedOrderCode)
-          .single();
-
-        if (findError || !order) {
-          console.warn(`SePay Webhook: Order #${matchedOrderCode} not found in database.`);
-        } else {
-          // Confirm payment & advance order status
-          const newOrderStatus = order.order_status === "pending" ? "confirmed" : order.order_status;
-
-          await supabase
-            .from("orders")
-            .update({
-              payment_status: "paid",
-              order_status: newOrderStatus,
-              internal_note: `Tự động duyệt thanh toán qua SePay Webhook (Mã GD: ${id || referenceNumber}, Ngân hàng: ${gateway}). Số tiền nhận: ${amountIn.toLocaleString("vi-VN")}đ.`,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("order_id", order.order_id);
-
-          // Insert payment record
-          await supabase.from("payments").insert([
-            {
-              order_id: order.order_id,
-              amount: amountIn,
-              payment_method: "banking",
-              transaction_code: referenceNumber || `SEPAY-${id}`,
-              status: "paid",
-              confirmed_at: new Date().toISOString(),
-            },
-          ]);
-
-          // Send payment confirmation email via Resend if configured
-          const resendApiKey = process.env.RESEND_API_KEY;
-          if (resendApiKey && (order as any).buyer_email) {
-            try {
-              const { generatePaymentReceivedHtml } = await import("@/lib/utils/emailService");
-              await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${resendApiKey}`,
-                },
-                body: JSON.stringify({
-                  from: process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>",
-                  to: [(order as any).buyer_email],
-                  subject: `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`,
-                  html: generatePaymentReceivedHtml(order as any),
-                }),
-              });
-            } catch (mailErr) {
-              console.error("SePay Webhook: Error sending payment email:", mailErr);
-            }
-          }
-        }
-      } catch (dbErr) {
-        console.error("SePay Webhook: Database update error:", dbErr);
+        const { generatePaymentReceivedHtml } = await import("@/lib/utils/emailService");
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify({
+            from: process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>",
+            to: [customerData.email],
+            subject: `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`,
+            html: generatePaymentReceivedHtml({
+              ...order,
+              buyer_name: customerData.full_name,
+              buyer_email: customerData.email,
+            } as any),
+          }),
+        });
+      } catch (mailErr) {
+        console.error("SePay Webhook: Error sending payment email:", mailErr);
       }
     }
 

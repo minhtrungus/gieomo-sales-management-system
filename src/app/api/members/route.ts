@@ -1,71 +1,46 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAuthenticatedUser, requireAdmin, hashPassword } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
-const CREDENTIALS_KEY = "members_auth_credentials";
-
-const DEFAULT_SALE_ACCOUNT = {
-  member_id: "e2b4c5d6-789a-4bc1-9def-0123456789ab",
-  full_name: "Mầm Mơ (BTC Sale)",
-  email: "sale@gieomo.store",
-  phone: "0888670637",
-  role: "btc_sale",
-  status: "active",
-  referral_code: "MAMO",
-  password_hash: "MamMo@123",
-  created_at: new Date("2026-09-01T00:00:00Z").toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-async function getStoredCredentialsMap(supabase: any): Promise<Record<string, string>> {
-  try {
-    const { data } = await supabase
-      .from("system_configs")
-      .select("config_value")
-      .eq("config_key", CREDENTIALS_KEY)
-      .maybeSingle();
-
-    if (data?.config_value) {
-      return JSON.parse(data.config_value);
-    }
-  } catch {
-    // Graceful fallback
-  }
-  return {};
-}
-
-async function saveStoredCredentialsMap(supabase: any, map: Record<string, string>): Promise<void> {
-  try {
-    await supabase.from("system_configs").upsert({
-      config_key: CREDENTIALS_KEY,
-      config_value: JSON.stringify(map),
-      updated_at: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.warn("[saveStoredCredentialsMap] warning:", err);
-  }
-}
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = createAdminClient();
+    const currentUser = await getAuthenticatedUser(request);
 
-    // 1. Fetch all members from database
+    // 1. If unauthenticated, return ONLY public safe information for checkout / referral lookups
+    if (!currentUser) {
+      const { data, error } = await supabase
+        .from("members")
+        .select("member_id, full_name, referral_code")
+        .eq("status", "active")
+        .order("full_name", { ascending: true });
+
+      if (error) {
+        console.warn("[GET /api/members] DB error:", error);
+        return NextResponse.json({ success: true, members: [] });
+      }
+
+      const publicMembers = (data || []).map((m: any) => ({
+        memberId: m.member_id,
+        fullName: m.full_name,
+        referralCode: m.referral_code || "",
+      }));
+
+      return NextResponse.json({ success: true, members: publicMembers });
+    }
+
+    // 2. If authenticated (Admin or Member), return full member roster WITHOUT passwords or hashes
     const { data, error } = await supabase
       .from("members")
-      .select("*")
+      .select("member_id, full_name, email, phone, role, status, referral_code, created_at, updated_at")
       .order("created_at", { ascending: true });
 
     if (error) {
       console.warn("[GET /api/members] DB error:", error);
       return NextResponse.json({ success: true, members: [] });
     }
-
-    let membersList = data || [];
-
-    // 2. Fetch credential map and presence map
-    const credMap = await getStoredCredentialsMap(supabase);
 
     let presenceMap: Record<string, string> = {};
     try {
@@ -81,22 +56,9 @@ export async function GET() {
       // ignore
     }
 
-    // 3. Attach password/password_hash and last_active_at to each member
-    membersList = membersList.map((m: any) => {
-      const emailKey = m.email ? m.email.toLowerCase().trim() : "";
-      const phoneKey = m.phone ? m.phone.replace(/\D/g, "") : "";
-      const refKey = m.referral_code ? m.referral_code.toUpperCase().trim() : "";
+    const sanitizedMembers = (data || []).map((m: any) => {
       const idKey = m.member_id || "";
-
-      const resolvedPassword =
-        m.password_hash ||
-        m.password ||
-        (emailKey && credMap[emailKey]) ||
-        (phoneKey && credMap[phoneKey]) ||
-        (refKey && credMap[refKey]) ||
-        (idKey && credMap[idKey]) ||
-        "MamMo@123";
-
+      const emailKey = m.email ? m.email.toLowerCase().trim() : "";
       const resolvedLastActive =
         presenceMap[idKey] ||
         presenceMap[idKey.toLowerCase()] ||
@@ -104,14 +66,24 @@ export async function GET() {
         null;
 
       return {
-        ...m,
-        password: resolvedPassword,
-        password_hash: resolvedPassword,
+        memberId: m.member_id,
+        member_id: m.member_id,
+        fullName: m.full_name,
+        full_name: m.full_name,
+        email: m.email || "",
+        phone: m.phone || "",
+        role: m.role || "btc_sale",
+        status: m.status || "active",
+        referralCode: m.referral_code || "",
+        referral_code: m.referral_code || "",
+        joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString("vi-VN") : "01/09/2026",
+        created_at: m.created_at,
+        updated_at: m.updated_at,
         last_active_at: resolvedLastActive,
       };
     });
 
-    return NextResponse.json({ success: true, members: membersList });
+    return NextResponse.json({ success: true, members: sanitizedMembers });
   } catch (err: any) {
     console.error("[GET /api/members] Exception:", err);
     return NextResponse.json({ success: true, members: [] });
@@ -120,9 +92,18 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    // Require Admin role
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     if (!body || (!body.fullName && !body.full_name)) {
-      return NextResponse.json({ success: false, error: "Họ và tên thành viên là bắt buộc" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Họ và tên thành viên là bắt buộc" },
+        { status: 400 }
+      );
     }
 
     const supabase = createAdminClient();
@@ -147,11 +128,12 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    if (rawPassword && rawPassword !== "••••••••") {
-      payload.password_hash = rawPassword;
+    // If new password provided and not placeholder, hash it securely with PBKDF2
+    if (rawPassword && rawPassword !== "••••••••" && rawPassword.length >= 4) {
+      payload.password_hash = hashPassword(rawPassword);
     }
 
-    // 1. Locate existing member in database
+    // Locate existing member in database
     let existingMemberId: string | null = null;
     if (isUuid) {
       const { data: byId } = await supabase
@@ -180,122 +162,90 @@ export async function POST(request: Request) {
       if (byRef?.member_id) existingMemberId = byRef.member_id;
     }
 
-    let result: any;
+    let savedMemberData: any = null;
+
     if (existingMemberId) {
-      // UPDATE existing member
-      result = await supabase
+      const { data, error } = await supabase
         .from("members")
         .update(payload)
         .eq("member_id", existingMemberId)
-        .select()
-        .maybeSingle();
+        .select("member_id, full_name, email, phone, role, status, referral_code, created_at, updated_at")
+        .single();
 
-      if (result.error && result.error.message?.includes("password_hash")) {
-        delete payload.password_hash;
-        result = await supabase
-          .from("members")
-          .update(payload)
-          .eq("member_id", existingMemberId)
-          .select()
-          .maybeSingle();
+      if (error) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       }
+      savedMemberData = data;
     } else {
-      // INSERT new member
       if (isUuid) {
         payload.member_id = memberId;
       }
-      result = await supabase
+      if (!payload.password_hash) {
+        const tempRandomPass = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+        payload.password_hash = hashPassword(tempRandomPass);
+      }
+      payload.created_at = new Date().toISOString();
+
+      const { data, error } = await supabase
         .from("members")
         .insert(payload)
-        .select()
-        .maybeSingle();
+        .select("member_id, full_name, email, phone, role, status, referral_code, created_at, updated_at")
+        .single();
 
-      if (result.error && result.error.message?.includes("password_hash")) {
-        delete payload.password_hash;
-        result = await supabase
-          .from("members")
-          .insert(payload)
-          .select()
-          .maybeSingle();
+      if (error) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       }
+      savedMemberData = data;
     }
 
-    // Dual-layer persistence: always store credentials in system_configs
-    if (rawPassword && rawPassword !== "••••••••") {
-      const credMap = await getStoredCredentialsMap(supabase);
-      if (email) credMap[email] = rawPassword;
-      if (phone) credMap[phone.replace(/\D/g, "")] = rawPassword;
-      if (referralCode) credMap[referralCode.toUpperCase()] = rawPassword;
-      const finalId = result.data?.member_id || memberId;
-      if (finalId) credMap[finalId] = rawPassword;
-      await saveStoredCredentialsMap(supabase, credMap);
-    }
-
-    if (result.error) {
-      console.error("[POST /api/members] DB Error:", result.error);
-      return NextResponse.json({ success: false, error: result.error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      member: {
-        ...result.data,
-        password: rawPassword && rawPassword !== "••••••••" ? rawPassword : "••••••••",
-      },
-    });
+    return NextResponse.json({ success: true, member: savedMemberData });
   } catch (err: any) {
     console.error("[POST /api/members] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu thông tin thành viên" }, { status: 500 });
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu thành viên" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const { searchParams } = new URL(request.url);
-    const memberId = searchParams.get("id");
+    const memberId = searchParams.get("memberId") || searchParams.get("id");
     const email = searchParams.get("email");
     const referralCode = searchParams.get("referralCode");
 
     if (!memberId && !email && !referralCode) {
-      return NextResponse.json({ success: false, error: "Cần cung cấp id, email hoặc referralCode để xoá" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Thiếu định danh thành viên cần xóa" },
+        { status: 400 }
+      );
     }
 
     const supabase = createAdminClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(memberId || "");
 
     let query = supabase.from("members").delete();
-
     if (isUuid) {
-      query = query.eq("member_id", memberId!);
+      query = query.eq("member_id", memberId);
     } else if (email) {
-      query = query.eq("email", email.toLowerCase());
+      query = query.ilike("email", email.trim().toLowerCase());
     } else if (referralCode) {
-      query = query.eq("referral_code", referralCode);
+      query = query.eq("referral_code", referralCode.trim());
     } else {
-      query = query.or(`referral_code.eq.${memberId},phone.eq.${memberId}`);
+      query = query.eq("member_id", memberId);
     }
 
     const { error } = await query;
-
-    // Clean up credentials map
-    try {
-      const credMap = await getStoredCredentialsMap(supabase);
-      if (email) delete credMap[email.toLowerCase()];
-      if (referralCode) delete credMap[referralCode.toUpperCase()];
-      if (memberId) delete credMap[memberId];
-      await saveStoredCredentialsMap(supabase, credMap);
-    } catch {
-      // non-blocking
-    }
-
     if (error) {
-      console.error("[DELETE /api/members] DB Error:", error);
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[DELETE /api/members] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi xoá thành viên" }, { status: 500 });
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa thành viên" }, { status: 500 });
   }
 }

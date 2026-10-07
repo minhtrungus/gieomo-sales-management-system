@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Warehouse } from "@/types/database";
 import type { InflowLog, TransferLog } from "@/lib/data/orderStore";
+import { requireAdmin, requireAuth } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -63,8 +64,13 @@ async function setConfigJson<T>(supabase: any, key: string, value: T): Promise<v
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authCheck = await requireAuth(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const supabase = createAdminClient();
 
     const [warehouses, inflowLogs, transferLogs] = await Promise.all([
@@ -92,6 +98,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const body = await request.json();
     const { action, warehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog, stockAdjustment } = body;
 
@@ -103,58 +114,50 @@ export async function POST(request: Request) {
     }
 
     if (action === "saveInflowLogs" && Array.isArray(inflowLogs)) {
-      await setConfigJson(supabase, INFLOW_LOGS_KEY, inflowLogs.slice(0, 100));
+      await setConfigJson(supabase, INFLOW_LOGS_KEY, inflowLogs);
       return NextResponse.json({ success: true });
     }
 
     if (action === "saveTransferLogs" && Array.isArray(transferLogs)) {
-      await setConfigJson(supabase, TRANSFER_LOGS_KEY, transferLogs.slice(0, 100));
+      await setConfigJson(supabase, TRANSFER_LOGS_KEY, transferLogs);
       return NextResponse.json({ success: true });
     }
 
-    if (action === "addInflowLog" && newInflowLog) {
-      const current = await getConfigJson<InflowLog[]>(supabase, INFLOW_LOGS_KEY, []);
-      const updated = [newInflowLog, ...current.filter((l) => l.logId !== newInflowLog.logId)].slice(0, 100);
-      await setConfigJson(supabase, INFLOW_LOGS_KEY, updated);
+    if (action === "addInflow" && newInflowLog) {
+      const currentLogs = await getConfigJson<InflowLog[]>(supabase, INFLOW_LOGS_KEY, []);
+      const updatedLogs = [newInflowLog, ...currentLogs.filter((l) => (l.logId || (l as any).inflow_id) !== (newInflowLog.logId || (newInflowLog as any).inflow_id))];
+      await setConfigJson(supabase, INFLOW_LOGS_KEY, updatedLogs);
+      return NextResponse.json({ success: true });
+    }
 
-      // If variantId provided, update stock directly in product_variants table
-      if (stockAdjustment?.variantId && stockAdjustment?.newTotalStock !== undefined) {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stockAdjustment.variantId);
-        if (isUuid) {
-          await supabase
-            .from("product_variants")
-            .update({
-              stock: stockAdjustment.newTotalStock,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("variant_id", stockAdjustment.variantId);
-        } else if (stockAdjustment.sku) {
-          await supabase
-            .from("product_variants")
-            .update({
-              stock: stockAdjustment.newTotalStock,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("sku", stockAdjustment.sku);
-        }
+    if (action === "addTransfer" && newTransferLog) {
+      const currentLogs = await getConfigJson<TransferLog[]>(supabase, TRANSFER_LOGS_KEY, []);
+      const updatedLogs = [newTransferLog, ...currentLogs.filter((l) => (l.logId || (l as any).transfer_id) !== (newTransferLog.logId || (newTransferLog as any).transfer_id))];
+      await setConfigJson(supabase, TRANSFER_LOGS_KEY, updatedLogs);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "stockAdjustment" && stockAdjustment) {
+      const { variantId, productId, newStock } = stockAdjustment;
+      const cleanStock = Math.max(0, Number(newStock) || 0);
+
+      if (variantId) {
+        await supabase
+          .from("product_variants")
+          .update({ stock: cleanStock, updated_at: new Date().toISOString() })
+          .eq("variant_id", variantId);
+      } else if (productId) {
+        await supabase
+          .from("products")
+          .update({ stock: cleanStock, updated_at: new Date().toISOString() })
+          .eq("product_id", productId);
       }
-
       return NextResponse.json({ success: true });
     }
 
-    if (action === "addTransferLog" && newTransferLog) {
-      const current = await getConfigJson<TransferLog[]>(supabase, TRANSFER_LOGS_KEY, []);
-      const updated = [newTransferLog, ...current.filter((l) => l.logId !== newTransferLog.logId)].slice(0, 100);
-      await setConfigJson(supabase, TRANSFER_LOGS_KEY, updated);
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ success: false, error: "Action không hợp lệ" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "Hành động kho không hợp lệ" }, { status: 400 });
   } catch (err: any) {
     console.error("[POST /api/inventory] Exception:", err);
-    return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi xử lý kho" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: err?.message || "Lỗi xử lý kho" }, { status: 500 });
   }
 }

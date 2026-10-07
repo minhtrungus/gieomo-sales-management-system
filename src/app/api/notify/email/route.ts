@@ -1,36 +1,95 @@
 import { NextResponse } from "next/server";
 import { generateOrderConfirmationHtml, generatePaymentReceivedHtml } from "@/lib/utils/emailService";
-import type { Order } from "@/types/database";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { type, order, toEmail } = body as {
+    const { type, orderCode, orderId } = body as {
       type: "order_confirmation" | "payment_received";
-      order: Order;
-      toEmail?: string;
+      orderCode?: string;
+      orderId?: string;
+      order?: any;
     };
 
-    if (!order || !order.order_code) {
+    const targetCode = orderCode || body.order?.order_code || orderId || body.order?.order_id;
+
+    if (!targetCode) {
       return NextResponse.json(
         { success: false, error: "Missing order information" },
         { status: 400 }
       );
     }
 
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const recipient = toEmail || process.env.ADMIN_NOTIFICATION_EMAIL || "gieomo@mammo.vn";
+    // Fetch verified order from database to prevent email relay spoofing
+    const supabase = createAdminClient();
+    const { data: dbOrder, error: dbError } = await supabase
+      .from("orders")
+      .select(`
+        order_id,
+        order_code,
+        receiver_name,
+        receiver_phone,
+        delivery_type,
+        shipping_address_snapshot,
+        subtotal,
+        shipping_fee,
+        voucher_discount,
+        final_amount,
+        order_status,
+        payment_status,
+        delivery_status,
+        payment_method,
+        customer_note,
+        created_at,
+        customers (
+          full_name,
+          phone,
+          email
+        ),
+        order_items (
+          item_name_snapshot,
+          variant_name_snapshot,
+          quantity,
+          unit_price,
+          subtotal
+        )
+      `)
+      .or(`order_code.eq.${targetCode.toUpperCase()},order_id.eq.${targetCode}`)
+      .maybeSingle();
+
+    if (dbError || !dbOrder) {
+      return NextResponse.json(
+        { success: false, error: "Đơn hàng không tồn tại trong hệ thống" },
+        { status: 404 }
+      );
+    }
+
+    const verifiedRecipientEmail = (dbOrder.customers as any)?.email;
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "gieomo@mammo.vn";
+    const recipient = verifiedRecipientEmail || adminEmail;
     const fromEmail = process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>";
+
+    const orderPayload: any = {
+      ...dbOrder,
+      buyer_name: (dbOrder.customers as any)?.full_name || dbOrder.receiver_name,
+      buyer_email: verifiedRecipientEmail,
+      recipient_name: dbOrder.receiver_name,
+      recipient_phone: dbOrder.receiver_phone,
+      address_detail: dbOrder.shipping_address_snapshot,
+      discount_amount: dbOrder.voucher_discount,
+      items: dbOrder.order_items || [],
+    };
 
     let subject = "";
     let html = "";
 
     if (type === "order_confirmation") {
-      subject = `🌱 Xác nhận đơn hàng #${order.order_code} - Gieo Mơ (Mầm Mơ)`;
-      html = generateOrderConfirmationHtml(order);
+      subject = `🌱 Xác nhận đơn hàng #${dbOrder.order_code} - Gieo Mơ (Mầm Mơ)`;
+      html = generateOrderConfirmationHtml(orderPayload);
     } else if (type === "payment_received") {
-      subject = `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`;
-      html = generatePaymentReceivedHtml(order);
+      subject = `✓ Đã nhận thanh toán cho đơn hàng #${dbOrder.order_code} - Gieo Mơ`;
+      html = generatePaymentReceivedHtml(orderPayload);
     } else {
       return NextResponse.json(
         { success: false, error: "Invalid notification type" },
@@ -38,7 +97,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (resendApiKey) {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey && verifiedRecipientEmail) {
       try {
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -66,11 +126,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // In development or when no key configured, simulate success
     return NextResponse.json({
       success: true,
       simulated: true,
-      message: "Email queued (RESEND_API_KEY not configured).",
+      message: "Email queued (verified recipient).",
       recipient,
       subject,
     });
