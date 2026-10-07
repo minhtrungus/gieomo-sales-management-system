@@ -40,15 +40,24 @@ export default function AdminReconciliationPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "action_required" | ReconciliationStatus>("all");
   const [selectedRecord, setSelectedRecord] = useState<ReconciliationRecord | null>(null);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
+
+  // Debounce search query to prevent hammering the server on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
       const params = new URLSearchParams();
-      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+      if (debouncedSearchQuery.trim()) params.set("search", debouncedSearchQuery.trim());
       if (activeTab === "action_required") {
         params.set("action_required", "true");
       } else if (activeTab !== "all") {
@@ -81,7 +90,7 @@ export default function AdminReconciliationPage() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [searchQuery, activeTab, dateRange]);
+  }, [debouncedSearchQuery, activeTab, dateRange]);
 
   useEffect(() => {
     setLoading(true);

@@ -1,5 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// In-memory catalog cache for 3-way reconciliation (TTL 30s)
+let catalogMemoryCache: {
+  variants: any[];
+  products: any[];
+  timestamp: number;
+} | null = null;
+const CATALOG_CACHE_TTL_MS = 30_000;
+
 export type ReconciliationStatus =
   | "OK"
   | "UNPAID"
@@ -196,20 +204,34 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     paymentsByOrderId.set(pay.order_id, existing);
   }
 
-  // 3. Fetch catalog variants and products to verify inventory consistency
-  const { data: catalogVariants } = await supabase
-    .from("product_variants")
-    .select("variant_id, product_id, name, sku, price, stock");
+  // 3. Fetch catalog variants and products with in-memory caching (TTL 30s) and parallel fetching
+  let catalogVariants: any[] = [];
+  let catalogProducts: any[] = [];
 
-  const { data: catalogProducts } = await supabase
-    .from("products")
-    .select("product_id, name, sku, price, stock, status");
+  if (catalogMemoryCache && Date.now() - catalogMemoryCache.timestamp < CATALOG_CACHE_TTL_MS) {
+    catalogVariants = catalogMemoryCache.variants;
+    catalogProducts = catalogMemoryCache.products;
+  } else {
+    const [variantsRes, productsRes] = await Promise.all([
+      supabase.from("product_variants").select("variant_id, product_id, name, sku, price, stock"),
+      supabase.from("products").select("product_id, name, sku, price, stock, status"),
+    ]);
+
+    catalogVariants = variantsRes.data || [];
+    catalogProducts = productsRes.data || [];
+
+    catalogMemoryCache = {
+      variants: catalogVariants,
+      products: catalogProducts,
+      timestamp: Date.now(),
+    };
+  }
 
   const variantMap = new Map<string, any>();
-  (catalogVariants || []).forEach((v) => variantMap.set(v.variant_id, v));
+  catalogVariants.forEach((v) => variantMap.set(v.variant_id, v));
 
   const productMap = new Map<string, any>();
-  (catalogProducts || []).forEach((p) => productMap.set(p.product_id, p));
+  catalogProducts.forEach((p) => productMap.set(p.product_id, p));
 
   // 4. Run 3-Way Reconciliation on each order
   const reconciledRecords: ReconciliationRecord[] = [];

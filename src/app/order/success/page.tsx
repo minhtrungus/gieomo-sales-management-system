@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Suspense, useState, useEffect, useMemo, useTransition } from "react";
+import { Suspense, useState, useEffect, useMemo, useTransition, useRef } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -87,8 +87,20 @@ function OrderSuccessContent() {
 
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [proofError, setProofError] = useState<string | null>(null);
+  const [showQrDetails, setShowQrDetails] = useState(false);
   const [zoomedProof, setZoomedProof] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Clean up object URLs on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current && previewUrlRef.current.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   // Social Share Card states
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -140,6 +152,7 @@ function OrderSuccessContent() {
           if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
             const latest = data.orders[0];
             if (latest.payment_status === "paid") {
+              updateStoredPaymentStatus(orderCode, "paid");
               setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
 
               // Send order confirmation email upon successful payment detection
@@ -182,83 +195,129 @@ function OrderSuccessContent() {
     setTimeout(() => setCopiedItem(null), 2000);
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setProofFile(file);
-    try {
-      const compressed = await compressImage(file, { maxWidth: 900, maxHeight: 900, quality: 0.7 });
-      setProofFile(compressed);
-      const previewUrl = URL.createObjectURL(compressed);
-      startTransition(() => {
-        setProofImage(previewUrl);
-      });
-    } catch {
-      const previewUrl = URL.createObjectURL(file);
-      startTransition(() => {
-        setProofImage(previewUrl);
-      });
+
+    setProofError(null);
+
+    // 1. Lightweight metadata validation without blocking main thread
+    if (file.size > 5 * 1024 * 1024) {
+      setProofError("Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.");
+      return;
     }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      setProofError("Định dạng ảnh không hợp lệ. Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.");
+      return;
+    }
+
+    // 2. Revoke any previous object URL to prevent memory leaks
+    if (previewUrlRef.current && previewUrlRef.current.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+
+    // 3. Instant preview without blocking the main thread
+    const previewUrl = URL.createObjectURL(file);
+    previewUrlRef.current = previewUrl;
+    setProofFile(file);
+    setProofImage(previewUrl);
+
+    // 4. Defer compression asynchronously without blocking UI
+    compressImage(file, { maxWidth: 900, maxHeight: 900, quality: 0.7 })
+      .then((compressed) => {
+        setProofFile(compressed);
+      })
+      .catch(() => {
+        // Fallback to original file
+      });
   };
 
   const handleConfirmPaymentSubmit = async () => {
+    if (isUploadingProof) return; // Prevent double-submit
+
+    // Immediate lightweight UI feedback on the button (<3ms execution time)
     setIsUploadingProof(true);
-    setHasSubmittedProof(true);
-    setIsConfirmModalOpen(false);
+    setProofError(null);
 
-    if (orderCode) {
-      try {
-        const formData = new FormData();
-        formData.append("orderCode", orderCode);
-        const tokenToSend =
-          proofToken ||
-          (typeof window !== "undefined" ? localStorage.getItem(`gieomo_order_token_${orderCode}`) || "" : "");
-        if (tokenToSend) {
-          formData.append("token", tokenToSend);
-        }
+    if (!proofFile && (!proofImage || proofImage.startsWith("blob:"))) {
+      setProofError("Vui lòng tải lên ảnh chụp màn hình biên lai chuyển khoản trước khi xác nhận.");
+      setIsUploadingProof(false);
+      return;
+    }
 
-        const phone = order?.buyer_phone || order?.recipient_phone || "";
-        if (phone) {
-          formData.append("phone", phone);
-        }
+    if (!orderCode) {
+      setProofError("Không tìm thấy mã đơn hàng để xác nhận.");
+      setIsUploadingProof(false);
+      return;
+    }
 
-        if (proofFile) {
-          formData.append("file", proofFile);
-        } else if (proofImage && !proofImage.startsWith("blob:")) {
-          formData.append("paymentProof", proofImage);
-        }
-
-        const res = await fetch("/api/orders/proof", {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await res.json();
-        if (data?.success) {
-          const finalUrl = data.paymentProof || proofImage;
-          localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
-          if (finalUrl) {
-            localStorage.setItem(`gieomo_proof_${orderCode}`, finalUrl);
-            setProofImage(finalUrl);
-            updateStoredPaymentProof(orderCode, finalUrl);
-          }
-
-          const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
-          setOrder((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  payment_proof: finalUrl || prev.payment_proof,
-                  internal_note: note,
-                }
-              : prev
-          );
-        }
-      } catch (err) {
-        console.warn("Error updating payment confirmation:", err);
-      } finally {
-        setIsUploadingProof(false);
+    try {
+      const formData = new FormData();
+      formData.append("orderCode", orderCode);
+      const tokenToSend =
+        proofToken ||
+        (typeof window !== "undefined" ? localStorage.getItem(`gieomo_order_token_${orderCode}`) || "" : "");
+      if (tokenToSend) {
+        formData.append("token", tokenToSend);
       }
+
+      const phone = order?.buyer_phone || order?.recipient_phone || "";
+      if (phone) {
+        formData.append("phone", phone);
+      }
+
+      if (proofFile) {
+        formData.append("file", proofFile);
+      }
+
+      const res = await fetch("/api/orders/proof", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.success) {
+        // State 5: Upload Error - Keep modal open, keep chosen file, allow retry
+        setProofError(data?.error || "Gửi biên lai thất bại. Vui lòng kiểm tra lại ảnh hoặc kết nối mạng.");
+        setIsUploadingProof(false);
+        return;
+      }
+
+      // Success: smoothly transition out of modal and update state
+      const finalUrl = data.paymentProof || proofImage;
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
+        if (finalUrl) {
+          localStorage.setItem(`gieomo_proof_${orderCode}`, finalUrl);
+        }
+      }
+
+      const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
+      startTransition(() => {
+        if (finalUrl) {
+          setProofImage(finalUrl);
+          updateStoredPaymentProof(orderCode, finalUrl);
+        }
+        setHasSubmittedProof(true);
+        setIsConfirmModalOpen(false);
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                payment_proof: finalUrl || prev.payment_proof,
+                internal_note: note,
+              }
+            : prev
+        );
+      });
+    } catch (err: any) {
+      console.warn("Error updating payment confirmation:", err);
+      setProofError(err?.message || "Lỗi kết nối khi gửi biên lai. Vui lòng thử lại!");
+    } finally {
+      setIsUploadingProof(false);
     }
   };
 
@@ -415,135 +474,240 @@ function OrderSuccessContent() {
 
         {/* Payment Instructions if Banking and Not Paid Yet */}
         {paymentMethod === "banking" && !isPaid ? (
-          <div className="space-y-4 pt-2">
-            {/* QR Code — Primary, Top, Large */}
-            <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-soft">
-              <p className="text-sm font-extrabold text-[#231B16] mb-1">
-                📱 Quét mã VietQR chuyển khoản
-              </p>
-              <p className="text-xs text-[#7E7068] mb-3">
-                Đã tự động điền <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> & nội dung <strong>{orderCode}</strong>
-              </p>
-              {/* Fixed Aspect-ratio Container to guarantee zero CLS */}
-              <div className="w-56 sm:w-64 h-56 sm:h-64 aspect-square flex items-center justify-center bg-gray-50 rounded-xl overflow-hidden shadow-xs border border-[#F0E5D8] my-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={vietQrUrl}
-                  alt="VietQR"
-                  width={256}
-                  height={256}
-                  className="w-full h-full object-contain"
-                  decoding="async"
-                />
-              </div>
-              <div className="pt-2.5 flex items-center gap-4 text-xs font-bold">
-                <a
-                  href={vietQrUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#2D6338] hover:underline inline-flex items-center gap-1"
-                >
-                  <span>Mở ảnh to</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                <a
-                  href={vietQrUrl}
-                  download={`QR-${orderCode}.png`}
-                  className="text-[#7E7068] hover:text-[#231B16] inline-flex items-center gap-1"
-                >
-                  <Download className="w-3 h-3" />
-                  <span>Tải ảnh QR</span>
-                </a>
-              </div>
-            </div>
-
-            {/* Direct Bank Details */}
-            <div className="rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] p-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-[#F0E5D8]">
-                <span className="font-bold text-[#5C4D44] text-xs">🏦 Chuyển khoản thủ công:</span>
-                <span className="text-[11px] text-gray-500 font-semibold">{bankAccount.bankName}</span>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                <div>
-                  <span className="text-gray-500 block text-[11px]">Chủ tài khoản:</span>
-                  <span className="font-bold text-gray-900 text-xs">{bankAccount.accountHolder}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block text-[11px]">Số tài khoản:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-emerald-950 text-sm">{bankAccount.accountNumber}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-                    >
-                      {copiedItem === "stk" ? "Đã chép" : "Chép"}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-gray-500 block text-[11px]">Số tiền:</span>
-                  <span className="font-extrabold text-emerald-950 text-sm">{finalAmount.toLocaleString("vi-VN")}đ</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block text-[11px]">Nội dung CK:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-xs tracking-wider">
-                      {bankAccount.transferMemo}
+          hasSubmittedProof ? (
+            /* State 2 & 4: Submission Processing / Waiting for Bank Reconciliation */
+            <div className="space-y-4 pt-2 animate-in fade-in">
+              <div className="p-5 rounded-3xl bg-linear-to-br from-amber-50/90 to-emerald-50/60 border-2 border-amber-300 text-left space-y-3.5 shadow-xs">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-3 w-3 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 hover:bg-red-200 text-red-800 cursor-pointer"
-                    >
-                      {copiedItem === "memo" ? "Đã chép" : "Chép"}
-                    </button>
+                    <span className="font-heading font-extrabold text-sm sm:text-base text-amber-950">
+                      Đã ghi nhận biên lai — Đang đối soát thanh toán
+                    </span>
                   </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10.5px] font-extrabold whitespace-nowrap">
+                    TỰ ĐỘNG CẬP NHẬT
+                  </span>
                 </div>
-              </div>
-            </div>
 
-            {/* Customer Payment Confirmation CTA */}
-            <div className="pt-3 border-t border-gray-100">
-              {hasSubmittedProof ? (
-                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 text-xs text-amber-950 space-y-2 animate-in fade-in text-left">
-                  <div className="flex items-center gap-2 font-bold text-amber-900">
-                    <span className="text-base">⏳</span>
-                    <span>Đã nhận biên lai chuyển khoản — Chờ BTC đối soát</span>
-                  </div>
-                  <p className="text-[11.5px] text-amber-800 leading-relaxed">
-                    Hệ thống đang chờ BTC Mầm Mơ kiểm tra khớp lệnh ngân hàng. Đơn hàng sẽ tự động chuyển sang trạng thái đã thanh toán ngay sau khi hoàn tất.
-                  </p>
-                  {proofImage && (
-                    <div className="flex items-center gap-2 pt-1">
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  Hệ thống Mầm Mơ đang tự động kết nối và đối soát giao dịch với ngân hàng. <strong>Trang sẽ tự động chuyển sang trạng thái thành công ngay khi nhận được thanh toán mà không cần bạn phải tải lại trang.</strong>
+                </p>
+
+                {proofImage && (
+                  <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/90 border border-amber-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={proofImage}
+                      alt="Biên lai đã gửi"
+                      className="w-12 h-12 rounded-xl object-cover border border-amber-200 shrink-0 cursor-pointer"
+                      onClick={() => startTransition(() => setZoomedProof(proofImage))}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11.5px] font-bold text-gray-800 block truncate">
+                        Biên lai chuyển khoản đã nộp
+                      </span>
                       <button
                         type="button"
                         onClick={() => startTransition(() => setZoomedProof(proofImage))}
-                        className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-[11px] hover:bg-amber-100 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs transition-colors"
+                        className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 hover:underline inline-flex items-center gap-1 cursor-pointer pt-0.5"
                       >
-                        <Maximize2 className="w-3.5 h-3.5" />
-                        <span>Xem lại ảnh biên lai đã gửi</span>
+                        <Maximize2 className="w-3 h-3" />
+                        <span>Xem ảnh phóng to</span>
                       </button>
                     </div>
-                  )}
+                  </div>
+                )}
+              </div>
+
+              {/* Collapsible QR & Bank Information for reference */}
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-3 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowQrDetails((prev) => !prev)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-gray-700 hover:text-gray-900 cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>📱</span>
+                    <span>{showQrDetails ? "Ẩn bớt thông tin chuyển khoản" : "Cần xem lại mã VietQR hoặc số tài khoản?"}</span>
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono">{showQrDetails ? "▲ Thu gọn" : "▼ Mở rộng"}</span>
+                </button>
+
+                {showQrDetails && (
+                  <div className="pt-3 space-y-3 border-t border-gray-200 mt-2.5 animate-in fade-in">
+                    {/* QR Code Container */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-[#BFE9C3] text-center">
+                      <div className="w-48 h-48 aspect-square flex items-center justify-center bg-gray-50 rounded-xl overflow-hidden shadow-xs border border-[#F0E5D8]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={vietQrUrl}
+                          alt="VietQR"
+                          width={192}
+                          height={192}
+                          className="w-full h-full object-contain"
+                          decoding="async"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bank Account Info */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-gray-500 block text-[11px]">Ngân hàng:</span>
+                        <span className="font-bold text-gray-900 text-xs">{bankAccount.bankName}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 block text-[11px]">Số tài khoản:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-emerald-950 text-xs">{bankAccount.accountNumber}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-200 hover:bg-gray-300 text-gray-700 cursor-pointer"
+                          >
+                            {copiedItem === "stk" ? "Đã chép" : "Chép"}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 block text-[11px]">Số tiền:</span>
+                        <span className="font-extrabold text-emerald-950 text-xs">{finalAmount.toLocaleString("vi-VN")}đ</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 block text-[11px]">Nội dung CK:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-xs">
+                            {bankAccount.transferMemo}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 hover:bg-red-200 text-red-800 cursor-pointer"
+                          >
+                            {copiedItem === "memo" ? "Đã chép" : "Chép"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* State 1: Active Payment Instructions */
+            <div className="space-y-4 pt-2">
+              {/* QR Code — Primary, Top, Large */}
+              <div className="flex flex-col items-center justify-center p-5 rounded-2xl bg-white border-2 border-[#BFE9C3] text-center shadow-soft">
+                <p className="text-sm font-extrabold text-[#231B16] mb-1">
+                  📱 Quét mã VietQR chuyển khoản
+                </p>
+                <p className="text-xs text-[#7E7068] mb-3">
+                  Đã tự động điền <strong>{finalAmount.toLocaleString("vi-VN")}đ</strong> & nội dung <strong>{orderCode}</strong>
+                </p>
+                {/* Fixed Aspect-ratio Container to guarantee zero CLS */}
+                <div className="w-56 sm:w-64 h-56 sm:h-64 aspect-square flex items-center justify-center bg-gray-50 rounded-xl overflow-hidden shadow-xs border border-[#F0E5D8] my-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={vietQrUrl}
+                    alt="VietQR"
+                    width={256}
+                    height={256}
+                    className="w-full h-full object-contain"
+                    decoding="async"
+                  />
                 </div>
-              ) : (
+                <div className="pt-2.5 flex items-center gap-4 text-xs font-bold">
+                  <a
+                    href={vietQrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#2D6338] hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>Mở ảnh to</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href={vietQrUrl}
+                    download={`QR-${orderCode}.png`}
+                    className="text-[#7E7068] hover:text-[#231B16] inline-flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Tải ảnh QR</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Direct Bank Details */}
+              <div className="rounded-2xl border border-[#F0E5D8] bg-[#FFFDF9] p-4 space-y-3 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-[#F0E5D8]">
+                  <span className="font-bold text-[#5C4D44] text-xs">🏦 Chuyển khoản thủ công:</span>
+                  <span className="text-[11px] text-gray-500 font-semibold">{bankAccount.bankName}</span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <span className="text-gray-500 block text-[11px]">Chủ tài khoản:</span>
+                    <span className="font-bold text-gray-900 text-xs">{bankAccount.accountHolder}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[11px]">Số tài khoản:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-emerald-950 text-sm">{bankAccount.accountNumber}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(bankAccount.accountNumber, "stk")}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
+                      >
+                        {copiedItem === "stk" ? "Đã chép" : "Chép"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[11px]">Số tiền:</span>
+                    <span className="font-extrabold text-emerald-950 text-sm">{finalAmount.toLocaleString("vi-VN")}đ</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[11px]">Nội dung CK:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-xs tracking-wider">
+                        {bankAccount.transferMemo}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(bankAccount.transferMemo, "memo")}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 hover:bg-red-200 text-red-800 cursor-pointer"
+                      >
+                        {copiedItem === "memo" ? "Đã chép" : "Chép"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Payment Confirmation CTA */}
+              <div className="pt-3 border-t border-gray-100">
                 <div className="space-y-2 text-center">
                   <p className="text-xs text-[#7E7068]">
                     Đã chuyển khoản thành công trên App ngân hàng?
                   </p>
                   <button
                     type="button"
-                    onClick={() => setIsConfirmModalOpen(true)}
+                    onClick={() => {
+                      setProofError(null);
+                      setIsConfirmModalOpen(true);
+                    }}
                     className="w-full sm:w-auto px-6 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-sm border border-[#9ed4a3] transition-all active:scale-95 cursor-pointer inline-flex items-center justify-center gap-2"
                   >
                     <span>✓ Tôi đã chuyển khoản xong</span>
                   </button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          )
         ) : null}
       </div>
 
@@ -593,7 +757,11 @@ function OrderSuccessContent() {
         <div className="p-4.5 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-1.5 animate-in fade-in">
           <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-900">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
-            <span>Đang chờ nhận chuyển khoản qua VietQR (Tự động cập nhật tức thì)</span>
+            <span>
+              {hasSubmittedProof
+                ? "Đang tự động đối soát giao dịch ngân hàng (Cập nhật mỗi 2.5s)"
+                : "Đang chờ nhận chuyển khoản qua VietQR (Tự động cập nhật tức thì)"}
+            </span>
           </div>
           <p className="text-[11.5px] text-amber-700">
             Thẻ chứng nhận gây quỹ &amp; quà tặng sẽ xuất hiện tại đây ngay khi giao dịch được xác nhận.
@@ -601,7 +769,6 @@ function OrderSuccessContent() {
         </div>
       )}
 
-      {/* SOCIAL SHARE CARD & STORY SECTION — ONLY SHOWN ONCE PAID */}
       {/* SOCIAL SHARE CARD & STORY SECTION — ONLY SHOWN ONCE PAID */}
       {isPaid && (
         <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-emerald-200 shadow-md text-left space-y-5 animate-in zoom-in-95">
@@ -649,7 +816,9 @@ function OrderSuccessContent() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsConfirmModalOpen(false)}
+                onClick={() => {
+                  if (!isUploadingProof) setIsConfirmModalOpen(false);
+                }}
                 className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer text-sm"
               >
                 ✕
@@ -667,10 +836,21 @@ function OrderSuccessContent() {
               </div>
             </div>
 
+            {/* Error Message if submit fails */}
+            {proofError && (
+              <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-1 animate-in fade-in">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Chưa thể gửi xác nhận:</span>
+                </div>
+                <p className="leading-relaxed">{proofError}</p>
+              </div>
+            )}
+
             {/* Proof image upload input */}
             <div className="space-y-2 text-xs">
               <label className="font-bold text-gray-700 block">
-                Ảnh biên lai chuyển khoản (Tùy chọn):
+                Ảnh biên lai chuyển khoản (bắt buộc để đối soát nhanh):
               </label>
 
               {proofImage ? (
@@ -679,7 +859,15 @@ function OrderSuccessContent() {
                   <img src={proofImage} alt="Biên lai" className="w-32 h-32 object-cover" loading="lazy" decoding="async" />
                   <button
                     type="button"
-                    onClick={() => setProofImage(null)}
+                    onClick={() => {
+                      if (previewUrlRef.current && previewUrlRef.current.startsWith("blob:")) {
+                        URL.revokeObjectURL(previewUrlRef.current);
+                        previewUrlRef.current = null;
+                      }
+                      setProofImage(null);
+                      setProofFile(null);
+                      setProofError(null);
+                    }}
                     className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white hover:bg-black text-[10px] cursor-pointer"
                     title="Xóa ảnh"
                   >
@@ -690,7 +878,7 @@ function OrderSuccessContent() {
                 <label className="flex flex-col items-center justify-center p-4 rounded-2xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/40 hover:bg-emerald-50/70 transition-colors cursor-pointer text-center group">
                   <span className="text-lg mb-1 group-hover:scale-110 transition-transform">📷</span>
                   <span className="text-xs font-bold text-emerald-900">Tải ảnh biên lai lên</span>
-                  <span className="text-[10px] text-gray-500 mt-0.5">Hỗ trợ JPG, PNG (tối đa 5MB)</span>
+                  <span className="text-[10px] text-gray-500 mt-0.5">Hỗ trợ JPG, PNG, WEBP (tối đa 5MB)</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -704,17 +892,28 @@ function OrderSuccessContent() {
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
               <button
                 type="button"
+                disabled={isUploadingProof}
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-50 cursor-pointer"
               >
                 Đóng
               </button>
               <button
                 type="button"
+                disabled={isUploadingProof}
                 onClick={handleConfirmPaymentSubmit}
-                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer"
+                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer inline-flex items-center gap-2"
               >
-                Đã chuyển khoản xong ➔
+                {isUploadingProof ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-emerald-900 border-t-transparent rounded-full animate-spin" />
+                    <span>Đang gửi biên lai...</span>
+                  </>
+                ) : proofError ? (
+                  <span>Thử lại ➔</span>
+                ) : (
+                  <span>Đã chuyển khoản xong ➔</span>
+                )}
               </button>
             </div>
           </div>
