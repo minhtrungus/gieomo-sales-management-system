@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     // 3. Fetch order to verify existence, payment status, and ownership
     const { data: order, error: fetchErr } = await supabase
       .from("orders")
-      .select("order_id, order_code, receiver_phone, payment_status, order_status, internal_note, payment_proof, customers (phone)")
+      .select("order_id, order_code, receiver_phone, payment_status, order_status, internal_note, customers (phone)")
       .eq("order_code", orderCode)
       .maybeSingle();
 
@@ -136,7 +136,8 @@ export async function POST(request: Request) {
     }
 
     // 6. Handle file upload if provided
-    let uploadedUrl = order.payment_proof || null;
+    let uploadedUrl: string | null =
+      order.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] || null;
 
     if (fileToUpload && fileToUpload.size > 0) {
       if (fileToUpload.size > MAX_PROOF_SIZE) {
@@ -207,23 +208,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // 7. Build safe internal note update
-    const proofTag = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
+    // 7. Build safe internal note update with receipt image tag
+    const proofTag = `[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát] [Ảnh biên lai]: ${uploadedUrl}`;
     let updatedInternalNote = order.internal_note || "";
     if (!updatedInternalNote.includes("[Khách đã nộp ảnh biên lai CK")) {
       updatedInternalNote = updatedInternalNote
         ? `${updatedInternalNote} | ${proofTag}`
         : proofTag;
+    } else {
+      // Replace existing proof image tag if re-uploaded
+      updatedInternalNote = updatedInternalNote.replace(
+        /\[Ảnh biên lai\]:\s*[^\s|]+/,
+        `[Ảnh biên lai]: ${uploadedUrl}`
+      );
     }
     if (customNote) {
       updatedInternalNote += ` (Ghi chú: ${customNote.replace(/[\r\n]+/g, " ").slice(0, 200)})`;
     }
 
-    // 8. Atomic update to orders: ONLY payment_proof, internal_note, updated_at
+    // 8. Atomic update to orders: ONLY internal_note, updated_at (orders table has no payment_proof column)
     const { error: updateErr } = await supabase
       .from("orders")
       .update({
-        payment_proof: uploadedUrl,
         internal_note: updatedInternalNote,
         updated_at: new Date().toISOString(),
       })

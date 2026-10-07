@@ -20,7 +20,6 @@ import {
 } from "@/lib/data/orderStore";
 import type { Order, Voucher } from "@/types/database";
 import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift, Maximize2, X, ZoomIn } from "lucide-react";
-import { compressImage } from "@/lib/utils/imageCompressor";
 import { ThankYouStoryCard } from "@/components/order/ThankYouStoryCard";
 
 function OrderSuccessContent() {
@@ -218,20 +217,11 @@ function OrderSuccessContent() {
       URL.revokeObjectURL(previewUrlRef.current);
     }
 
-    // 3. Instant preview without blocking the main thread
+    // 3. Instant preview without blocking the main thread (<1ms)
     const previewUrl = URL.createObjectURL(file);
     previewUrlRef.current = previewUrl;
     setProofFile(file);
     setProofImage(previewUrl);
-
-    // 4. Defer compression asynchronously without blocking UI
-    compressImage(file, { maxWidth: 900, maxHeight: 900, quality: 0.7 })
-      .then((compressed) => {
-        setProofFile(compressed);
-      })
-      .catch(() => {
-        // Fallback to original file
-      });
   };
 
   const handleConfirmPaymentSubmit = async () => {
@@ -263,7 +253,15 @@ function OrderSuccessContent() {
         formData.append("token", tokenToSend);
       }
 
-      const phone = order?.buyer_phone || order?.recipient_phone || "";
+      let phone = order?.buyer_phone || order?.recipient_phone || "";
+      if (!phone && typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("gieomo_customer_profile");
+          if (stored) {
+            phone = JSON.parse(stored)?.phone || "";
+          }
+        } catch {}
+      }
       if (phone) {
         formData.append("phone", phone);
       }
@@ -805,7 +803,7 @@ function OrderSuccessContent() {
 
       {/* MODAL: XÁC NHẬN ĐÃ CHUYỂN KHOẢN */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-emerald-100 shadow-2xl space-y-4 animate-in zoom-in-95 text-left">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">

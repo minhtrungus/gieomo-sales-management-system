@@ -572,7 +572,6 @@ export async function getOrdersServer(options?: {
         payment_method,
         customer_note,
         internal_note,
-        payment_proof,
         assigned_shipper_id,
         source_type,
         introducer_info,
@@ -650,8 +649,14 @@ export async function getOrdersServer(options?: {
         payment_method: row.payment_method,
         customer_note: shouldMask ? undefined : row.customer_note,
         internal_note: isAdmin ? row.internal_note : undefined,
-        payment_proof: isAdmin || options?.code ? (row.payment_proof || null) : undefined,
-        has_payment_proof: Boolean(row.payment_proof || row.internal_note?.includes("[Khách đã nộp ảnh biên lai CK")),
+        payment_proof: (() => {
+          const parsed = row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] || null;
+          return (isAdmin || options?.code) ? parsed : undefined;
+        })(),
+        has_payment_proof: Boolean(
+          row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] ||
+          row.internal_note?.includes("[Khách đã nộp ảnh biên lai CK")
+        ),
         assigned_shipper_id: isAdmin ? row.assigned_shipper_id : undefined,
         created_at: row.created_at,
         confirmed_at: row.confirmed_at,

@@ -113,7 +113,11 @@ export async function PATCH(request: Request) {
       updateData.internal_note = internalNote;
     }
     if (paymentProof || payment_proof) {
-      updateData.payment_proof = paymentProof || payment_proof;
+      const proofUrl = paymentProof || payment_proof;
+      const proofTag = `[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát] [Ảnh biên lai]: ${proofUrl}`;
+      updateData.internal_note = updateData.internal_note
+        ? `${updateData.internal_note} | ${proofTag}`
+        : proofTag;
     }
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrCode);
