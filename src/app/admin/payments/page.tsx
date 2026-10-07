@@ -69,12 +69,12 @@ export default function AdminPaymentsPage() {
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
       if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase();
-        const matchedCode = p.orderCode.toLowerCase().includes(q);
-        const matchedTx = p.transactionCode.toLowerCase().includes(q);
+        const matchedCode = (p.orderCode ?? "").toLowerCase().includes(q);
+        const matchedTx = (p.transactionCode ?? "").toLowerCase().includes(q);
         const orderObj = orderMap.get(p.orderCode);
         const matchedBuyer =
-          orderObj?.buyer_name?.toLowerCase().includes(q) ||
-          orderObj?.buyer_phone?.toLowerCase().includes(q);
+          (orderObj?.buyer_name ?? "").toLowerCase().includes(q) ||
+          (orderObj?.buyer_phone ?? "").includes(q);
         return matchedCode || matchedTx || !!matchedBuyer;
       }
       return true;

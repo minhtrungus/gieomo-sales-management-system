@@ -80,10 +80,10 @@ export default function NotificationsPage() {
       // Search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchesTitle = item.title.toLowerCase().includes(query);
-        const matchesDesc = item.desc.toLowerCase().includes(query);
-        const matchesCode = item.meta?.order_code?.toLowerCase().includes(query);
-        const matchesCustomer = item.meta?.customer?.toLowerCase().includes(query);
+        const matchesTitle = (item.title ?? "").toLowerCase().includes(query);
+        const matchesDesc = (item.desc ?? "").toLowerCase().includes(query);
+        const matchesCode = (item.meta?.order_code ?? "").toLowerCase().includes(query);
+        const matchesCustomer = (item.meta?.customer ?? "").toLowerCase().includes(query);
         return matchesTitle || matchesDesc || matchesCode || matchesCustomer;
       }
 

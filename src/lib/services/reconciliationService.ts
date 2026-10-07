@@ -469,10 +469,10 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   if (options?.search && options.search.trim() !== "") {
     const q = options.search.trim().toLowerCase();
     filtered = filtered.filter((r) => {
-      const matchCode = r.order_code.toLowerCase().includes(q);
-      const matchName = r.receiver_name.toLowerCase().includes(q);
-      const matchPhone = r.receiver_phone.toLowerCase().includes(q);
-      const matchTx = r.payments.some((p) => (p.transaction_code || "").toLowerCase().includes(q));
+      const matchCode = (r.order_code ?? "").toLowerCase().includes(q);
+      const matchName = (r.receiver_name ?? "").toLowerCase().includes(q);
+      const matchPhone = (r.receiver_phone ?? "").toLowerCase().includes(q);
+      const matchTx = (r.payments ?? []).some((p) => ((p.transaction_code ?? "").toLowerCase()).includes(q));
       return matchCode || matchName || matchPhone || matchTx;
     });
   }

@@ -1010,15 +1010,15 @@ export function getStoredMembers(): StoredMember[] {
     let needsUpdate = false;
     let sanitized = parsed.filter((m) => {
       const isRevoked =
-        m.email.toLowerCase() === "admin@mammo.vn" ||
+        (m.email ?? "").toLowerCase() === "admin@mammo.vn" ||
         m.memberId === "mem-0" ||
-        m.fullName.includes("BTC Mầm Mơ (Trưởng ban)");
+        (m.fullName ?? "").includes("BTC Mầm Mơ (Trưởng ban)");
       if (isRevoked) needsUpdate = true;
       return !isRevoked;
     });
 
     const baotriExists = sanitized.some(
-      (m) => m.email.toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
+      (m) => (m.email ?? "").toLowerCase() === "baotri@gieomo.store" || m.memberId === "baotri-system"
     );
 
     if (!baotriExists) {
@@ -1046,9 +1046,9 @@ export function getActiveReferralMembers(): StoredMember[] {
     if (m.status !== "active") return false;
     if (m.isSystemProtected) return false;
     if (m.memberId === "baotri-system") return false;
-    if (m.email?.toLowerCase() === "baotri@gieomo.store") return false;
-    if (m.referralCode?.toUpperCase() === "BAOTRI") return false;
-    if (m.fullName?.toLowerCase().includes("bảo trì")) return false;
+    if ((m.email ?? "").toLowerCase() === "baotri@gieomo.store") return false;
+    if ((m.referralCode ?? "").toUpperCase() === "BAOTRI") return false;
+    if ((m.fullName ?? "").toLowerCase().includes("bảo trì")) return false;
     return true;
   });
 }
@@ -1059,9 +1059,9 @@ export function saveStoredMembers(members: StoredMember[], changedMember?: Store
     // 1. Filter out revoked account admin@mammo.vn
     let sanitized = members.filter(
       (m) =>
-        m.email.toLowerCase() !== "admin@mammo.vn" &&
+        (m.email ?? "").toLowerCase() !== "admin@mammo.vn" &&
         m.memberId !== "mem-0" &&
-        !m.fullName.includes("BTC Mầm Mơ (Trưởng ban)")
+        !(m.fullName ?? "").includes("BTC Mầm Mơ (Trưởng ban)")
     );
 
     // 2. Ensure at least one admin account is kept

@@ -58,16 +58,22 @@ export default function AdminReconciliationPage() {
       if (dateRange.end) params.set("end_date", dateRange.end);
 
       const res = await fetch(`/api/admin/reconciliation?${params.toString()}`);
+      if (res.status === 401) {
+        throw new Error("Phiên làm việc đã hết hạn hoặc chưa đăng nhập. Vui lòng đăng nhập lại!");
+      }
+      if (res.status === 403) {
+        throw new Error("Bạn không có quyền truy cập dữ liệu đối soát (Yêu cầu tài khoản Quản trị viên).");
+      }
       if (!res.ok) {
-        throw new Error(`Lỗi kết nối máy chủ (${res.status})`);
+        throw new Error(`Lỗi máy chủ (${res.status}) khi tải dữ liệu đối soát.`);
       }
       const data = await res.json();
       if (!data.success) {
         throw new Error(data.error || "Không thể tải dữ liệu đối soát");
       }
 
-      setRecords(data.records || []);
-      setSummary(data.summary || null);
+      setRecords(Array.isArray(data?.records) ? data.records : []);
+      setSummary(data?.summary || null);
     } catch (err: any) {
       console.error("[Reconciliation UI] Fetch error:", err);
       setError(err?.message || "Lỗi tải dữ liệu");

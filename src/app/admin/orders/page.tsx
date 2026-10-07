@@ -195,7 +195,7 @@ function AdminOrdersContent() {
   // 2. BTC members list and their individual stats
   const btcMembers = useMemo(() => {
     return members.filter(
-      (m) => m.status === "active" && !m.fullName.includes("Trưởng ban cũ")
+      (m) => m.status === "active" && !(m.fullName ?? "").includes("Trưởng ban cũ")
     );
   }, [members]);
 
@@ -228,7 +228,7 @@ function AdminOrdersContent() {
     if (activeTab === "by_btc") {
       if (selectedBtcRef && selectedBtcRef !== "all") {
         const targetMember = btcMembers.find(
-          (m) => m.referralCode?.toLowerCase() === selectedBtcRef.toLowerCase()
+          (m) => (m.referralCode ?? "").toLowerCase() === selectedBtcRef.toLowerCase()
         );
         return targetMember ? orders.filter((o) => isOrderOfMember(o, targetMember)) : orders;
       }
@@ -252,14 +252,14 @@ function AdminOrdersContent() {
         ) {
           return false;
         }
-        if (introducerFilter !== "direct" && !ord.introducer_info?.includes(introducerFilter)) {
+        if (introducerFilter !== "direct" && !(ord.introducer_info ?? "").includes(introducerFilter)) {
           return false;
         }
       }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchCode = ord.order_code.toLowerCase().includes(q);
+        const matchCode = (ord.order_code ?? "").toLowerCase().includes(q);
         const matchName = (ord.buyer_name || "").toLowerCase().includes(q);
         const matchPhone = (ord.buyer_phone || "").includes(q);
         const matchIntro = (ord.introducer_info || "").toLowerCase().includes(q);
@@ -594,11 +594,11 @@ function AdminOrdersContent() {
                       {ord.introducer_info ? (
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            ord.introducer_info.includes("LAN")
+                            (ord.introducer_info ?? "").includes("LAN")
                               ? "bg-[#BFE9C3]/50 text-[#16381D] border-[#9ed4a3]"
-                              : ord.introducer_info.includes("QUANG")
+                              : (ord.introducer_info ?? "").includes("QUANG")
                               ? "bg-[#CFE8FF]/60 text-[#133A63] border-[#b2d9ff]"
-                              : ord.introducer_info.includes("ADMIN")
+                              : (ord.introducer_info ?? "").includes("ADMIN")
                               ? "bg-[#FFE7A8]/70 text-[#542B07] border-[#ebd089]"
                               : "bg-gray-100 text-gray-700 border-gray-200"
                           }`}

@@ -6,7 +6,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NotificationProvider } from "@/lib/notifications/NotificationContext";
 import { NotificationToastContainer } from "@/components/admin/NotificationToast";
-import { isAdminAuthenticated, getAdminSession, touchMemberActive } from "@/lib/data/orderStore";
+import { isAdminAuthenticated, getAdminSession, clearAdminSession, touchMemberActive } from "@/lib/data/orderStore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,28 +37,51 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [pathname, isLoginPage]);
 
   useEffect(() => {
-    if (!isLoginPage) {
-      if (!isAdminAuthenticated()) {
-        router.replace("/admin/login");
-        return;
-      }
-      const session = getAdminSession();
-      if (session?.role === "btc_sale") {
-        router.replace("/sale");
-        return;
-      }
-    }
-    if (!isLoginPage && isAdminAuthenticated()) {
-      touchMemberActive();
-    }
-    setIsAuthChecked(true);
+    let isMounted = true;
 
-    const heartbeatInterval = !isLoginPage && isAdminAuthenticated() 
-      ? setInterval(() => touchMemberActive(), 20000) 
-      : null;
+    async function verifyAuth() {
+      if (isLoginPage) {
+        setIsAuthChecked(true);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/session");
+        if (!res.ok) {
+          clearAdminSession();
+          router.replace("/admin/login");
+          return;
+        }
+
+        const data = await res.json();
+        if (!data?.authenticated || !data?.user) {
+          clearAdminSession();
+          router.replace("/admin/login");
+          return;
+        }
+
+        if (data.user.role === "btc_sale") {
+          router.replace("/sale");
+          return;
+        }
+
+        if (isMounted) {
+          touchMemberActive();
+          setIsAuthChecked(true);
+        }
+      } catch (err) {
+        console.error("[AdminLayout] Auth verification failed:", err);
+        clearAdminSession();
+        router.replace("/admin/login");
+      }
+    }
+
+    verifyAuth();
+
+    const heartbeatInterval = !isLoginPage ? setInterval(() => touchMemberActive(), 20000) : null;
 
     const onFocus = () => {
-      if (!isLoginPage && isAdminAuthenticated()) {
+      if (!isLoginPage) {
         touchMemberActive();
       }
     };
@@ -66,21 +89,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     const handleAuthChange = () => {
       if (!isLoginPage) {
-        if (!isAdminAuthenticated()) {
-          router.replace("/admin/login");
-          return;
-        }
-        touchMemberActive();
-        const s = getAdminSession();
-        if (s?.role === "btc_sale") {
-          router.replace("/sale");
-          return;
-        }
+        verifyAuth();
       }
     };
 
     window.addEventListener("gieomo_admin_auth_changed", handleAuthChange);
     return () => {
+      isMounted = false;
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("gieomo_admin_auth_changed", handleAuthChange);
