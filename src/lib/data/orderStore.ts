@@ -2616,42 +2616,11 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
     };
   }
 
-  // System maintenance account authentication (supports custom updated password & default GieoMo@2026)
-  if (cleanLower === "baotri@gieomo.store" || cleanLower === "baotri" || matchedMember?.memberId === "baotri-system") {
-    const isCustomPass = Boolean(matchedMember?.password && matchedMember.password !== "••••••••" && password === matchedMember.password);
-    if (isCustomPass || password === currentPass) {
-      if (typeof window !== "undefined") {
-        if (matchedMember) {
-          matchedMember.lastLoginAt = new Date().toISOString();
-          saveStoredMembers(members);
-        }
-        localStorage.setItem("gieomo_admin_session", JSON.stringify({
-          authenticated: true,
-          email: matchedMember?.email || "baotri@gieomo.store",
-          name: matchedMember?.fullName || "Bảo trì Hệ thống",
-          role: matchedMember?.role || "admin",
-          referralCode: matchedMember?.referralCode || "BAOTRI",
-          memberId: matchedMember?.memberId || "baotri-system",
-          phone: matchedMember?.phone || "0900000000",
-          isSystemProtected: true,
-          loginAt: new Date().toISOString(),
-        }));
-        window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
-      }
-      return { success: true };
-    }
-    return { success: false, error: "Mật khẩu không chính xác!" };
-  }
-
-  const isMasterMatch = password === currentPass;
   const isMemberMatch = matchedMember
     ? Boolean(matchedMember.password && matchedMember.password !== "••••••••" && matchedMember.password === password)
     : false;
 
-  // Master password without a matched email: only allow generic (no-email) admin logins.
-  const masterAllowed = isMasterMatch && (!cleanInput || Boolean(matchedMember));
-
-  if (masterAllowed || isMemberMatch) {
+  if (isMemberMatch) {
     if (typeof window !== "undefined") {
       const role: "admin" | "btc_sale" = matchedMember ? matchedMember.role : "admin";
       const name = matchedMember?.fullName || (cleanLower === DEFAULT_ADMIN_EMAIL ? "Bảo trì Hệ thống" : "Quản trị viên");

@@ -28,6 +28,15 @@ function OrderSuccessContent() {
   const orderCode = searchParams.get("code") || "GM-369817";
   const paymentMethod = searchParams.get("payment") || "banking";
   const urlAmount = Number(searchParams.get("amount") || "110000");
+  const urlToken = searchParams.get("token") || "";
+
+  const [proofToken] = useState<string>(() => {
+    if (urlToken) return urlToken;
+    if (typeof window !== "undefined" && orderCode) {
+      return localStorage.getItem(`gieomo_order_token_${orderCode}`) || "";
+    }
+    return "";
+  });
 
   const [settings, setSettings] = useState<SiteSettings>(() => {
     return typeof window !== "undefined" ? getStoredSettings() : DEFAULT_SETTINGS;
@@ -105,6 +114,7 @@ function OrderSuccessContent() {
           setOrder((prev) => ({ ...(prev || {}), ...dbOrder }));
           if (
             dbOrder.payment_proof ||
+            dbOrder.has_payment_proof ||
             dbOrder.payment_status === "paid" ||
             dbOrder.internal_note?.includes("[Khách đã nộp ảnh biên lai CK") ||
             dbOrder.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
@@ -198,48 +208,52 @@ function OrderSuccessContent() {
 
     if (orderCode) {
       try {
-        let uploadedUrl = proofImage;
+        const formData = new FormData();
+        formData.append("orderCode", orderCode);
+        const tokenToSend =
+          proofToken ||
+          (typeof window !== "undefined" ? localStorage.getItem(`gieomo_order_token_${orderCode}`) || "" : "");
+        if (tokenToSend) {
+          formData.append("token", tokenToSend);
+        }
 
-        // Try uploading to Supabase Storage if a real file is selected
+        const phone = order?.buyer_phone || order?.recipient_phone || "";
+        if (phone) {
+          formData.append("phone", phone);
+        }
+
         if (proofFile) {
-          const { uploadAsset } = await import("@/lib/services/uploadService");
-          const uploadRes = await uploadAsset(proofFile, "content-media", `payment-proof-${orderCode}-${Date.now()}.jpg`);
-          if (uploadRes.success && uploadRes.url) {
-            uploadedUrl = uploadRes.url;
-            setProofImage(uploadedUrl);
-          }
+          formData.append("file", proofFile);
+        } else if (proofImage && !proofImage.startsWith("blob:")) {
+          formData.append("paymentProof", proofImage);
         }
 
-        localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
-        if (uploadedUrl) {
-          localStorage.setItem(`gieomo_proof_${orderCode}`, uploadedUrl);
-          updateStoredPaymentProof(orderCode, uploadedUrl);
-        }
-
-        const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
-        setOrder((prev) =>
-          prev
-            ? {
-                ...prev,
-                payment_proof: uploadedUrl || prev.payment_proof,
-                internal_note: note,
-              }
-            : prev
-        );
-
-        // Send proof and note to server to persist across all devices
-        const payload: any = {
-          orderCode,
-          internalNote: note,
-        };
-        if (uploadedUrl) {
-          payload.paymentProof = uploadedUrl;
-        }
-        await fetch("/api/orders", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        const res = await fetch("/api/orders/proof", {
+          method: "POST",
+          body: formData,
         });
+
+        const data = await res.json();
+        if (data?.success) {
+          const finalUrl = data.paymentProof || proofImage;
+          localStorage.setItem(`gieomo_proof_submitted_${orderCode}`, "true");
+          if (finalUrl) {
+            localStorage.setItem(`gieomo_proof_${orderCode}`, finalUrl);
+            setProofImage(finalUrl);
+            updateStoredPaymentProof(orderCode, finalUrl);
+          }
+
+          const note = "[Khách đã nộp ảnh biên lai CK - Chờ BTC đối soát]";
+          setOrder((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  payment_proof: finalUrl || prev.payment_proof,
+                  internal_note: note,
+                }
+              : prev
+          );
+        }
       } catch (err) {
         console.warn("Error updating payment confirmation:", err);
       } finally {

@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       orderId: result.orderId,
       orderCode: result.orderCode,
       finalAmount: result.finalAmount,
+      proofToken: result.proofToken,
     });
   } catch (error: any) {
     return NextResponse.json(

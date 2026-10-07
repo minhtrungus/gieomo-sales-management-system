@@ -121,8 +121,8 @@ function CheckoutContent() {
       }
       const matched = members.find(
         (m) =>
-          m.referralCode?.toUpperCase() === clean.toUpperCase() ||
-          m.fullName?.toLowerCase() === clean.toLowerCase()
+          (m.referralCode ?? "").toUpperCase() === clean.toUpperCase() ||
+          (m.fullName ?? "").toLowerCase() === clean.toLowerCase()
       );
 
       if (matched) {
@@ -147,8 +147,8 @@ function CheckoutContent() {
         const clean = currentStoredRef.trim();
         const matched = updated.find(
           (m) =>
-            m.referralCode?.toUpperCase() === clean.toUpperCase() ||
-            m.fullName?.toLowerCase() === clean.toLowerCase()
+            (m.referralCode ?? "").toUpperCase() === clean.toUpperCase() ||
+            (m.fullName ?? "").toLowerCase() === clean.toLowerCase()
         );
         if (matched) {
           setSelectedMember(matched);
@@ -262,9 +262,9 @@ function CheckoutContent() {
     const q = memberSearchQuery.toLowerCase().trim();
     return activeMembers.filter(
       (m) =>
-        m.fullName.toLowerCase().includes(q) ||
-        m.referralCode.toLowerCase().includes(q) ||
-        m.phone.includes(q)
+        (m.fullName ?? "").toLowerCase().includes(q) ||
+        (m.referralCode ?? "").toLowerCase().includes(q) ||
+        (m.phone ?? "").includes(q)
     );
   }, [activeMembers, memberSearchQuery]);
 
@@ -339,8 +339,8 @@ function CheckoutContent() {
         const cleanCandidate = candidate.trim().toUpperCase();
         const matched = activeMembers.find(
           (m) =>
-            m.referralCode?.toUpperCase() === cleanCandidate ||
-            m.fullName?.toLowerCase() === candidate.toLowerCase()
+            (m.referralCode ?? "").toUpperCase() === cleanCandidate ||
+            (m.fullName ?? "").toLowerCase() === candidate.toLowerCase()
         );
         if (matched) {
           finalSellerId = matched.memberId;
@@ -452,7 +452,7 @@ function CheckoutContent() {
         // Cache order in local device storage
         saveNewOrder(newOrderRecord);
 
-        // Update local customer profile
+        // Update local customer profile and store proof token
         try {
           const myRaw = localStorage.getItem("gieomo_my_order_codes");
           const myCodes = myRaw ? JSON.parse(myRaw) : [];
@@ -460,6 +460,9 @@ function CheckoutContent() {
             "gieomo_my_order_codes",
             JSON.stringify([serverOrderCode, ...myCodes.filter((c: string) => c !== serverOrderCode)])
           );
+          if (result.proofToken) {
+            localStorage.setItem(`gieomo_order_token_${serverOrderCode}`, result.proofToken);
+          }
           localStorage.setItem(
             "gieomo_customer_profile",
             JSON.stringify({ name: formData.buyer_name, phone: formData.buyer_phone })
@@ -470,8 +473,9 @@ function CheckoutContent() {
 
         // Clear cart and redirect to success page
         clearCart();
+        const tokenQuery = result.proofToken ? `&token=${encodeURIComponent(result.proofToken)}` : "";
         router.push(
-          `/order/success?code=${serverOrderCode}&payment=${paymentMethod}&amount=${serverFinalAmount}`
+          `/order/success?code=${serverOrderCode}&payment=${paymentMethod}&amount=${serverFinalAmount}${tokenQuery}`
         );
       } catch (err: any) {
         console.error("[Checkout] Order creation failed:", err);

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSystemSettingsServer } from "@/lib/services/configService";
+import { createOrderProofToken } from "@/lib/auth/serverAuth";
 
 /**
  * Server-Side Order Creation with Complete Price, Voucher, and Inventory Integrity.
@@ -31,6 +32,7 @@ export async function createOrderServer(orderInput: {
   orderId?: string;
   orderCode?: string;
   finalAmount?: number;
+  proofToken?: string;
   error?: string;
 }> {
   try {
@@ -490,11 +492,14 @@ export async function createOrderServer(orderInput: {
       // ignore
     }
 
+    const proofToken = createOrderProofToken(createdOrder.order_code, createdOrder.order_id);
+
     return {
       success: true,
       orderId: createdOrder.order_id,
       orderCode: createdOrder.order_code,
       finalAmount,
+      proofToken,
     };
   } catch (err: any) {
     console.error("[createOrderServer] Exception:", err);
@@ -645,7 +650,8 @@ export async function getOrdersServer(options?: {
         payment_method: row.payment_method,
         customer_note: shouldMask ? undefined : row.customer_note,
         internal_note: isAdmin ? row.internal_note : undefined,
-        payment_proof: isAdmin ? row.payment_proof : undefined,
+        payment_proof: isAdmin || options?.code ? (row.payment_proof || null) : undefined,
+        has_payment_proof: Boolean(row.payment_proof || row.internal_note?.includes("[Khách đã nộp ảnh biên lai CK")),
         assigned_shipper_id: isAdmin ? row.assigned_shipper_id : undefined,
         created_at: row.created_at,
         confirmed_at: row.confirmed_at,

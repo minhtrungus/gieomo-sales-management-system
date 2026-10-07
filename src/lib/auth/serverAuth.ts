@@ -201,3 +201,38 @@ export async function requireAuth(
 }
 
 export { SESSION_COOKIE_NAME, SESSION_EXPIRATION_SECONDS };
+
+/**
+ * Create a cryptographically signed capability token for an order.
+ * Allows the customer to submit payment proof without an admin session.
+ */
+export function createOrderProofToken(orderCode: string, orderId: string): string {
+  const payload = `${orderCode.toUpperCase().trim()}:${orderId.trim()}`;
+  const payloadB64 = Buffer.from(payload).toString("base64url");
+  const signature = createHmac("sha256", getSecretKey()).update(payloadB64).digest("base64url");
+  return `${payloadB64}.${signature}`;
+}
+
+/**
+ * Verify order proof capability token against expected order code.
+ */
+export function verifyOrderProofToken(token: string, expectedOrderCode: string): boolean {
+  try {
+    if (!token || !token.includes(".")) return false;
+    const [payloadB64, signature] = token.split(".");
+    if (!payloadB64 || !signature) return false;
+
+    const expectedSignature = createHmac("sha256", getSecretKey()).update(payloadB64).digest("base64url");
+    const sigBuf = Buffer.from(signature, "utf-8");
+    const expBuf = Buffer.from(expectedSignature, "utf-8");
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+      return false;
+    }
+
+    const payload = Buffer.from(payloadB64, "base64url").toString("utf-8");
+    const [orderCode] = payload.split(":");
+    return Boolean(orderCode && orderCode.toUpperCase().trim() === expectedOrderCode.toUpperCase().trim());
+  } catch {
+    return false;
+  }
+}

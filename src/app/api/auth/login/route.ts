@@ -56,9 +56,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const isPasswordCorrect = matchedMember.password_hash
-        ? verifyPassword(password, matchedMember.password_hash)
-        : (password === "GieoMo@2026" || (matchedMember.password && matchedMember.password === password));
+      if (!matchedMember.password_hash) {
+        return NextResponse.json(
+          { success: false, error: "Tài khoản hoặc mật khẩu không chính xác!" },
+          { status: 401 }
+        );
+      }
+
+      const isPasswordCorrect = verifyPassword(password, matchedMember.password_hash);
 
       if (isPasswordCorrect) {
         authenticatedUser = {
@@ -81,18 +86,6 @@ export async function POST(request: Request) {
           } catch {}
         }
       }
-    } else if (
-      (account === "baotri@gieomo.store" || account === "baotri") &&
-      password === "GieoMo@2026"
-    ) {
-      authenticatedUser = {
-        memberId: "baotri-system",
-        email: "baotri@gieomo.store",
-        fullName: "Bảo trì Hệ thống",
-        role: "admin",
-        referralCode: "BAOTRI",
-        phone: "0900000000",
-      };
     }
 
     if (!authenticatedUser) {

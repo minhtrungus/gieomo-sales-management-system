@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     // Find matching order
     const { data: order, error: findError } = await supabase
       .from("orders")
-      .select("order_id, order_code, final_amount, order_status, payment_status, internal_note")
+      .select("order_id, order_code, customer_id, final_amount, order_status, payment_status, internal_note")
       .eq("order_code", matchedOrderCode)
       .maybeSingle();
 
@@ -163,34 +163,36 @@ export async function POST(request: Request) {
 
     // Send payment confirmation email via Resend if configured
     const resendApiKey = process.env.RESEND_API_KEY;
-    const { data: customerData } = await supabase
-      .from("customers")
-      .select("email, full_name")
-      .eq("customer_id", (order as any).customer_id || "")
-      .maybeSingle();
+    if (order.customer_id) {
+      const { data: customerData } = await supabase
+        .from("customers")
+        .select("email, full_name")
+        .eq("customer_id", order.customer_id)
+        .maybeSingle();
 
-    if (resendApiKey && customerData?.email) {
-      try {
-        const { generatePaymentReceivedHtml } = await import("@/lib/utils/emailService");
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${resendApiKey}`,
-          },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>",
-            to: [customerData.email],
-            subject: `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`,
-            html: generatePaymentReceivedHtml({
-              ...order,
-              buyer_name: customerData.full_name,
-              buyer_email: customerData.email,
-            } as any),
-          }),
-        });
-      } catch (mailErr) {
-        console.error("SePay Webhook: Error sending payment email:", mailErr);
+      if (resendApiKey && customerData?.email) {
+        try {
+          const { generatePaymentReceivedHtml } = await import("@/lib/utils/emailService");
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${resendApiKey}`,
+            },
+            body: JSON.stringify({
+              from: process.env.RESEND_FROM_EMAIL || "Gieo Mơ <onboarding@resend.dev>",
+              to: [customerData.email],
+              subject: `✓ Đã nhận thanh toán cho đơn hàng #${order.order_code} - Gieo Mơ`,
+              html: generatePaymentReceivedHtml({
+                ...order,
+                buyer_name: customerData.full_name,
+                buyer_email: customerData.email,
+              } as any),
+            }),
+          });
+        } catch (mailErr) {
+          console.error("SePay Webhook: Error sending payment email:", mailErr);
+        }
       }
     }
 

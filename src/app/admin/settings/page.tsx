@@ -694,7 +694,7 @@ export default function AdminSettingsPage() {
 
           <div className="flex items-center justify-between pt-2">
             <span className="text-[11px] text-gray-500">
-              💡 Mật khẩu mặc định ban đầu: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono font-bold text-emerald-950">GieoMo@2026</code>. Bạn có thể đổi bất kỳ lúc nào.
+              💡 Mật khẩu phải có độ dài tối thiểu 6 ký tự để đảm bảo an toàn.
             </span>
             <button
               type="button"
