@@ -88,7 +88,7 @@ export default function AdminVouchersPage() {
       // Search Filter
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        if (!v.code.toLowerCase().includes(q)) {
+        if (!(v.code ?? "").toLowerCase().includes(q)) {
           return false;
         }
       }

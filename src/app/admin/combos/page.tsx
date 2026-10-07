@@ -402,8 +402,8 @@ export default function AdminCombosPage() {
 
     const updated: ExtendedCombo = {
       ...editingCombo,
-      name: editingCombo.name.trim(),
-      slug: (editingCombo.slug || "").trim() || editingCombo.name.toLowerCase().trim().replace(/\s+/g, "-"),
+      name: (editingCombo.name || "").trim(),
+      slug: (editingCombo.slug || "").trim() || (editingCombo.name || "").toLowerCase().trim().replace(/\s+/g, "-"),
       items: mappedItems,
       thumbnail: currentThumb,
       images: [currentThumb],

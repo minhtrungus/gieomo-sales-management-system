@@ -141,10 +141,10 @@ export default function AdminMessagesPage() {
   const filteredMessages = useMemo(() => {
     return messages.filter((m) => {
       const matchesSearch =
-        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.phone && m.phone.includes(searchQuery)) ||
-        m.message.toLowerCase().includes(searchQuery.toLowerCase());
+        (m.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.email ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        Boolean(m.phone && m.phone.includes(searchQuery)) ||
+        (m.message ?? "").toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === "all" || m.status === statusFilter;
       return matchesSearch && matchesStatus;
@@ -170,10 +170,10 @@ export default function AdminMessagesPage() {
       const prodName = prod?.name || "";
       const matchesSearch =
         !reviewSearch.trim() ||
-        r.author_name.toLowerCase().includes(reviewSearch.toLowerCase()) ||
-        (r.phone_masked && r.phone_masked.includes(reviewSearch)) ||
-        r.comment.toLowerCase().includes(reviewSearch.toLowerCase()) ||
-        prodName.toLowerCase().includes(reviewSearch.toLowerCase());
+        (r.author_name ?? "").toLowerCase().includes(reviewSearch.toLowerCase()) ||
+        Boolean(r.phone_masked && r.phone_masked.includes(reviewSearch)) ||
+        (r.comment ?? "").toLowerCase().includes(reviewSearch.toLowerCase()) ||
+        (prodName ?? "").toLowerCase().includes(reviewSearch.toLowerCase());
 
       let matchesRating = true;
       if (reviewRatingFilter === "5") matchesRating = r.rating === 5;

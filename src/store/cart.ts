@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { CartItem } from "@/types/database";
 import { SITE_CONFIG } from "@/lib/constants";
 import { getStoredProducts, getStoredCombos } from "@/lib/data/orderStore";
@@ -16,6 +16,64 @@ interface CartState {
   validateCart: () => { removedCount: number; updatedCount: number };
   getItemCount: () => number;
   getSubtotal: () => number;
+}
+
+// In-memory cache & debounced persistence to decouple UI responsiveness from synchronous disk I/O
+let memoryCartCache: string | null = null;
+let pendingWriteTimer: ReturnType<typeof setTimeout> | null = null;
+const CART_STORAGE_KEY = "gieomo-cart";
+
+const deferredCartStorage = {
+  getItem: (name: string): string | null => {
+    if (typeof window === "undefined") return null;
+    if (memoryCartCache !== null) return memoryCartCache;
+    try {
+      const val = localStorage.getItem(name);
+      memoryCartCache = val;
+      return val;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    memoryCartCache = value;
+    if (typeof window === "undefined") return;
+
+    if (pendingWriteTimer) clearTimeout(pendingWriteTimer);
+    pendingWriteTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(name, value);
+      } catch (err) {
+        console.warn("[CartStorage] Failed writing to localStorage:", err);
+      }
+      pendingWriteTimer = null;
+    }, 150);
+  },
+  removeItem: (name: string): void => {
+    memoryCartCache = null;
+    if (pendingWriteTimer) {
+      clearTimeout(pendingWriteTimer);
+      pendingWriteTimer = null;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(name);
+      } catch {}
+    }
+  },
+};
+
+// Immediate flush on page reload or navigation to ensure ZERO data loss
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    if (pendingWriteTimer && memoryCartCache !== null) {
+      clearTimeout(pendingWriteTimer);
+      pendingWriteTimer = null;
+      try {
+        localStorage.setItem(CART_STORAGE_KEY, memoryCartCache);
+      } catch {}
+    }
+  });
 }
 
 export const useCartStore = create<CartState>()(
@@ -224,7 +282,8 @@ export const useCartStore = create<CartState>()(
       },
     }),
     {
-      name: "gieomo-cart",
+      name: CART_STORAGE_KEY,
+      storage: createJSONStorage(() => deferredCartStorage),
       // Only persist items, not computed values
       partialize: (state) => ({ items: state.items }),
       onRehydrateStorage: () => (state) => {

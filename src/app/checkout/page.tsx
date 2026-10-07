@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, useDeferredValue, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
@@ -257,16 +257,26 @@ function CheckoutContent() {
     }
   }, []);
 
+  const deferredMemberSearchQuery = useDeferredValue(memberSearchQuery);
+
+  // Pre-normalize search index to prevent repeated string operations on every keystroke
+  const normalizedMembersIndex = useMemo(() => {
+    return activeMembers.map((m) => ({
+      member: m,
+      searchTarget: `${m.fullName ?? ""} ${m.referralCode ?? ""} ${m.phone ?? ""}`.toLowerCase(),
+      cleanPhone: m.phone ?? "",
+    }));
+  }, [activeMembers]);
+
+  // Fast deferred filtering with top 10 items to prevent layout thrashing and high INP
   const filteredMembers = useMemo(() => {
-    if (!memberSearchQuery.trim()) return activeMembers;
-    const q = memberSearchQuery.toLowerCase().trim();
-    return activeMembers.filter(
-      (m) =>
-        (m.fullName ?? "").toLowerCase().includes(q) ||
-        (m.referralCode ?? "").toLowerCase().includes(q) ||
-        (m.phone ?? "").includes(q)
-    );
-  }, [activeMembers, memberSearchQuery]);
+    const q = deferredMemberSearchQuery.toLowerCase().trim();
+    if (!q) return activeMembers.slice(0, 10);
+    return normalizedMembersIndex
+      .filter((entry) => entry.searchTarget.includes(q) || entry.cleanPhone.includes(q))
+      .map((entry) => entry.member)
+      .slice(0, 10);
+  }, [normalizedMembersIndex, deferredMemberSearchQuery, activeMembers]);
 
   const handleValidateForm = (e: React.FormEvent) => {
     e.preventDefault();

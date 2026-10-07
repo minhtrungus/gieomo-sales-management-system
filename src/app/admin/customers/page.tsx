@@ -109,9 +109,9 @@ export default function AdminCustomersPage() {
 
   const filteredCustomers = customers.filter(
     (c) =>
-      c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.phone.includes(searchQuery) ||
-      (c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()))
+      (c.fullName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      Boolean(c.phone && c.phone.includes(searchQuery)) ||
+      Boolean(c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (

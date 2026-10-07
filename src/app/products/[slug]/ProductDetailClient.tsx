@@ -332,54 +332,31 @@ export function ProductDetailClient({
               className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none cursor-zoom-in"
               title="Nhấp để phóng to ảnh xem chi tiết các mẫu"
             >
-              {/* Ambient backdrop for non-square photos */}
-              {displayImages[selectedImageIndex] && (
-                <div 
-                  className="absolute inset-0 opacity-20 filter blur-xl scale-110 pointer-events-none"
-                  style={{
-                    backgroundImage: `url(${customActiveImage || displayImages[selectedImageIndex]})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                />
-              )}
+              {/* Ambient backdrop for non-square photos without raw image network request */}
+              <div 
+                className="absolute inset-0 bg-gradient-to-tr from-amber-100/30 via-emerald-50/20 to-transparent pointer-events-none"
+              />
 
-              {/* Render all display images with smooth, gentle crossfade transition */}
-              {displayImages.map((img, idx) => {
-                const isCurrent = !customActiveImage && selectedImageIndex === idx;
+              {/* Render optimized active product image */}
+              {(() => {
+                const currentImg = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
+                if (!currentImg) return null;
                 return (
                   <div
-                    key={img + idx}
-                    className={`absolute inset-0 flex items-center justify-center p-2 transition-all duration-500 ease-out ${
-                      isCurrent
-                        ? "opacity-100 scale-100 z-10"
-                        : "opacity-0 scale-[1.02] pointer-events-none z-0"
-                    }`}
+                    key={currentImg}
+                    className="absolute inset-0 flex items-center justify-center p-2 transition-opacity duration-300 ease-out z-10"
                   >
                     <Image
-                      src={img}
-                      alt={`${product.name} - ${idx + 1}`}
+                      src={currentImg}
+                      alt={product.name}
                       fill
-                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 580px"
                       className="object-contain"
-                      priority={idx === 0}
+                      priority={selectedImageIndex === 0 && !customActiveImage}
                     />
                   </div>
                 );
-              })}
-
-              {/* Custom Variant Active Image (if selected directly) */}
-              {customActiveImage && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center p-2 transition-all duration-500 ease-out opacity-100 scale-100">
-                  <Image
-                    src={customActiveImage}
-                    alt={product.name}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="object-contain"
-                  />
-                </div>
-              )}
+              })()}
 
               {/* Hover Zoom Badge */}
               <div className="absolute top-3 right-3 z-30 px-2.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-xs flex items-center gap-1.5 transition-all shadow-md">

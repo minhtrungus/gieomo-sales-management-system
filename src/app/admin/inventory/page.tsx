@@ -910,8 +910,8 @@ export default function AdminInventoryPage() {
       .filter((item) => {
         if (
           searchQuery.trim() !== "" &&
-          !item.productName.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !item.sku.toLowerCase().includes(searchQuery.toLowerCase())
+          !(item.productName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !(item.sku ?? "").toLowerCase().includes(searchQuery.toLowerCase())
         ) {
           return false;
         }

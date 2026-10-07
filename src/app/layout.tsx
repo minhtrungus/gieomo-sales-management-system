@@ -14,21 +14,21 @@ const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin", "vietnamese"],
   display: "swap",
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const caveat = Caveat({
   variable: "--font-handwriting",
   subsets: ["latin", "latin-ext"],
   display: "swap",
-  weight: ["400", "600", "700"],
+  weight: ["700"],
 });
 
 const playfair = Playfair_Display({
   variable: "--font-serif",
   subsets: ["latin", "vietnamese"],
   display: "swap",
-  weight: ["400", "600", "700"],
+  weight: ["400"],
 });
 
 // Note: Boldonse will be loaded via CSS @font-face when font file is provided.

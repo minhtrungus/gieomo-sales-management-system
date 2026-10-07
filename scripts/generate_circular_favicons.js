@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 async function generateFavicons() {
-  const sourcePath = path.join(__dirname, '..', 'public', 'images', 'AVA GIEO MƠ.png');
+  const defaultSource = path.join(__dirname, '..', 'public', 'images', 'AVA GIEO MƠ.png');
+  const fallbackSource = path.join(__dirname, '..', 'public', 'images', 'logo.png');
+  const sourcePath = fs.existsSync(defaultSource) ? defaultSource : fallbackSource;
   if (!fs.existsSync(sourcePath)) {
     throw new Error('Source image not found: ' + sourcePath);
   }

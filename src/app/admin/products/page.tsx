@@ -62,8 +62,8 @@ export default function AdminProductsPage() {
     return products.filter((p) => {
       if (
         searchQuery.trim() !== "" &&
-        !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !p.slug.toLowerCase().includes(searchQuery.toLowerCase())
+        !(p.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !(p.slug ?? "").toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }

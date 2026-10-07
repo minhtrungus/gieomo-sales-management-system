@@ -415,7 +415,7 @@ const EditMemberModal = memo(function EditMemberModal({
     }
 
     const duplicate = members.find(
-      (m) => m.memberId !== member.memberId && m.email.toLowerCase() === trimmedEmail
+      (m) => m.memberId !== member.memberId && (m.email ?? "").toLowerCase() === trimmedEmail
     );
     if (duplicate) {
       setError(`Email "${trimmedEmail}" đã được sử dụng bởi ${duplicate.fullName}.`);
@@ -835,7 +835,7 @@ export default function AdminMembersPage() {
         if (rawSession) {
           const session = JSON.parse(rawSession);
           if (
-            session.email?.toLowerCase() === updatedMember.email.toLowerCase() ||
+            session.email?.toLowerCase() === (updatedMember.email ?? "").toLowerCase() ||
             (updatedMember.memberId === "baotri-system" && session.email === "baotri@gieomo.store")
           ) {
             session.name = updatedMember.fullName;
@@ -914,7 +914,7 @@ export default function AdminMembersPage() {
 
           const isProtected = Boolean(
             m.isSystemProtected ||
-            m.email.toLowerCase() === "baotri@gieomo.store" ||
+            (m.email ?? "").toLowerCase() === "baotri@gieomo.store" ||
             m.memberId === "baotri-system"
           );
 
@@ -1104,7 +1104,7 @@ export default function AdminMembersPage() {
 
                 const isProtected = Boolean(
                   m.isSystemProtected ||
-                  m.email.toLowerCase() === "baotri@gieomo.store" ||
+                  (m.email ?? "").toLowerCase() === "baotri@gieomo.store" ||
                   m.memberId === "baotri-system"
                 );
 
