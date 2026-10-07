@@ -35,7 +35,7 @@ function getCookieRef(): string | null {
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { items, getSubtotal, clearCart, validateCart } = useCartStore();
+  const { items, getSubtotal, clearCart, validateCart, updateQuantity, removeItem } = useCartStore();
   const subtotal = getSubtotal();
   const totalItemCount = items.reduce((acc, it) => acc + it.quantity, 0);
 
@@ -842,20 +842,65 @@ function CheckoutContent() {
           {/* Sidebar Summary - Right 5 Cols */}
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-xs space-y-6 sticky top-24">
-              <h3 className="font-heading font-bold text-xl text-emerald-950 border-b border-gray-100 pb-3">
-                Đơn hàng của bạn ({items.length} món)
+              <h3 className="font-heading font-bold text-xl text-emerald-950 border-b border-gray-100 pb-3 flex items-center justify-between">
+                <span>Đơn hàng của bạn ({items.length} món)</span>
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={clearCart}
+                    className="text-[11px] text-red-500 hover:text-red-700 font-semibold cursor-pointer"
+                  >
+                    Xóa tất cả
+                  </button>
+                )}
               </h3>
 
               {/* Items List */}
-              <div className="max-h-60 overflow-y-auto divide-y divide-gray-100 pr-1">
+              <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 pr-1">
                 {items.map((item) => (
-                  <div key={`${item.product_id}-${item.variant_id}`} className="py-2.5 flex items-center justify-between text-xs">
-                    <div className="min-w-0 pr-2">
+                  <div key={`${item.product_id}-${item.variant_id ?? "default"}`} className="py-2.5 flex items-center justify-between gap-2.5 text-xs">
+                    <div className="min-w-0 flex-1">
                       <span className="font-semibold text-gray-900 block truncate">{item.product_name}</span>
                       {item.variant_name && <span className="text-gray-500 text-[11px] block">{item.variant_name}</span>}
-                      <span className="text-gray-500">x{item.quantity}</span>
+                      <MoneyDisplay amount={item.price} className="text-[11px] text-gray-500" />
                     </div>
-                    <MoneyDisplay amount={item.price * item.quantity} className="font-bold text-gray-900 shrink-0" />
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {/* Quantity Stepper */}
+                      <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.product_id, item.variant_id, item.quantity - 1)}
+                          className="w-5 h-5 flex items-center justify-center text-gray-600 hover:bg-white rounded font-bold text-xs cursor-pointer transition-colors"
+                          title="Giảm 1"
+                        >
+                          -
+                        </button>
+                        <span className="w-5 text-center text-xs font-bold text-gray-900">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.product_id, item.variant_id, item.quantity + 1)}
+                          disabled={item.stock !== undefined && item.stock !== null && item.quantity >= item.stock}
+                          className="w-5 h-5 flex items-center justify-center text-gray-600 hover:bg-white rounded font-bold text-xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={item.stock !== undefined && item.stock !== null && item.quantity >= item.stock ? "Đã đạt số lượng tối đa trong kho" : "Tăng 1"}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <MoneyDisplay amount={item.price * item.quantity} className="font-bold text-gray-900 min-w-[60px] text-right" />
+
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.product_id, item.variant_id)}
+                        className="text-gray-400 hover:text-red-500 p-0.5 cursor-pointer transition-colors text-sm"
+                        title="Xóa món này khỏi đơn hàng"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

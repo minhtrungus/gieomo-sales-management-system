@@ -188,6 +188,8 @@ export function ProductDetailClient({
   }, [product]);
 
   const addItem = useCartStore((state) => state.addItem);
+  const itemsInCart = useCartStore((state) => state.items);
+  const [isAdding, setIsAdding] = useState(false);
 
   const isNumberedMode = useMemo(() => {
     if (!product?.variants || product.variants.length < 5) return false;
@@ -231,7 +233,22 @@ export function ProductDetailClient({
   }, [selectedVariant?.variant_id, currentStock]);
 
   const handleAddToCart = () => {
-    if (!product || isOutOfStock) return;
+    if (!product || isOutOfStock || isAdding) return;
+
+    const existingInCart = itemsInCart.find(
+      (it) => it.product_id === product.product_id && it.variant_id === (selectedVariant?.variant_id ?? null)
+    );
+
+    if (existingInCart && existingInCart.quantity >= currentStock) {
+      setToastMessage(
+        currentStock <= 1
+          ? `Mẫu "${selectedVariant?.name || product.name}" độc bản này đã có trong giỏ hàng của bạn!`
+          : `Bạn đã thêm tối đa số lượng có trong kho (${currentStock} sản phẩm)!`
+      );
+      return;
+    }
+
+    setIsAdding(true);
 
     addItem({
       product_id: product.product_id,
@@ -246,9 +263,11 @@ export function ProductDetailClient({
     });
 
     setToastMessage(`Đã thêm ${quantity}x "${product.name}" vào giỏ hàng!`);
+    setTimeout(() => setIsAdding(false), 200);
   };
 
   const handleBuyNow = () => {
+    if (!product || isOutOfStock) return;
     handleAddToCart();
     router.push("/checkout");
   };

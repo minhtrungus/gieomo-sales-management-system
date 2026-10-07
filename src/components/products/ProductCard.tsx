@@ -10,14 +10,20 @@ import { Toast } from "@/components/ui/Toast";
 import { useState, memo } from "react";
 import { Plus } from "lucide-react";
 
+import { useRouter } from "next/navigation";
+
 interface ProductCardProps {
   product: ExtendedProduct;
 }
 
 export const ProductCard = memo(function ProductCard({ product }: ProductCardProps) {
+  const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
+  const itemsInCart = useCartStore((state) => state.items);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
 
+  const hasMultipleVariants = Boolean(product.variants && product.variants.length > 1);
   const defaultVariant = product.variants?.[0];
   const stockCount = product.variants && product.variants.length > 0
     ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
@@ -28,7 +34,26 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
     e.preventDefault();
     e.stopPropagation();
 
-    if (isOutOfStock) return;
+    if (isOutOfStock || isAdding) return;
+
+    // For products with multiple variants, direct customer to choose their unique mẫu
+    if (hasMultipleVariants) {
+      router.push(`/products/${product.slug}`);
+      return;
+    }
+
+    setIsAdding(true);
+
+    const targetStock = defaultVariant ? (Number(defaultVariant.stock) || 0) : (Number(product.stock) || 0);
+    const existingInCart = itemsInCart.find(
+      (it) => it.product_id === product.product_id && it.variant_id === (defaultVariant?.variant_id ?? null)
+    );
+
+    if (existingInCart && existingInCart.quantity >= targetStock) {
+      setToastMessage(`"${product.name}" đã có trong giỏ hàng (tồn kho: ${targetStock})!`);
+      setIsAdding(false);
+      return;
+    }
 
     addItem({
       product_id: product.product_id,
@@ -38,11 +63,12 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
       variant_name: defaultVariant?.name ?? null,
       price: product.price,
       quantity: 1,
-      stock: stockCount,
+      stock: targetStock,
       image_url: product.images?.[0] ?? null,
     });
 
     setToastMessage(`Đã thêm "${product.name}" vào giỏ hàng!`);
+    setTimeout(() => setIsAdding(false), 200);
   };
 
   return (
@@ -126,7 +152,13 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
                 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                 : "bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#1B3622] border-[#9ed4a3] font-bold active:scale-95 shadow-xs"
             }`}
-            title={isOutOfStock ? "Hết hàng" : "Thêm vào giỏ"}
+            title={
+              isOutOfStock
+                ? "Hết hàng"
+                : hasMultipleVariants
+                ? "Xem và chọn mẫu độc bản"
+                : "Thêm vào giỏ"
+            }
           >
             <Plus className="w-4 h-4" />
           </button>

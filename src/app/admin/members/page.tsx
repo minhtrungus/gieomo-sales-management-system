@@ -575,9 +575,10 @@ const MemberOrdersModal = memo(function MemberOrdersModal({
   const memberOrders = useMemo(() => {
     return orders.filter(
       (o) =>
+        o.seller_id === member.memberId ||
         o.created_by_member_id === member.memberId ||
-        o.referral_code === member.referralCode ||
-        (o.introducer_info && o.introducer_info.includes(member.referralCode))
+        (member.referralCode && o.referral_code === member.referralCode) ||
+        (member.referralCode && o.introducer_info && o.introducer_info.includes(member.referralCode))
     );
   }, [orders, member]);
 
@@ -788,9 +789,10 @@ export default function AdminMembersPage() {
 
     for (const o of orders) {
       const rev = o.final_amount || 0;
-      if (o.created_by_member_id) {
-        const cur = byId.get(o.created_by_member_id) || { count: 0, revenue: 0 };
-        byId.set(o.created_by_member_id, { count: cur.count + 1, revenue: cur.revenue + rev });
+      const targetMemberId = o.seller_id || o.created_by_member_id;
+      if (targetMemberId) {
+        const cur = byId.get(targetMemberId) || { count: 0, revenue: 0 };
+        byId.set(targetMemberId, { count: cur.count + 1, revenue: cur.revenue + rev });
       }
       if (o.referral_code) {
         const cleanRef = o.referral_code.toUpperCase();

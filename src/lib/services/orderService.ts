@@ -391,23 +391,64 @@ export async function createOrderServer(orderInput: {
       if (newCustomer) customerId = newCustomer.customer_id;
     }
 
-    // 8. Resolve Seller ID & Referral
+    // 8. Resolve Seller ID & Referral via Server Authority (Query Supabase members)
     let sellerId: string | null = null;
+    let assignedShipperId: string | null = null;
+    let finalIntroducerInfo = orderInput.introducer_info || "Trực tiếp (Website)";
+    let finalSourceType: "landing_page" | "member_referral" = "landing_page";
+
     const isUuid = (id?: string | null) =>
       Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
 
+    let matchedMember: { member_id: string; full_name: string; referral_code: string | null } | null = null;
+
+    // A. Validate candidate seller_id against active members
     if (isUuid(orderInput.seller_id)) {
-      sellerId = orderInput.seller_id!;
+      const { data: mById } = await supabase
+        .from("members")
+        .select("member_id, full_name, referral_code")
+        .eq("member_id", orderInput.seller_id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (mById) matchedMember = mById;
     }
 
+    // B. If not matched, lookup by referral_code
     const cleanRef = (orderInput.referral_code || "").trim().toUpperCase();
-    if (!sellerId && cleanRef) {
-      const { data: refMember } = await supabase
+    if (!matchedMember && cleanRef) {
+      const { data: mByCode } = await supabase
         .from("members")
-        .select("member_id")
+        .select("member_id, full_name, referral_code")
         .ilike("referral_code", cleanRef)
+        .eq("status", "active")
         .maybeSingle();
-      if (refMember) sellerId = refMember.member_id;
+      if (mByCode) matchedMember = mByCode;
+    }
+
+    // C. If still not matched, extract referral code or name from introducer_info (e.g. "(MAM-LY)")
+    if (!matchedMember && orderInput.introducer_info) {
+      const extractedCode = orderInput.introducer_info.match(/\(([A-Za-z0-9_-]+)\)/)?.[1];
+      if (extractedCode) {
+        const { data: mByExtracted } = await supabase
+          .from("members")
+          .select("member_id, full_name, referral_code")
+          .ilike("referral_code", extractedCode.trim().toUpperCase())
+          .eq("status", "active")
+          .maybeSingle();
+        if (mByExtracted) matchedMember = mByExtracted;
+      }
+    }
+
+    // D. Apply validated member relationship
+    if (matchedMember) {
+      sellerId = matchedMember.member_id;
+      finalSourceType = "member_referral";
+      finalIntroducerInfo = `${matchedMember.full_name} (${matchedMember.referral_code || "Thành viên"})`;
+
+      // If delivery is through acquaintance / member delivery, assign order to this member
+      if (deliveryType === "member_delivery") {
+        assignedShipperId = matchedMember.member_id;
+      }
     }
 
     // 9. Generate Random Order Code and Insert Order Record
@@ -423,8 +464,9 @@ export async function createOrderServer(orderInput: {
         order_code: randomCode,
         customer_id: customerId!,
         seller_id: sellerId,
-        source_type: (sellerId || cleanRef) ? "member_referral" : "landing_page",
-        introducer_info: orderInput.introducer_info || (cleanRef ? `Mã giới thiệu: ${cleanRef}` : "Trực tiếp (Website)"),
+        source_type: finalSourceType,
+        introducer_info: finalIntroducerInfo,
+        assigned_shipper_id: assignedShipperId,
         receiver_name: orderInput.recipient_name || fullName,
         receiver_phone: orderInput.recipient_phone ? orderInput.recipient_phone.replace(/\D/g, "") : rawPhone,
         delivery_type: dbDeliveryType,
@@ -657,7 +699,11 @@ export async function getOrdersServer(options?: {
           row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] ||
           row.internal_note?.includes("[Khách đã nộp ảnh biên lai CK")
         ),
-        assigned_shipper_id: isAdmin ? row.assigned_shipper_id : undefined,
+        seller_id: row.seller_id || null,
+        source_type: row.source_type || "landing_page",
+        introducer_info: row.introducer_info || null,
+        referral_code: row.seller_id ? (row.introducer_info?.match(/\(([^)]+)\)/)?.[1] || null) : null,
+        assigned_shipper_id: row.assigned_shipper_id || null,
         created_at: row.created_at,
         confirmed_at: row.confirmed_at,
         completed_at: row.completed_at,

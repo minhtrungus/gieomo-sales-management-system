@@ -92,9 +92,12 @@ export const useCartStore = create<CartState>()(
 
           if (existing) {
             // Update quantity, capped at stock and max
+            const effectiveStock = (item.stock !== undefined && item.stock !== null)
+              ? Math.min(existing.stock, item.stock)
+              : existing.stock;
             const newQty = Math.min(
               existing.quantity + item.quantity,
-              existing.stock,
+              effectiveStock,
               SITE_CONFIG.maxCartQuantity
             );
             return {
@@ -102,7 +105,7 @@ export const useCartStore = create<CartState>()(
                 i.product_id === item.product_id &&
                 i.variant_id === item.variant_id &&
                 i.combo_id === item.combo_id
-                  ? { ...i, quantity: newQty }
+                  ? { ...i, quantity: newQty, stock: effectiveStock }
                   : i
               ),
             };

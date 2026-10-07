@@ -947,16 +947,19 @@ export function syncMembersFromServer(force = false): void {
           } catch {}
 
           const mapped: StoredMember[] = data.members.map((m: any) => {
-            const loc = localMap.get(m.member_id?.toLowerCase()) || (m.email ? localMap.get(m.email.toLowerCase()) : undefined);
-            const savedPresence = presenceMap[m.member_id] || (m.email ? presenceMap[m.email.toLowerCase()] : undefined);
+            const resolvedId = m.member_id || m.memberId || "";
+            const resolvedName = m.full_name || m.fullName || "";
+            const resolvedRef = m.referral_code || m.referralCode || "";
+            const loc = localMap.get(resolvedId?.toLowerCase()) || (m.email ? localMap.get(m.email.toLowerCase()) : undefined);
+            const savedPresence = presenceMap[resolvedId] || (m.email ? presenceMap[m.email.toLowerCase()] : undefined);
             const finalLastActive = m.last_active_at || loc?.lastActiveAt || savedPresence || undefined;
 
             return {
-              memberId: m.member_id,
-              fullName: m.full_name,
+              memberId: resolvedId,
+              fullName: resolvedName,
               email: m.email || "",
               role: m.role || "btc_sale",
-              referralCode: m.referral_code || "",
+              referralCode: resolvedRef,
               phone: m.phone || "Chưa cập nhật",
               totalOrders: loc?.totalOrders || 0,
               totalRevenue: loc?.totalRevenue || 0,
