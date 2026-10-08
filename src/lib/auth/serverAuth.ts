@@ -40,25 +40,24 @@ export function hashPassword(password: string): string {
 }
 
 /**
- * Verify password against stored hash (supports both PBKDF2 and initial plaintext migration fallback).
+ * Verify password against stored hash (PBKDF2 only - no plaintext fallback for security).
  */
 export function verifyPassword(password: string, storedHash?: string | null): boolean {
   if (!storedHash) return false;
 
-  if (storedHash.startsWith("pbkdf2$")) {
-    const parts = storedHash.split("$");
-    if (parts.length !== 3) return false;
-    const [, salt, originalHash] = parts;
-    const computedHash = pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-    try {
-      return timingSafeEqual(Buffer.from(computedHash, "hex"), Buffer.from(originalHash, "hex"));
-    } catch {
-      return false;
-    }
+  if (!storedHash.startsWith("pbkdf2$")) {
+    return false;
   }
 
-  // Graceful fallback for initial legacy/unhashed migration records
-  return password === storedHash;
+  const parts = storedHash.split("$");
+  if (parts.length !== 3) return false;
+  const [, salt, originalHash] = parts;
+  const computedHash = pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+  try {
+    return timingSafeEqual(Buffer.from(computedHash, "hex"), Buffer.from(originalHash, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 /**
