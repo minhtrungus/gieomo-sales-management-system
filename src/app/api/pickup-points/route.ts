@@ -90,6 +90,73 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
+    const body = await request.json();
+    const { id, name, address, contact_name, contact_phone, opening_hours, status } = body;
+
+    if (!id && !name) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu id hoặc name điểm nhận cần cập nhật" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const isUuid = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // Find existing pickup point
+    let existingPointId: string | null = null;
+    if (isUuid) {
+      existingPointId = body.pickup_point_id;
+    } else if (name) {
+      const { data: exPoint } = await supabase
+        .from("pickup_points")
+        .select("pickup_point_id")
+        .eq("name", name.trim())
+        .maybeSingle();
+      if (exPoint) existingPointId = exPoint.pickup_point_id;
+    }
+
+    if (!existingPointId) {
+      return NextResponse.json({ success: false, error: "Không tìm thấy điểm nhận" }, { status: 404 });
+    }
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (name !== undefined) payload.name = name.trim();
+    if (address !== undefined) payload.address = address.trim();
+    if (contact_name !== undefined) payload.contact_name = contact_name;
+    if (contact_phone !== undefined) payload.contact_phone = contact_phone;
+    if (opening_hours !== undefined) payload.opening_hours = opening_hours;
+    if (status !== undefined) payload.status = status;
+
+    const { data, error } = await supabase
+      .from("pickup_points")
+      .update(payload)
+      .eq("pickup_point_id", existingPointId)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+
+    return NextResponse.json({ success: true, pickup_point: data });
+  } catch (err: any) {
+    console.error("[PATCH /api/pickup-points] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi cập nhật điểm nhận hàng" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const authCheck = await requireAdmin(request);

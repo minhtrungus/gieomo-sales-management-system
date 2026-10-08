@@ -78,6 +78,74 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
+    const body = await request.json();
+    const { id, status, discount_value, min_order_value, usage_limit, start_date, end_date } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu id voucher cần cập nhật" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (status !== undefined) {
+      payload.status = status;
+    }
+    if (discount_value !== undefined) {
+      payload.discount_value = Math.max(0, discount_value);
+    }
+    if (min_order_value !== undefined) {
+      payload.min_order_value = Number(min_order_value) || 0;
+    }
+    if (usage_limit !== undefined) {
+      payload.usage_limit = usage_limit;
+    }
+    if (start_date !== undefined) {
+      payload.start_date = start_date;
+    }
+    if (end_date !== undefined) {
+      payload.end_date = end_date;
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    let query = supabase.from("vouchers").update(payload);
+    if (isUuid) {
+      query = query.eq("voucher_id", id);
+    } else {
+      query = query.eq("code", id.toUpperCase());
+    }
+
+    const { data, error } = await query.select().single();
+
+    if (error) {
+      console.error("[PATCH /api/vouchers] Error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, voucher: data });
+  } catch (err: any) {
+    console.error("[PATCH /api/vouchers] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi cập nhật mã giảm giá" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const authCheck = await requireAdmin(request);

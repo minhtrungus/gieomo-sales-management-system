@@ -72,6 +72,63 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
+    const body = await request.json();
+    const { id, name, slug, description, image_url, status, sort_order } = body;
+
+    if (!id && !slug) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu id hoặc slug danh mục cần cập nhật" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const isUuid = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (name !== undefined) payload.name = name;
+    if (slug !== undefined) payload.slug = slug;
+    if (description !== undefined) payload.description = description;
+    if (image_url !== undefined) payload.image_url = image_url;
+    if (status !== undefined) payload.status = status;
+    if (sort_order !== undefined) payload.sort_order = sort_order;
+
+    let query = supabase.from("product_categories").update(payload);
+    if (isUuid) {
+      query = query.eq("category_id", id);
+    } else if (slug) {
+      query = query.eq("slug", slug);
+    } else {
+      query = query.eq("category_id", id);
+    }
+
+    const { data, error } = await query.select().single();
+
+    if (error) {
+      console.error("[PATCH /api/categories] Error:", error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, category: data });
+  } catch (err: any) {
+    console.error("[PATCH /api/categories] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi cập nhật danh mục" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const authCheck = await requireAdmin(request);

@@ -179,6 +179,131 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
+    const body = await request.json();
+    const { id, slug, name, price, image_url, description, status, featured, sort_order, items } = body;
+
+    if (!id && !slug) {
+      return NextResponse.json(
+        { success: false, error: "Thiếu id hoặc slug combo cần cập nhật" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const isUuid = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // Find existing combo
+    let existingComboId: string | null = null;
+    if (isUuid) {
+      const { data } = await supabase
+        .from("combos")
+        .select("combo_id")
+        .eq("combo_id", id)
+        .maybeSingle();
+      if (data) existingComboId = data.combo_id;
+    }
+    if (!existingComboId && slug) {
+      const { data } = await supabase
+        .from("combos")
+        .select("combo_id")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (data) existingComboId = data.combo_id;
+    }
+
+    if (!existingComboId) {
+      return NextResponse.json({ success: false, error: "Không tìm thấy combo" }, { status: 404 });
+    }
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (name !== undefined) payload.name = name.trim();
+    if (slug !== undefined) payload.slug = slug.trim();
+    if (price !== undefined) payload.price = Number(price) || 0;
+    if (image_url !== undefined) payload.image_url = image_url;
+    if (description !== undefined) payload.description = description;
+    if (status !== undefined) payload.status = status;
+    if (featured !== undefined) payload.featured = Boolean(featured);
+    if (sort_order !== undefined) payload.sort_order = Number(sort_order) || 1;
+
+    const { error: updErr } = await supabase
+      .from("combos")
+      .update(payload)
+      .eq("combo_id", existingComboId);
+
+    if (updErr) {
+      return NextResponse.json({ success: false, error: updErr.message }, { status: 400 });
+    }
+
+    // Update combo items if provided
+    if (items && Array.isArray(items)) {
+      await supabase.from("combo_items").delete().eq("combo_id", existingComboId);
+
+      const itemRows = [];
+      for (const it of items) {
+        let pId = it.product_id || it.product?.product_id;
+        let isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId);
+        const itemSlug = it.slug || it.product?.slug;
+        const itemName = it.name || it.product?.name;
+
+        if (!isProdUuid && itemSlug) {
+          const { data: pData } = await supabase
+            .from("products")
+            .select("product_id")
+            .eq("slug", itemSlug)
+            .maybeSingle();
+          if (pData) {
+            pId = pData.product_id;
+            isProdUuid = true;
+          }
+        }
+
+        if (!isProdUuid && itemName) {
+          const { data: pNameData } = await supabase
+            .from("products")
+            .select("product_id")
+            .ilike("name", `%${itemName}%`)
+            .limit(1)
+            .maybeSingle();
+          if (pNameData) {
+            pId = pNameData.product_id;
+            isProdUuid = true;
+          }
+        }
+
+        if (isProdUuid) {
+          itemRows.push({
+            combo_id: existingComboId,
+            product_id: pId,
+            quantity: Number(it.quantity) || 1,
+          });
+        }
+      }
+
+      if (itemRows.length > 0) {
+        await supabase.from("combo_items").insert(itemRows);
+      }
+    }
+
+    return NextResponse.json({ success: true, combo_id: existingComboId });
+  } catch (err: any) {
+    console.error("[PATCH /api/combos] Exception:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Lỗi cập nhật combo" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const authCheck = await requireAdmin(request);
