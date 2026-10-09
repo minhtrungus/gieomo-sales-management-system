@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createOrderServer, getOrdersServer } from "@/lib/services/orderService";
+import { createOrderServer, getOrdersServer, createVoucherCasOps, releaseVoucherSlot } from "@/lib/services/orderService";
 import { getAuthenticatedUser, requireAdmin, requireAuth } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -121,6 +121,47 @@ export async function PATCH(request: Request) {
     }
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrCode);
+
+    if (orderStatus === "cancelled") {
+      let cancelQuery = supabase
+        .from("orders")
+        .update(updateData)
+        .neq("order_status", "cancelled");
+      if (orderCode) {
+        cancelQuery = cancelQuery.eq("order_code", orderCode.trim().toUpperCase());
+      } else if (isUuid) {
+        cancelQuery = cancelQuery.eq("order_id", idOrCode);
+      } else {
+        cancelQuery = cancelQuery.eq("order_code", idOrCode.trim().toUpperCase());
+      }
+
+      const { data, error } = await cancelQuery.select("order_id, voucher_id");
+
+      if (error) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      if (rows.length === 0) {
+        return NextResponse.json({ success: true, alreadyCancelled: true });
+      }
+
+      const voucherId = rows[0]?.voucher_id as string | null | undefined;
+      if (voucherId) {
+        const ops = createVoucherCasOps(supabase);
+        const outcome = await releaseVoucherSlot(ops, voucherId);
+        if (outcome !== "released") {
+          console.error("[orders PATCH] voucher-release-after-cancel-failed", {
+            orderId: rows[0]?.order_id,
+            voucherId,
+            outcome,
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
     let query = supabase.from("orders").update(updateData);
     if (orderCode) {
       query = query.eq("order_code", orderCode.trim().toUpperCase());
