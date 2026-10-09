@@ -1,11 +1,190 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSystemSettingsServer } from "@/lib/services/configService";
 import { createOrderProofToken } from "@/lib/auth/serverAuth";
+import { computePricing, isVoucherApplicable, type PricingVoucher } from "@/lib/pricing";
 
 /**
  * Server-Side Order Creation with Complete Price, Voucher, and Inventory Integrity.
  * Does NOT trust client-supplied amounts, prices, or statuses.
  */
+
+export interface VoucherCasOps {
+  readSnapshot(voucherId: string): Promise<{
+    row: { times_used: unknown; usage_limit: unknown } | null;
+    error: string | null;
+  }>;
+  casIncrement(voucherId: string, snapshot: number): Promise<{ rowsAffected: number | null; error: string | null }>;
+  casDecrement(voucherId: string, snapshot: number): Promise<{ rowsAffected: number | null; error: string | null }>;
+}
+
+export type VoucherReserveOutcome =
+  | { ok: true; timesUsed: number }
+  | { ok: false; reason: "not_found" | "limit" | "contention" | "db_error"; errorMessage?: string };
+
+const VOUCHER_RESERVE_MAX_ATTEMPTS = 5;
+const VOUCHER_RELEASE_MAX_ATTEMPTS = 3;
+
+function normalizeTimesUsed(value: unknown): number | null {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  return null;
+}
+
+type NormalizedUsageLimit = { kind: "unlimited" } | { kind: "limited"; value: number } | { kind: "invalid" };
+
+function normalizeUsageLimit(value: unknown): NormalizedUsageLimit {
+  if (value === null || value === undefined) return { kind: "unlimited" };
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return { kind: "limited", value };
+  return { kind: "invalid" };
+}
+
+export async function reserveVoucherSlot(
+  ops: VoucherCasOps,
+  voucherId: string,
+  maxAttempts: number = VOUCHER_RESERVE_MAX_ATTEMPTS
+): Promise<VoucherReserveOutcome> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let snapshot: Awaited<ReturnType<VoucherCasOps["readSnapshot"]>>;
+    try {
+      snapshot = await ops.readSnapshot(voucherId);
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "db_error",
+        errorMessage: err instanceof Error ? err.message : "Không đọc được voucher",
+      };
+    }
+    if (snapshot.error) return { ok: false, reason: "db_error", errorMessage: snapshot.error };
+    if (!snapshot.row) return { ok: false, reason: "not_found" };
+
+    const timesUsed = normalizeTimesUsed(snapshot.row.times_used);
+    if (timesUsed === null) {
+      return { ok: false, reason: "db_error", errorMessage: "times_used không hợp lệ" };
+    }
+
+    const limit = normalizeUsageLimit(snapshot.row.usage_limit);
+    if (limit.kind === "invalid") {
+      return { ok: false, reason: "db_error", errorMessage: "usage_limit không hợp lệ" };
+    }
+    if (limit.kind === "limited" && timesUsed >= limit.value) {
+      return { ok: false, reason: "limit" };
+    }
+
+    let cas: { rowsAffected: number | null; error: string | null };
+    try {
+      cas = await ops.casIncrement(voucherId, timesUsed);
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "db_error",
+        errorMessage: err instanceof Error ? err.message : "Không cập nhật được voucher",
+      };
+    }
+    if (cas.error) return { ok: false, reason: "db_error", errorMessage: cas.error };
+    if (cas.rowsAffected === 1) return { ok: true, timesUsed };
+    if (cas.rowsAffected === 0) continue;
+    return { ok: false, reason: "db_error", errorMessage: "Không xác định được số hàng cập nhật khi giữ chỗ" };
+  }
+  return { ok: false, reason: "contention" };
+}
+
+export type VoucherReleaseOutcome = "released" | "not_found" | "invalid_counter" | "failed";
+
+export async function releaseVoucherSlot(
+  ops: VoucherCasOps,
+  voucherId: string,
+  maxAttempts: number = VOUCHER_RELEASE_MAX_ATTEMPTS
+): Promise<VoucherReleaseOutcome> {
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const snapshot = await ops.readSnapshot(voucherId);
+      if (snapshot.error) {
+        console.error("[createOrderServer] voucher-release-read-failed", { voucherId, attempt, error: snapshot.error });
+        continue;
+      }
+      if (!snapshot.row) {
+        console.warn("[createOrderServer] voucher-release-skipped", { voucherId, reason: "not_found" });
+        return "not_found";
+      }
+      const timesUsed = normalizeTimesUsed(snapshot.row.times_used);
+      if (timesUsed === null) {
+        console.error("[createOrderServer] voucher-release-invalid-counter", {
+          voucherId,
+          value: snapshot.row.times_used,
+        });
+        return "invalid_counter";
+      }
+      if (timesUsed === 0) {
+        console.error("[createOrderServer] voucher-release-invalid-counter", {
+          voucherId,
+          reason: "counter_already_zero",
+        });
+        return "invalid_counter";
+      }
+      const cas = await ops.casDecrement(voucherId, timesUsed);
+      if (cas.error) {
+        console.error("[createOrderServer] voucher-release-cas-failed", { voucherId, attempt, error: cas.error });
+        continue;
+      }
+      if (cas.rowsAffected === 1) return "released";
+      if (cas.rowsAffected === 0) continue;
+      console.error("[createOrderServer] voucher-release-cas-failed", {
+        voucherId,
+        attempt,
+        reason: "unknown_rows_affected",
+      });
+    }
+    console.error("[createOrderServer] voucher-release-failed", { voucherId, attempts: maxAttempts });
+    return "failed";
+  } catch (err) {
+    console.error("[createOrderServer] voucher-release-exception", {
+      voucherId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return "failed";
+  }
+}
+
+export function createVoucherCasOps(supabase: ReturnType<typeof createAdminClient>): VoucherCasOps {
+  return {
+    async readSnapshot(voucherId) {
+      const { data, error } = await supabase
+        .from("vouchers")
+        .select("times_used, usage_limit")
+        .eq("voucher_id", voucherId)
+        .maybeSingle();
+      if (error) return { row: null, error: error.message };
+      if (data === null || data === undefined) return { row: null, error: null };
+      if (typeof data !== "object") return { row: null, error: "Dữ liệu voucher không hợp lệ" };
+      const record = data as { times_used?: unknown; usage_limit?: unknown };
+      return { row: { times_used: record.times_used, usage_limit: record.usage_limit }, error: null };
+    },
+    async casIncrement(voucherId, snapshot) {
+      const { data, error } = await supabase
+        .from("vouchers")
+        .update({ times_used: snapshot + 1 })
+        .eq("voucher_id", voucherId)
+        .eq("times_used", snapshot)
+        .select("voucher_id");
+      if (error) return { rowsAffected: null, error: error.message };
+      if (Array.isArray(data)) return { rowsAffected: data.length, error: null };
+      return { rowsAffected: null, error: "Phản hồi cập nhật giữ chỗ không hợp lệ" };
+    },
+    async casDecrement(voucherId, snapshot) {
+      const { data, error } = await supabase
+        .from("vouchers")
+        .update({ times_used: snapshot - 1 })
+        .eq("voucher_id", voucherId)
+        .eq("times_used", snapshot)
+        .gt("times_used", 0)
+        .select("voucher_id");
+      if (error) return { rowsAffected: null, error: error.message };
+      if (Array.isArray(data)) return { rowsAffected: data.length, error: null };
+      return { rowsAffected: null, error: "Phản hồi cập nhật giải phóng không hợp lệ" };
+    },
+  };
+}
+
 export async function createOrderServer(orderInput: {
   buyer_name?: string;
   buyer_phone?: string;
@@ -35,8 +214,22 @@ export async function createOrderServer(orderInput: {
   proofToken?: string;
   error?: string;
 }> {
+  let voucherSlotHeld = false;
+  let reservedVoucherId: string | null = null;
+  let voucherSupabase: ReturnType<typeof createAdminClient> | null = null;
+
+  const releaseReservedVoucherSlot = async (): Promise<void> => {
+    if (!voucherSlotHeld || !reservedVoucherId || !voucherSupabase) return;
+    voucherSlotHeld = false;
+    const releaseId = reservedVoucherId;
+    reservedVoucherId = null;
+    const ops = createVoucherCasOps(voucherSupabase);
+    await releaseVoucherSlot(ops, releaseId);
+  };
+
   try {
     const supabase = createAdminClient();
+    voucherSupabase = supabase;
 
     // 1. Validate Customer Information
     const rawPhone = (orderInput.buyer_phone || orderInput.recipient_phone || "").trim().replace(/\D/g, "");
@@ -181,18 +374,11 @@ export async function createOrderServer(orderInput: {
 
     // 3. Load System Settings for Shipping Fee calculation
     const settings = await getSystemSettingsServer();
-    let shippingFee = Number(settings.flatShippingFee) || 25000;
-
+    const baseShippingFee = Number(settings.flatShippingFee) || 25000;
     const deliveryType = orderInput.delivery_type || "home_delivery";
-    if (deliveryType === "pickup_point" || deliveryType === "self_pickup" || deliveryType === "member_delivery") {
-      shippingFee = 0;
-    } else if (settings.freeShippingThreshold > 0 && calculatedSubtotal >= settings.freeShippingThreshold) {
-      shippingFee = 0;
-    }
 
-    // 4. Validate Voucher Code Strictly from Database
-    let discountAmount = 0;
-    let validatedVoucherId: string | null = null;
+    // 4. Validate Voucher Code Strictly from Database + reserve usage slot (CAS)
+    let applicableVoucher: PricingVoucher | null = null;
     const cleanVoucherCode = (orderInput.voucher_code || "").trim().toUpperCase();
 
     if (cleanVoucherCode) {
@@ -203,160 +389,168 @@ export async function createOrderServer(orderInput: {
         .eq("status", "active")
         .maybeSingle();
 
-      if (voucher) {
-        const now = new Date();
-        const startValid = !voucher.start_date || new Date(voucher.start_date) <= now;
-        const endValid = !voucher.end_date || new Date(voucher.end_date) >= now;
-        const usageValid = !voucher.usage_limit || (voucher.times_used || 0) < voucher.usage_limit;
-        const minOrderValid = !voucher.min_order_value || calculatedSubtotal >= Number(voucher.min_order_value);
-
-        if (startValid && endValid && usageValid && minOrderValid) {
-          validatedVoucherId = voucher.voucher_id;
-          if (voucher.discount_type === "freeship") {
-            discountAmount = shippingFee;
-            shippingFee = 0;
-          } else if (voucher.discount_type === "percentage") {
-            const percent = Math.min(100, Math.max(0, Number(voucher.discount_value) || 0));
-            const rawCalc = Math.round((calculatedSubtotal * percent) / 100);
-            if (voucher.max_discount && Number(voucher.max_discount) > 0) {
-              discountAmount = Math.min(rawCalc, Number(voucher.max_discount));
-            } else {
-              discountAmount = rawCalc;
-            }
-          } else {
-            const rawDiscount = Number(voucher.discount_value) || 0;
-            discountAmount = Math.min(calculatedSubtotal, Math.max(0, rawDiscount));
-          }
+      if (voucher && isVoucherApplicable(voucher, calculatedSubtotal)) {
+        const ops = createVoucherCasOps(supabase);
+        const reserve = await reserveVoucherSlot(ops, voucher.voucher_id);
+        if (reserve.ok) {
+          voucherSlotHeld = true;
+          reservedVoucherId = voucher.voucher_id;
+          applicableVoucher = voucher;
+        } else if (reserve.reason === "db_error") {
+          console.error("[createOrderServer] voucher-reserve-db-error", {
+            voucherId: voucher.voucher_id,
+            error: reserve.errorMessage,
+          });
+        } else if (reserve.reason === "contention") {
+          console.warn("[createOrderServer] voucher-reserve-contention", {
+            voucherId: voucher.voucher_id,
+          });
         }
       }
     }
 
     // 5. Compute Final Amount (Server Authoritative)
-    const finalAmount = Math.max(0, calculatedSubtotal + shippingFee - discountAmount);
+    const {
+      shippingFee,
+      voucherDiscount: discountAmount,
+      finalAmount,
+    } = computePricing({
+      subtotal: calculatedSubtotal,
+      baseShippingFee,
+      deliveryType,
+      freeShippingThreshold: settings.freeShippingThreshold,
+      voucher: applicableVoucher,
+    });
 
-    // 6. Deduct Stock Atomically BEFORE inserting order (Prevents overselling race conditions)
-    const successfullyDeductedItems: Array<{
-      variant_id?: string | null;
-      product_id?: string | null;
-      qty: number;
-    }> = [];
+// 6. Deduct Stock Atomically BEFORE inserting order (Prevents overselling race conditions)
+// NOTE: We track deducted items to allow rollback if order insertion fails after retries
+     const successfullyDeductedItems: Array<{
+       variant_id?: string | null;
+       product_id?: string | null;
+       qty: number;
+     }> = [];
 
-    for (const it of verifiedOrderItems) {
-      if (it.variant_id) {
-        // Atomic conditional decrement: stock must be >= it.quantity
-        const { data: updatedVariant, error: deductErr } = await supabase
-          .from("product_variants")
-          .update({
-            stock: Math.max(0, it.actualStock - it.quantity),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("variant_id", it.variant_id)
-          .gte("stock", it.quantity)
-          .select("variant_id, stock")
-          .maybeSingle();
+     for (const it of verifiedOrderItems) {
+       if (it.variant_id) {
+         // Atomic conditional decrement: stock must be >= it.quantity
+         const { data: updatedVariant, error: deductErr } = await supabase
+           .from("product_variants")
+           .update({
+             stock: Math.max(0, it.actualStock - it.quantity),
+             updated_at: new Date().toISOString(),
+           })
+           .eq("variant_id", it.variant_id)
+           .gte("stock", it.quantity)
+           .select("variant_id, stock")
+           .maybeSingle();
 
-        if (deductErr || !updatedVariant) {
-          // Rollback any previously deducted items in this transaction
-          for (const prev of successfullyDeductedItems) {
-            if (prev.variant_id) {
-              const { data: currentV } = await supabase
-                .from("product_variants")
-                .select("stock")
-                .eq("variant_id", prev.variant_id)
-                .maybeSingle();
-              if (currentV) {
-                await supabase
-                  .from("product_variants")
-                  .update({ stock: (currentV.stock || 0) + prev.qty })
-                  .eq("variant_id", prev.variant_id);
-              }
-            } else if (prev.product_id) {
-              const { data: currentP } = await supabase
-                .from("products")
-                .select("stock")
-                .eq("product_id", prev.product_id)
-                .maybeSingle();
-              if (currentP) {
-                await supabase
-                  .from("products")
-                  .update({ stock: (currentP.stock || 0) + prev.qty })
-                  .eq("product_id", prev.product_id);
-              }
-            }
-          }
+         if (deductErr || !updatedVariant) {
+           // Rollback any previously deducted items in this transaction
+           for (const prev of successfullyDeductedItems) {
+             if (prev.variant_id) {
+               const { data: currentV } = await supabase
+                 .from("product_variants")
+                 .select("stock")
+                 .eq("variant_id", prev.variant_id)
+                 .maybeSingle();
+               if (currentV) {
+                 await supabase
+                   .from("product_variants")
+                   .update({ stock: (currentV.stock || 0) + prev.qty })
+                   .eq("variant_id", prev.variant_id);
+               }
+             } else if (prev.product_id) {
+               const { data: currentP } = await supabase
+                 .from("products")
+                 .select("stock")
+                 .eq("product_id", prev.product_id)
+                 .maybeSingle();
+               if (currentP) {
+                 await supabase
+                   .from("products")
+                   .update({ stock: (currentP.stock || 0) + prev.qty })
+                   .eq("product_id", prev.product_id);
+               }
+             }
+           }
 
-          return {
-            success: false,
-            error: `Phân loại "${it.variant_name_snapshot || it.item_name_snapshot}" vừa hết hàng do có khách đặt trước. Vui lòng chọn sản phẩm khác!`,
-          };
-        }
+            await releaseReservedVoucherSlot();
+            return {
+             success: false,
+              error: `Phân loại "${it.variant_name_snapshot || it.item_name_snapshot}" vừa hết hàng do có khách đặt trước. Vui lòng chọn sản phẩm khác!`,
+            };
+         }
 
-        successfullyDeductedItems.push({ variant_id: it.variant_id, product_id: it.product_id, qty: it.quantity });
+         successfullyDeductedItems.push({ variant_id: it.variant_id, product_id: it.product_id, qty: it.quantity });
 
-        // Synchronize parent product stock
-        if (it.product_id) {
-          const { data: allVars } = await supabase
-            .from("product_variants")
-            .select("stock")
-            .eq("product_id", it.product_id);
-          const totalStock = (allVars || []).reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
-          await supabase
-            .from("products")
-            .update({ stock: totalStock, updated_at: new Date().toISOString() })
-            .eq("product_id", it.product_id);
-        }
-      } else if (it.product_id && !it.combo_id) {
-        // Simple product atomic decrement
-        const { data: updatedProd, error: prodDeductErr } = await supabase
-          .from("products")
-          .update({
-            stock: Math.max(0, it.actualStock - it.quantity),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("product_id", it.product_id)
-          .gte("stock", it.quantity)
-          .select("product_id, stock")
-          .maybeSingle();
+         // Synchronize parent product stock
+         if (it.product_id) {
+           const { data: allVars } = await supabase
+             .from("product_variants")
+             .select("stock")
+             .eq("product_id", it.product_id);
+           const totalStock = (allVars || []).reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+           await supabase
+             .from("products")
+             .update({ stock: totalStock, updated_at: new Date().toISOString() })
+             .eq("product_id", it.product_id);
+         }
+       } else if (it.product_id && !it.combo_id) {
+         // Simple product atomic decrement
+         const { data: updatedProd, error: prodDeductErr } = await supabase
+           .from("products")
+           .update({
+             stock: Math.max(0, it.actualStock - it.quantity),
+             updated_at: new Date().toISOString(),
+           })
+           .eq("product_id", it.product_id)
+           .gte("stock", it.quantity)
+           .select("product_id, stock")
+           .maybeSingle();
 
-        if (prodDeductErr || !updatedProd) {
-          // Rollback
-          for (const prev of successfullyDeductedItems) {
-            if (prev.variant_id) {
-              const { data: currentV } = await supabase
-                .from("product_variants")
-                .select("stock")
-                .eq("variant_id", prev.variant_id)
-                .maybeSingle();
-              if (currentV) {
-                await supabase
-                  .from("product_variants")
-                  .update({ stock: (currentV.stock || 0) + prev.qty })
-                  .eq("variant_id", prev.variant_id);
-              }
-            } else if (prev.product_id) {
-              const { data: currentP } = await supabase
-                .from("products")
-                .select("stock")
-                .eq("product_id", prev.product_id)
-                .maybeSingle();
-              if (currentP) {
-                await supabase
-                  .from("products")
-                  .update({ stock: (currentP.stock || 0) + prev.qty })
-                  .eq("product_id", prev.product_id);
-              }
-            }
-          }
+         if (prodDeductErr || !updatedProd) {
+           // Rollback
+           for (const prev of successfullyDeductedItems) {
+             if (prev.variant_id) {
+               const { data: currentV } = await supabase
+                 .from("product_variants")
+                 .select("stock")
+                 .eq("variant_id", prev.variant_id)
+                 .maybeSingle();
+               if (currentV) {
+                 await supabase
+                   .from("product_variants")
+                   .update({ stock: (currentV.stock || 0) + prev.qty })
+                   .eq("variant_id", prev.variant_id);
+               }
+             } else if (prev.product_id) {
+               const { data: currentP } = await supabase
+                 .from("products")
+                 .select("stock")
+                 .eq("product_id", prev.product_id)
+                 .maybeSingle();
+               if (currentP) {
+                 await supabase
+                   .from("products")
+                   .update({ stock: (currentP.stock || 0) + prev.qty })
+                   .eq("product_id", prev.product_id);
+               }
+             }
+           }
 
-          return {
-            success: false,
-            error: `Sản phẩm "${it.item_name_snapshot}" vừa hết hàng do có khách đặt trước. Vui lòng chọn sản phẩm khác!`,
-          };
-        }
+            await releaseReservedVoucherSlot();
+            return {
+              success: false,
+              error: `Sản phẩm "${it.item_name_snapshot}" vừa hết hàng do có khách đặt trước. Vui lòng chọn sản phẩm khác!`,
+            };
+         }
 
-        successfullyDeductedItems.push({ variant_id: null, product_id: it.product_id, qty: it.quantity });
-      }
-    }
+         successfullyDeductedItems.push({ variant_id: null, product_id: it.product_id, qty: it.quantity });
+       }
+     }
+
+     // Stock has been deducted atomically. If order insertion ultimately fails,
+     // we must restore this stock to maintain data integrity.
 
     // 7. Upsert Customer Record
     let customerId: string | null = null;
@@ -451,42 +645,137 @@ export async function createOrderServer(orderInput: {
       }
     }
 
-    // 9. Generate Random Order Code and Insert Order Record
-    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+// 9. Generate Order Code with uniqueness check and insert retry on race condition
+    // Database has UNIQUE constraint on order_code (migration 001) so we must handle
+    // the rare case where two requests generate the same code between check and insert.
+    let randomCode: string = "";
+    let codeAttempt = 0;
+    const maxAttempts = 5;
+    let orderInserted = false;
+    let createdOrder: { order_id: string; order_code: string } | null = null;
+    let orderError: { code?: string; message?: string } | null = null;
 
-    let dbDeliveryType: "home_delivery" | "pickup_point" | "self_pickup" = "home_delivery";
-    if (deliveryType === "pickup_point") dbDeliveryType = "pickup_point";
-    else if (deliveryType === "self_pickup" || deliveryType === "member_delivery") dbDeliveryType = "self_pickup";
+    while (codeAttempt < maxAttempts && !orderInserted) {
+      const ts = Date.now().toString().slice(-6);
+      const rand = Math.floor(1000 + Math.random() * 9000).toString();
+      randomCode = `GM-${ts}${rand}`;
 
-    const { data: createdOrder, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_code: randomCode,
-        customer_id: customerId!,
-        seller_id: sellerId,
-        source_type: finalSourceType,
-        introducer_info: finalIntroducerInfo,
-        assigned_shipper_id: assignedShipperId,
-        receiver_name: orderInput.recipient_name || fullName,
-        receiver_phone: orderInput.recipient_phone ? orderInput.recipient_phone.replace(/\D/g, "") : rawPhone,
-        delivery_type: dbDeliveryType,
-        shipping_address_snapshot: address,
-        subtotal: calculatedSubtotal,
-        shipping_fee: shippingFee,
-        voucher_discount: discountAmount,
-        final_amount: finalAmount,
-        order_status: "pending",
-        payment_status: "pending",
-        delivery_status: "not_ready",
-        payment_method: "banking",
-        customer_note: orderInput.customer_note || null,
-      })
-      .select("order_id, order_code")
-      .single();
+      // Quick check to avoid obvious collisions before attempting insert.
+      // NOTE: This check does NOT eliminate race conditions between check and insert.
+      // The database UNIQUE constraint is the ultimate guard. If the check query fails,
+      // we treat it as an unrecoverable error and abort rather than blindly proceeding.
+      const { data: existingCode, error: checkError } = await supabase
+        .from("orders")
+        .select("order_code")
+        .eq("order_code", randomCode)
+        .maybeSingle();
 
-    if (orderError || !createdOrder) {
-      console.error("[createOrderServer] Order insert error:", orderError);
-      return { success: false, error: orderError?.message || "Lỗi lưu đơn hàng vào cơ sở dữ liệu" };
+      if (checkError) {
+        orderError = { code: checkError.code, message: checkError.message };
+        break;
+      }
+
+      if (existingCode) {
+        codeAttempt++;
+        continue;
+      }
+
+      let dbDeliveryType: "home_delivery" | "pickup_point" | "self_pickup" = "home_delivery";
+      if (deliveryType === "pickup_point") dbDeliveryType = "pickup_point";
+      else if (deliveryType === "self_pickup" || deliveryType === "member_delivery") dbDeliveryType = "self_pickup";
+
+      const insertResult = await supabase
+        .from("orders")
+        .insert({
+          order_code: randomCode,
+          customer_id: customerId!,
+          seller_id: sellerId,
+          source_type: finalSourceType,
+          introducer_info: finalIntroducerInfo,
+          assigned_shipper_id: assignedShipperId,
+          receiver_name: orderInput.recipient_name || fullName,
+          receiver_phone: orderInput.recipient_phone ? orderInput.recipient_phone.replace(/\D/g, "") : rawPhone,
+          delivery_type: dbDeliveryType,
+          shipping_address_snapshot: address,
+          subtotal: calculatedSubtotal,
+          shipping_fee: shippingFee,
+          voucher_id: reservedVoucherId,
+          voucher_discount: discountAmount,
+          final_amount: finalAmount,
+          order_status: "pending",
+          payment_status: "pending",
+          delivery_status: "not_ready",
+          payment_method: "banking",
+          customer_note: orderInput.customer_note || null,
+        })
+        .select("order_id, order_code")
+        .single();
+
+      if (insertResult.error) {
+        // PostgreSQL error code 23505 = unique_violation.
+        // The orders table has UNIQUE(order_code) and a separate UNIQUE constraint on
+        // order_code. We only retry on this specific violation. Other errors (e.g.
+        // FK violations, connection issues) are NOT retried to avoid side-effect
+        // duplication (stock was already deducted, voucher not yet incremented, etc.).
+        if (insertResult.error.code === "23505") {
+          codeAttempt++;
+          continue;
+        }
+        orderError = { code: insertResult.error.code, message: insertResult.error.message };
+        break;
+      }
+
+      createdOrder = insertResult.data;
+      orderInserted = true;
+    }
+
+    if (!orderInserted || !createdOrder) {
+      console.error("[createOrderServer] Order insert failed after retries:", orderError);
+      // CRITICAL: Restore stock that was deducted at step 6 since order was not created
+      for (const prev of successfullyDeductedItems) {
+        if (prev.variant_id) {
+          const { data: currentV } = await supabase
+            .from("product_variants")
+            .select("stock")
+            .eq("variant_id", prev.variant_id)
+            .maybeSingle();
+          if (currentV) {
+            await supabase
+              .from("product_variants")
+              .update({ stock: (currentV.stock || 0) + prev.qty })
+              .eq("variant_id", prev.variant_id);
+            // Also sync parent product stock
+            if (prev.product_id) {
+              const { data: allVars } = await supabase
+                .from("product_variants")
+                .select("stock")
+                .eq("product_id", prev.product_id);
+              const totalStock = (allVars || []).reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+              await supabase
+                .from("products")
+                .update({ stock: totalStock, updated_at: new Date().toISOString() })
+                .eq("product_id", prev.product_id);
+            }
+          }
+        } else if (prev.product_id) {
+          const { data: currentP } = await supabase
+            .from("products")
+            .select("stock")
+            .eq("product_id", prev.product_id)
+            .maybeSingle();
+          if (currentP) {
+            await supabase
+              .from("products")
+              .update({ stock: (currentP.stock || 0) + prev.qty })
+              .eq("product_id", prev.product_id);
+          }
+        }
+      }
+      await releaseReservedVoucherSlot();
+      return {
+        success: false,
+        error: orderError?.message || "Không thể tạo mã đơn hàng duy nhất sau nhiều lần thử.",
+      };
     }
 
     // 10. Insert Order Items Snapshot
@@ -500,28 +789,15 @@ export async function createOrderServer(orderInput: {
       subtotal: it.subtotal,
     }));
 
-    await supabase.from("order_items").insert(orderItemsToInsert);
-
-    // 11. Update Voucher Times Used Atomically
-    if (validatedVoucherId) {
-      try {
-        const { data: vRecord } = await supabase
-          .from("vouchers")
-          .select("times_used")
-          .eq("voucher_id", validatedVoucherId)
-          .single();
-        if (vRecord) {
-          await supabase
-            .from("vouchers")
-            .update({ times_used: (vRecord.times_used || 0) + 1 })
-            .eq("voucher_id", validatedVoucherId);
-        }
-      } catch {
-        // ignore
-      }
+    const { error: orderItemsError } = await supabase.from("order_items").insert(orderItemsToInsert);
+    if (orderItemsError) {
+      console.error("[createOrderServer] order-items-insert-failed", {
+        orderId: createdOrder.order_id,
+        error: orderItemsError.message,
+      });
     }
 
-    // 12. Log initial Status History
+    // 11. Log initial Status History
     try {
       await supabase.from("order_status_history").insert({
         order_id: createdOrder.order_id,
@@ -545,6 +821,7 @@ export async function createOrderServer(orderInput: {
     };
   } catch (err: any) {
     console.error("[createOrderServer] Exception:", err);
+    await releaseReservedVoucherSlot();
     return { success: false, error: err?.message || "Lỗi máy chủ khi xử lý đơn hàng" };
   }
 }
