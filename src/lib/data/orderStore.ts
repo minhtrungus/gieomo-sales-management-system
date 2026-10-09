@@ -1373,9 +1373,35 @@ export function getStoredVouchers(): Voucher[] {
   }
 }
 
-export function saveNewVoucher(voucher: Voucher): void {
+async function requestVoucherMutation(path: string, init: RequestInit): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : "Không thể kết nối máy chủ");
+  }
+  if (!response.ok) {
+    let serverError = "";
+    try {
+      const body = (await response.json()) as { error?: unknown };
+      if (typeof body?.error === "string") serverError = body.error;
+    } catch {
+      // non-JSON error body — fall back to the status code below
+    }
+    throw new Error(serverError || `Máy chủ từ chối yêu cầu (HTTP ${response.status})`);
+  }
+}
+
+export async function saveNewVoucher(voucher: Voucher): Promise<void> {
   const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
+
+  await requestVoucherMutation("/api/vouchers", {
+    method: "POST",
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(voucherToSave),
+  });
+
   try {
     const list = getStoredVouchers();
     const updated = [
@@ -1385,21 +1411,21 @@ export function saveNewVoucher(voucher: Voucher): void {
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/vouchers", {
-      method: "POST",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(voucherToSave),
-    }).catch((err) => console.warn("Could not persist voucher to server:", err));
   } catch (e) {
     console.error("Error saving new voucher", e);
   }
 }
 
-export function updateStoredVoucher(voucher: Voucher): void {
+export async function updateStoredVoucher(voucher: Voucher): Promise<void> {
   const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
+
+  await requestVoucherMutation("/api/vouchers", {
+    method: "POST",
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(voucherToSave),
+  });
+
   try {
     const list = getStoredVouchers();
     const updated = list.map((v) =>
@@ -1408,34 +1434,28 @@ export function updateStoredVoucher(voucher: Voucher): void {
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/vouchers", {
-      method: "POST",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(voucherToSave),
-    }).catch((err) => console.warn("Could not update voucher on server:", err));
   } catch (e) {
     console.error("Error updating voucher", e);
   }
 }
 
-export function deleteStoredVoucher(voucherId: string): void {
+export async function deleteStoredVoucher(voucherId: string): Promise<void> {
   if (typeof window === "undefined") return;
+
+  const existing = getStoredVouchers();
+  const target = existing.find((v) => v.voucher_id === voucherId);
+  const idToDelete = target?.code || voucherId;
+
+  await requestVoucherMutation(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
   try {
-    const list = getStoredVouchers();
-    const target = list.find((v) => v.voucher_id === voucherId);
-    const updated = list.filter((v) => v.voucher_id !== voucherId);
+    const updated = getStoredVouchers().filter((v) => v.voucher_id !== voucherId);
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync DELETE to Supabase
-    const idToDelete = target?.code || voucherId;
-    fetch(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
-      method: "DELETE",
-      headers: getAuthHeaders(),
-    }).catch((err) => console.warn("Could not delete voucher on server:", err));
   } catch (e) {
     console.error("Error deleting voucher", e);
   }

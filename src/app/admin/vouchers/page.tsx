@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
+import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import {
   getStoredOrders,
   getStoredVouchers,
@@ -61,6 +62,7 @@ export default function AdminVouchersPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
   const [deletingVoucher, setDeletingVoucher] = useState<Voucher | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form states
   const [code, setCode] = useState("");
@@ -114,7 +116,7 @@ export default function AdminVouchersPage() {
   };
 
   // Add Voucher
-  const handleCreateVoucher = (e: React.FormEvent) => {
+  const handleCreateVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code) return;
 
@@ -137,7 +139,16 @@ export default function AdminVouchersPage() {
       created_at: new Date().toISOString(),
     };
 
-    saveNewVoucher(newVoucher);
+    try {
+      await saveNewVoucher(newVoucher);
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? `Không thể tạo voucher: ${err.message}`
+          : "Không thể tạo voucher. Vui lòng thử lại."
+      );
+      return;
+    }
     setVouchers(getStoredVouchers());
     setIsAddModalOpen(false);
     setCode("");
@@ -146,35 +157,64 @@ export default function AdminVouchersPage() {
   };
 
   // Save Edit Voucher
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVoucher) return;
 
-    updateStoredVoucher({
-      ...editingVoucher,
-      code: editingVoucher.code.toUpperCase().trim(),
-      visibility: editingVoucher.visibility || "public",
-    });
+    try {
+      await updateStoredVoucher({
+        ...editingVoucher,
+        code: editingVoucher.code.toUpperCase().trim(),
+        visibility: editingVoucher.visibility || "public",
+      });
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? `Không thể lưu thay đổi voucher: ${err.message}`
+          : "Không thể lưu thay đổi voucher. Vui lòng thử lại."
+      );
+      return;
+    }
     setVouchers(getStoredVouchers());
     setEditingVoucher(null);
   };
 
   // Confirm Delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingVoucher) return;
-    deleteStoredVoucher(deletingVoucher.voucher_id);
-    setVouchers(getStoredVouchers());
-    setDeletingVoucher(null);
+    setIsDeleting(true);
+    try {
+      await deleteStoredVoucher(deletingVoucher.voucher_id);
+      setVouchers(getStoredVouchers());
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? `Không thể xóa voucher: ${err.message}`
+          : "Không thể xóa voucher. Vui lòng thử lại."
+      );
+    } finally {
+      setIsDeleting(false);
+      setDeletingVoucher(null);
+    }
   };
 
   // Quick Toggle Status
-  const handleToggleStatus = (v: Voucher) => {
+  const handleToggleStatus = async (v: Voucher) => {
     const updated: Voucher = {
       ...v,
       status: v.status === "active" ? "inactive" : "active",
       visibility: v.visibility || "public",
     };
-    updateStoredVoucher(updated);
+    try {
+      await updateStoredVoucher(updated);
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? `Không thể cập nhật trạng thái voucher: ${err.message}`
+          : "Không thể cập nhật trạng thái voucher. Vui lòng thử lại."
+      );
+      return;
+    }
     setVouchers(getStoredVouchers());
   };
 
@@ -854,39 +894,20 @@ export default function AdminVouchersPage() {
 
       {/* MODAL: XÓA VOUCHER */}
       {deletingVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
-          <div
-            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-200"
-            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
-          >
-            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-              Xác nhận xóa Voucher?
-            </h3>
-            <p className="text-xs text-[#7E7068] leading-relaxed">
-              Bạn có chắc muốn xóa mã <strong>&quot;{deletingVoucher.code}&quot;</strong>? Khách hàng sẽ không thể áp dụng mã này khi thanh toán nữa.
-            </p>
-
-            <div className="flex items-center justify-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingVoucher(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer"
-              >
-                Xóa vĩnh viễn
-              </button>
-            </div>
-          </div>
-        </div>
+        <DoubleConfirmDialog
+          open={true}
+          onClose={() => setDeletingVoucher(null)}
+          onConfirm={handleConfirmDelete}
+          title="Xóa Voucher"
+          message="Bạn có chắc muốn xóa voucher này? Khuyến mãi sẽ bị gỡ bỏ khỏi các đơn hàng hiện có."
+          confirmCode="XOA"
+          loading={isDeleting}
+          details={[
+            { label: "Mã Voucher", value: deletingVoucher.code },
+            { label: "Loại giảm giá", value: deletingVoucher.discount_type },
+            { label: "Trạng thái", value: deletingVoucher.status },
+          ]}
+        />
       )}
 
       {/* MODAL: XEM ĐƠN HÀNG DÙNG MÃ NÀY */}
