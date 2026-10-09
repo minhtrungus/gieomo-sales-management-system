@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Voucher } from "@/types/database";
 import { requireAdmin } from "@/lib/auth/serverAuth";
+import { buildVoucherPayload } from "@/lib/voucherPayload";
 
 export const dynamic = "force-dynamic";
 
@@ -39,26 +40,7 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.voucher_id);
-
-    const isFreeship = body.discount_type === "freeship";
-    const discountVal = Number(body.discount_value) || (isFreeship ? 15000 : 10000);
-
-    const payload: any = {
-      code: body.code.trim().toUpperCase(),
-      discount_type: isFreeship ? "fixed_amount" : (body.discount_type || "fixed_amount"),
-      discount_value: Math.max(1, discountVal),
-      min_order_value: Number(body.min_order_value) || 0,
-      usage_limit: body.usage_limit ? Number(body.usage_limit) : null,
-      times_used: body.times_used || 0,
-      start_date: body.start_date || null,
-      end_date: body.end_date || null,
-      status: body.status || "active",
-    };
-
-    if (isUuid) {
-      payload.voucher_id = body.voucher_id;
-    }
+    const payload = buildVoucherPayload(body);
 
     const { data, error } = await supabase
       .from("vouchers")
@@ -97,15 +79,20 @@ export async function PATCH(request: Request) {
 
     const supabase = createAdminClient();
 
-    const payload: any = {
-      updated_at: new Date().toISOString(),
-    };
+    const payload: any = {};
 
     if (status !== undefined) {
       payload.status = status;
     }
     if (discount_value !== undefined) {
-      payload.discount_value = Math.max(0, discount_value);
+      const value = Number(discount_value);
+      if (!Number.isFinite(value) || value <= 0) {
+        return NextResponse.json(
+          { success: false, error: "Giá trị giảm (discount_value) phải là số lớn hơn 0" },
+          { status: 400 }
+        );
+      }
+      payload.discount_value = value;
     }
     if (min_order_value !== undefined) {
       payload.min_order_value = Number(min_order_value) || 0;
@@ -118,6 +105,13 @@ export async function PATCH(request: Request) {
     }
     if (end_date !== undefined) {
       payload.end_date = end_date;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Không có trường nào để cập nhật" },
+        { status: 400 }
+      );
     }
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
