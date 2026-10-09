@@ -118,7 +118,7 @@ export type VariantInput = z.infer<typeof variantSchema>;
 // === Admin: Voucher ===
 export const voucherSchema = z.object({
   code: z.string().min(1).max(50).transform((v) => v.toUpperCase().trim()),
-  discount_type: z.enum(["percentage", "fixed_amount"]),
+  discount_type: z.enum(["percentage", "fixed_amount", "freeship"]),
   discount_value: z.number().positive("Giá trị giảm phải lớn hơn 0"),
   min_order_value: z.number().min(0).default(0),
   usage_limit: z.number().int().positive().optional().nullable(),

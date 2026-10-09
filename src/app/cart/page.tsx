@@ -17,6 +17,7 @@ import {
   syncSettingsFromServer,
 } from "@/lib/data/orderStore";
 import type { Voucher } from "@/types/database";
+import { computePricing, isVoucherApplicable } from "@/lib/pricing";
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, clearCart, getSubtotal, validateCart } = useCartStore();
@@ -26,8 +27,7 @@ export default function CartPage() {
   const [voucherCode, setVoucherCode] = useState("");
   const [appliedVoucher, setAppliedVoucher] = useState<{
     code: string;
-    discountAmount: number;
-    discountType: string;
+    voucher: Voucher;
   } | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [removedAlert, setRemovedAlert] = useState(false);
@@ -54,9 +54,15 @@ export default function CartPage() {
   const isFreeshipEligible = freeshipThreshold > 0 && subtotal >= freeshipThreshold;
   const freeshipProgress = freeshipThreshold > 0 ? Math.min(100, Math.round((subtotal / freeshipThreshold) * 100)) : 0;
 
-  const baseShippingFee = subtotal === 0 ? 0 : settings.flatShippingFee;
-  const shippingFee = appliedVoucher?.discountType === "freeship" ? 0 : baseShippingFee;
-  const finalTotal = Math.max(0, subtotal - (appliedVoucher?.discountAmount ?? 0) + shippingFee);
+  const pricing = computePricing({
+    subtotal,
+    baseShippingFee: subtotal === 0 ? 0 : settings.flatShippingFee,
+    freeShippingThreshold: settings.freeShippingThreshold,
+    voucher: appliedVoucher?.voucher ?? null,
+  });
+  const shippingFee = pricing.shippingFee;
+  const voucherDiscount = pricing.voucherDiscount;
+  const finalTotal = pricing.finalAmount;
 
   const handleApplyVoucher = (e?: React.FormEvent, codeOverride?: string) => {
     if (e) e.preventDefault();
@@ -92,20 +98,14 @@ export default function CartPage() {
       return;
     }
 
-    let discount = 0;
-    if (found.discount_type === "freeship") {
-      discount = baseShippingFee;
-    } else if (found.discount_type === "percentage") {
-      const calc = Math.round((subtotal * found.discount_value) / 100);
-      discount = found.max_discount_amount ? Math.min(calc, found.max_discount_amount) : calc;
-    } else {
-      discount = Math.min(subtotal, found.discount_value);
+    if (!isVoucherApplicable(found, subtotal)) {
+      setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn!");
+      return;
     }
 
     setAppliedVoucher({
       code: found.code,
-      discountAmount: discount,
-      discountType: found.discount_type,
+      voucher: found,
     });
     setVoucherCode(found.code);
   };
@@ -279,7 +279,14 @@ export default function CartPage() {
                   )}
                   {appliedVoucher && (
                     <div className="text-xs text-emerald-700 font-semibold flex items-center justify-between bg-emerald-50 p-2 rounded-xl border border-emerald-100">
-                      <span>✓ Đã áp mã &quot;{appliedVoucher.code}&quot; (-<MoneyDisplay amount={appliedVoucher.discountAmount} />)</span>
+                      <span>
+                        ✓ Đã áp mã &quot;{appliedVoucher.code}&quot;
+                        {appliedVoucher.voucher.discount_type === "freeship" ? (
+                          <> (Miễn phí vận chuyển)</>
+                        ) : (
+                          <> (-<MoneyDisplay amount={voucherDiscount} />)</>
+                        )}
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
@@ -301,10 +308,10 @@ export default function CartPage() {
                     <MoneyDisplay amount={subtotal} className="font-bold text-gray-900" />
                   </div>
 
-                  {appliedVoucher && (
+                  {voucherDiscount > 0 && (
                     <div className="flex justify-between text-emerald-700 font-semibold">
                       <span>Giảm giá:</span>
-                      <span>-<MoneyDisplay amount={appliedVoucher.discountAmount} /></span>
+                      <span>-<MoneyDisplay amount={voucherDiscount} /></span>
                     </div>
                   )}
 
