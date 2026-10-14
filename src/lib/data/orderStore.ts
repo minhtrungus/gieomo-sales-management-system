@@ -334,9 +334,43 @@ export async function saveNewOrder(
   }
 }
 
-export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus): void {
-  if (typeof window === "undefined") return;
+export async function updateStoredOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined") return { ok: false, error: "Browser context is required." };
   try {
+    // Cancellation is a server-authoritative, multi-entity transaction. Do not
+    // publish optimistic local status or inventory effects before it commits.
+    if (newStatus === "cancelled") {
+      const response = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ orderId, orderStatus: newStatus }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        return { ok: false, error: result.error || `Cancellation failed (${response.status})` };
+      }
+
+      const committedAt = new Date().toISOString();
+      const committedOrders = getStoredOrders().map((order) =>
+        order.order_id === orderId || order.order_code === orderId
+          ? {
+              ...order,
+              order_status: "cancelled" as const,
+              status_timestamps: { ...(order.status_timestamps || {}), cancelled: committedAt },
+              cancelled_at: committedAt,
+              updated_at: committedAt,
+            }
+          : order
+      );
+      cachedOrders = committedOrders;
+      localStorage.setItem("gieomo_orders", JSON.stringify(committedOrders));
+      window.dispatchEvent(new Event("gieomo_orders_updated"));
+      return { ok: true };
+    }
+
     const orders = getStoredOrders();
     const nowIso = new Date().toISOString();
     const updated = orders.map((o: any) => {
@@ -349,7 +383,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
           status_timestamps: timestamps,
           confirmed_at: newStatus === "confirmed" ? nowIso : o.confirmed_at,
           completed_at: newStatus === "completed" ? nowIso : o.completed_at,
-          cancelled_at: newStatus === "cancelled" ? nowIso : o.cancelled_at,
+          cancelled_at: o.cancelled_at,
           updated_at: nowIso,
         };
       }
@@ -370,56 +404,11 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
       console.warn("[updateStoredOrderStatus] Failed to sync status to Supabase:", err);
     });
 
-    // Restore stock if order is cancelled
-    if (newStatus === "cancelled") {
-      const cancelledOrder = orders.find((o: any) => o.order_id === orderId || o.order_code === orderId);
-      if (cancelledOrder && cancelledOrder.items && cancelledOrder.items.length > 0) {
-        try {
-          const prods = getStoredProducts();
-          const targetWhId = cancelledOrder.warehouse_id || "wh-1";
-          let prodsChanged = false;
-          const restored = prods.map((prod) => {
-            let prodModified = false;
-            const updatedVariants = prod.variants?.map((v) => {
-              const matchingItem = cancelledOrder.items?.find(
-                (it: any) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
-              );
-              if (matchingItem) {
-                prodModified = true;
-                prodsChanged = true;
-                const qty = matchingItem.quantity || 1;
-                const stocks = { ...(v.warehouse_stocks || {}) };
-                let wh1 = v.stock_warehouse_1 ?? 0;
-                let wh2 = v.stock_warehouse_2 ?? 0;
-                if (targetWhId === "wh-1") wh1 += qty;
-                else if (targetWhId === "wh-2") wh2 += qty;
-                stocks[targetWhId] = (stocks[targetWhId] ?? 0) + qty;
-                return {
-                  ...v,
-                  stock: (v.stock || 0) + qty,
-                  stock_warehouse_1: wh1,
-                  stock_warehouse_2: wh2,
-                  warehouse_stocks: stocks,
-                };
-              }
-              return v;
-            });
-            return prodModified ? { ...prod, variants: updatedVariants } : prod;
-          });
-          if (prodsChanged) {
-            cachedProducts = restored;
-            localStorage.setItem("gieomo_products", JSON.stringify(restored));
-            window.dispatchEvent(new Event("gieomo_products_updated"));
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
+    return { ok: true };
   } catch (e) {
     console.error("Error updating order status", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 

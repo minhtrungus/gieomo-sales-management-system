@@ -85,9 +85,21 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!order) return;
-    updateStoredOrderStatus(order.order_id, orderStatus);
+    const statusResult = await updateStoredOrderStatus(order.order_id, orderStatus);
+    if (!statusResult.ok) {
+      alert(statusResult.error || "Không thể cập nhật trạng thái đơn hàng.");
+      return;
+    }
+
+    if (orderStatus === "cancelled") {
+      setOrder((current) => current ? { ...current, order_status: "cancelled" } : current);
+      setIsSavedNotice(true);
+      setTimeout(() => setIsSavedNotice(false), 2500);
+      return;
+    }
+
     updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredDeliveryStatus(order.order_id, deliveryStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });

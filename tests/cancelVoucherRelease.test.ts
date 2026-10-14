@@ -1,5 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { register } from "node:module";
 
 const SRC_ROOT = new URL("../src/", import.meta.url).href;
@@ -47,7 +48,7 @@ export async function load(url, context, nextLoad) {
     return { format: "module", shortCircuit: true, source: 'export async function getSystemSettingsServer() { return { flatShippingFee: 25000, freeShippingThreshold: 0 }; }' };
   }
   if (url === "mock:server-auth") {
-    return { format: "module", shortCircuit: true, source: 'export async function requireAdmin() { return { authorized: true }; } export async function requireAuth() { return { authorized: true }; } export async function getAuthenticatedUser() { return { role: "admin" }; } export function createOrderProofToken(code) { return "proof-" + code; }' };
+    return { format: "module", shortCircuit: true, source: 'export async function requireAdmin() { return { authorized: true, user: { memberId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", role: "admin" } }; } export async function requireAuth() { return { authorized: true, user: { memberId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", role: "admin" } }; } export async function getAuthenticatedUser() { return { memberId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", role: "admin" }; } export function createOrderProofToken(code) { return "proof-" + code; }' };
   }
   return nextLoad(url, context);
 }
@@ -238,6 +239,36 @@ class CancelQuery {
 
 function createFakeSupabase(world: CancelWorld) {
   return {
+    async rpc(name: string, args: { p: Record<string, unknown> }) {
+      world.calls.push({ table: "rpc", action: name, payload: args });
+      if (name !== "cancel_order_atomic") return { data: null, error: { message: "unexpected rpc" } };
+      if (world.force.ordersUpdateError) return { data: null, error: world.force.ordersUpdateError };
+
+      const order = world.orders.find((row) =>
+        args.p.order_id ? row.order_id === args.p.order_id : row.order_code === args.p.order_code
+      );
+      if (!order) return { data: { outcome: "not_found" }, error: null };
+      if (order.order_status === "cancelled") {
+        return { data: { outcome: "already_cancelled", refund_required: false }, error: null };
+      }
+
+      const voucher = world.vouchers.find((row) => row.voucher_id === order.voucher_id);
+      if (voucher && world.force.voucherCasDecrementOverride) {
+        world.voucherDecAttempts++;
+        const forced = world.force.voucherCasDecrementOverride();
+        if (forced.error || forced.rowsAffected !== 1) {
+          return { data: null, error: { message: forced.error || "voucher release failed" } };
+        }
+      }
+
+      if (voucher) {
+        voucher.times_used = Number(voucher.times_used) - 1;
+        world.calls.push({ table: "vouchers", action: "voucher-cas-decrement", payload: { times_used: voucher.times_used } });
+      }
+      order.order_status = "cancelled";
+      order.cancelled_at = new Date().toISOString();
+      return { data: { outcome: "cancelled", refund_required: false }, error: null };
+    },
     from(table: string) {
       return new CancelQuery(table, world);
     },
@@ -293,7 +324,7 @@ test("C1 — hủy đơn lần đầu có voucher: decrement đúng 1 lần, can
   assert.equal(res.status, 200);
   const body = (await res.json()) as { success: boolean; alreadyCancelled?: boolean };
   assert.equal(body.success, true);
-  assert.equal(body.alreadyCancelled, undefined);
+  assert.equal(body.alreadyCancelled, false);
   assert.equal(world.orders[0].order_status, "cancelled");
   assert.ok(world.orders[0].cancelled_at);
   assert.equal(countAction(world, "voucher-cas-decrement"), 1);
@@ -357,34 +388,20 @@ test("C5 — hủy đơn thất bại (DB error): không decrement, trả 500", 
   assert.equal(world.orders[0].order_status, "pending");
 });
 
-test("C6 — CAS release lỗi sau khi hủy thành công: vẫn success, log voucher-release-after-cancel-failed", async () => {
+test("C6 — voucher release failure aborts the atomic cancellation", async () => {
   const world = emptyWorld();
   seedOrder(world, VOUCHER_ID);
   world.force.voucherCasDecrementOverride = () => ({ rowsAffected: null, error: "release boom" });
   g.__fakeCancelDb = createFakeSupabase(world);
 
-  const logged: string[] = [];
-  const origError = console.error;
-  console.error = (...args: unknown[]) => {
-    logged.push(String(args[0]));
-    origError(...args);
-  };
-  try {
-    const res = await patchRequest({ orderId: ORDER_ID, orderStatus: "cancelled" });
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as { success: boolean };
-    assert.equal(body.success, true);
-  } finally {
-    console.error = origError;
-  }
+  const res = await patchRequest({ orderId: ORDER_ID, orderStatus: "cancelled" });
+  assert.equal(res.status, 500);
+  const body = (await res.json()) as { success: boolean };
+  assert.equal(body.success, false);
 
-  assert.equal(world.orders[0].order_status, "cancelled");
+  assert.equal(world.orders[0].order_status, "pending");
   assert.equal(world.vouchers[0].times_used, 1, "không decrement khi CAS fail");
   assert.ok(world.voucherDecAttempts >= 1);
-  assert.ok(
-    logged.some((m) => m.includes("voucher-release-after-cancel-failed")),
-    `mong đợi log có cấu trúc, nhận: ${logged.join(" | ")}`
-  );
 });
 
 test("C7 — voucher đã xóa (voucher_id null do FK SET NULL): hủy thành công, không decrement", async () => {
@@ -422,6 +439,18 @@ test("C9 — hủy theo order_code thay vì orderId: vẫn idempotent", async ()
   const body2 = (await res2.json()) as { alreadyCancelled?: boolean };
   assert.equal(body2.alreadyCancelled, true);
   assert.equal(countAction(world, "voucher-cas-decrement"), 1);
+});
+
+test("C10 — admin UI awaits cancellation and advances only after a successful result", () => {
+  const listPage = readFileSync(new URL("../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+  const detailPage = readFileSync(new URL("../src/app/admin/orders/[id]/page.tsx", import.meta.url), "utf8");
+  const store = readFileSync(new URL("../src/lib/data/orderStore.ts", import.meta.url), "utf8");
+
+  assert.match(listPage, /await updateStoredOrderStatus\(pendingStatusChange\.orderId/);
+  assert.match(detailPage, /const statusResult = await updateStoredOrderStatus/);
+  assert.match(detailPage, /if \(!statusResult\.ok\)[\s\S]*?return;/);
+  assert.match(store, /if \(!response\.ok\)[\s\S]*?return \{ ok: false/);
+  assert.doesNotMatch(store, /Restore stock if order is cancelled/);
 });
 
 beforeEach(() => {
