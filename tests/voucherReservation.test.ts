@@ -37,7 +37,12 @@ export async function resolve(specifier, context, nextResolve) {
 
 export async function load(url, context, nextLoad) {
   if (url === "mock:supabase-admin") {
-    return { format: "module", shortCircuit: true, source: 'export function createAdminClient() { return globalThis.__fakeOrderDb; }' };
+    return {
+      format: "module",
+      shortCircuit: true,
+      source:
+        'export function createAdminClient() { if (!globalThis.__fakeOrderDb) throw new Error("database access must not occur"); return globalThis.__fakeOrderDb; }',
+    };
   }
   if (url === "mock:config-service") {
     return { format: "module", shortCircuit: true, source: 'export async function getSystemSettingsServer() { return { flatShippingFee: 25000, freeShippingThreshold: 0 }; }' };
@@ -62,6 +67,10 @@ type CallLog = { table: string; action: string; payload?: unknown };
 type FakeWorld = {
   tables: Record<string, FakeRow[]>;
   calls: CallLog[];
+  rpcCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  rpcHandler:
+    | ((name: string, args: Record<string, unknown>) => { data: unknown; error: { message: string } | null })
+    | null;
   force: {
     productDeductFail?: boolean;
     ordersInsertError?: { code?: string; message: string } | null;
@@ -94,6 +103,8 @@ function emptyWorld(): FakeWorld {
       order_status_history: [],
     },
     calls: [],
+    rpcCalls: [],
+    rpcHandler: null,
     force: {},
     voucherIncAttempt: 0,
     voucherDecAttempt: 0,
@@ -322,7 +333,44 @@ function createFakeSupabase(world: FakeWorld) {
     from(table: string) {
       return new FakeQuery(table, world);
     },
+    async rpc(name: string, args: Record<string, unknown>) {
+      world.rpcCalls.push({ name, args });
+      if (!world.rpcHandler) {
+        throw new Error(`create_order_atomic handler not configured for ${name}`);
+      }
+      return world.rpcHandler(name, args);
+    },
   };
+}
+
+const RPC_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+function okRpcResult(overrides: Record<string, unknown> = {}) {
+  return {
+    data: {
+      outcome: "created",
+      order_id: RPC_UUID,
+      order_code: "GM-261014-000001",
+      final_amount: 110000,
+      replayed: false,
+      ...overrides,
+    },
+    error: null,
+  };
+}
+
+function errorRpcResult(message: string) {
+  return { data: null, error: { message } };
+}
+
+function rpcPayloadOf(args: Record<string, unknown>): Record<string, unknown> {
+  const payload = args.p;
+  assert.ok(payload && typeof payload === "object", "RPC phải nhận tham số p dạng jsonb");
+  return payload as Record<string, unknown>;
+}
+
+function tableWrites(world: FakeWorld): CallLog[] {
+  return world.calls;
 }
 
 function makeOps(overrides: Partial<VoucherCasOps> = {}): VoucherCasOps {
@@ -532,128 +580,163 @@ test("T12 — buildVoucherPayload không gửi times_used lên DB", () => {
   assert.equal(payload.code, "CAS15K");
 });
 
-test("T13 — createOrderServer thành công: tăng times_used 1 lần, KHÔNG release, finalAmount đúng", async () => {
+function atomicInput(overrides: Record<string, unknown> = {}) {
+  return {
+    ...happyOrderInput(),
+    idempotency_key: "11111111-1111-4111-8111-111111111111",
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Decision 3 contract: createOrderServer now issues exactly ONE
+// create_order_atomic RPC. Stock, voucher quota, order rows, history and audit
+// are the database transaction's responsibility, so the client must never issue
+// compensating table writes. Row-level rollback/concurrency evidence lives in
+// tests/atomicOrderPg.integration.test.ts (real PostgreSQL).
+// ---------------------------------------------------------------------------
+
+test("T13 — createOrderServer dùng đúng MỘT RPC và nhận finalAmount do máy chủ quyết định", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
+  world.rpcHandler = (_name, args) => {
+    const payload = rpcPayloadOf(args);
+    assert.equal(payload.final_amount, undefined, "client không được gửi final_amount");
+    assert.equal(payload.subtotal, undefined, "client không được gửi subtotal");
+    assert.equal(payload.shipping_fee, undefined, "client không được gửi shipping_fee");
+    assert.equal(payload.voucher_discount, undefined, "client không được gửi voucher_discount");
+    assert.match(String(payload.scope_key), /^guest:[0-9a-f]{64}$/);
+    assert.match(String(payload.request_hash), /^[0-9a-f]{64}$/);
+    assert.match(String(payload.idempotency_key), /^[0-9a-f-]{36}$/i);
+    return okRpcResult();
+  };
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer(happyOrderInput());
+  const r = await createOrderServer(atomicInput());
   assert.equal(r.success, true);
+  assert.equal(r.orderId, RPC_UUID);
+  assert.equal(r.orderCode, "GM-261014-000001");
   assert.equal(r.finalAmount, 110000);
-  assert.equal(countAction(world, "voucher-cas-increment"), 1);
-  assert.equal(countAction(world, "voucher-cas-decrement"), 0);
-  assert.equal(world.tables.vouchers[0].times_used, 1);
+  assert.equal(world.rpcCalls.length, 1);
+  assert.equal(world.rpcCalls[0].name, "create_order_atomic");
+  assert.equal(tableWrites(world).length, 0, "không được ghi bảng trực tiếp ngoài RPC");
+  assert.equal(world.tables.orders.length, 0, "không có đơn nào được ghi phía client");
+  assert.equal(world.tables.vouchers[0].times_used, 0, "quota voucher chỉ do máy chủ tăng");
 });
 
-test("T14a — stock fail sau khi giữ chỗ → release đúng 1 lần, không tăng times_used", async () => {
+test("T14a — RPC báo thiếu tồn kho → fail closed, không bù trừ cục bộ", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
-  world.force.productDeductFail = true;
+  world.rpcHandler = () => errorRpcResult("D3:STOCK_INSUFFICIENT");
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer(happyOrderInput());
+  const r = await createOrderServer(atomicInput());
   assert.equal(r.success, false);
-  assert.match(r.error || "", /hết hàng/);
-  assert.equal(countAction(world, "voucher-cas-increment"), 1);
-  assert.equal(countAction(world, "voucher-cas-decrement"), 1);
-  assert.equal(world.tables.vouchers[0].times_used, 0);
-});
-
-test("T8 — orders insert fail: restore stock TRƯỚC release, release đúng 1 lần", async () => {
-  const world = emptyWorld();
-  seedHappyWorld(world);
-  world.force.ordersInsertError = { message: "orders insert failed" };
-  g.__fakeOrderDb = createFakeSupabase(world);
-
-  const r = await createOrderServer(happyOrderInput());
-  assert.equal(r.success, false);
-  assert.equal(r.error, "orders insert failed");
-  assert.equal(countAction(world, "voucher-cas-decrement"), 1);
+  assert.match(r.error || "", /không còn đủ tồn kho/);
+  assert.equal(world.rpcCalls.length, 1);
+  assert.equal(tableWrites(world).length, 0, "rollback thuộc về transaction, không có bù trừ phía client");
   assert.equal(world.tables.vouchers[0].times_used, 0);
   assert.equal(world.tables.products[0].stock, 10);
-
-  const idxInsert = world.calls.findIndex((c) => c.table === "orders" && c.action === "insert");
-  const idxRelease = world.calls.findIndex((c) => c.action === "voucher-cas-decrement");
-  assert.ok(idxInsert >= 0 && idxRelease > idxInsert, "release phải sau failed insert");
-  const idxRestore = world.calls.findIndex(
-    (c, i) =>
-      i > idxInsert &&
-      c.table === "products" &&
-      c.action === "update" &&
-      c.payload &&
-      typeof c.payload === "object" &&
-      "stock" in (c.payload as FakeRow) &&
-      Number((c.payload as FakeRow).stock) >= 10
-  );
-  assert.ok(idxRestore > idxInsert, "restore stock phải sau failed insert");
-  assert.ok(idxRelease > idxRestore, "release phải sau restore stock");
 });
 
-test("T10 — insert fail + release fail: vẫn trả lỗi gốc, không throw", async () => {
+test("T8 — máy chủ báo lỗi ghi đơn → trả success:false, KHÔNG restore stock/voucher cục bộ", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
-  world.force.ordersInsertError = { message: "orders insert failed" };
-  world.force.voucherCasDecrementOverride = () => ({ rowsAffected: null, error: "release boom" });
+  world.rpcHandler = () => errorRpcResult("orders insert failed");
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer(happyOrderInput());
+  const r = await createOrderServer(atomicInput());
   assert.equal(r.success, false);
-  assert.equal(r.error, "orders insert failed");
-  assert.ok(world.voucherDecAttempt >= 3, "release đã thử lại tối đa");
+  assert.ok(r.error, "phải trả lỗi cho client");
+  assert.equal(tableWrites(world).length, 0, "không được ghi/restore bảng trực tiếp");
+  assert.equal(world.tables.orders.length, 0);
+  assert.equal(world.tables.vouchers[0].times_used, 0);
+  assert.equal(world.tables.products[0].stock, 10);
 });
 
-test("T14b — exception ngoài luồng sau khi giữ chỗ → release trong catch", async () => {
+test("T10 — RPC ném lỗi bất ngờ → bắt exception, trả success:false, không throw ra ngoài", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
-  world.force.throwOnCustomersSelect = true;
+  world.rpcHandler = () => {
+    throw new Error("release boom");
+  };
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer(happyOrderInput());
+  const r = await createOrderServer(atomicInput());
   assert.equal(r.success, false);
-  assert.match(r.error || "", /customers select exploded/);
-  assert.equal(countAction(world, "voucher-cas-increment"), 1);
-  assert.equal(countAction(world, "voucher-cas-decrement"), 1);
+  assert.ok(r.error);
+  assert.equal(tableWrites(world).length, 0);
   assert.equal(world.tables.vouchers[0].times_used, 0);
 });
 
-test("T15 — M5A: đơn có voucher lưu đúng voucher_id từ reservedVoucherId", async () => {
+test("T14b — exception ngoài luồng khi mở kết nối → fail closed, không trả đơn giả", async () => {
   const world = emptyWorld();
-  seedHappyWorld(world);
-  g.__fakeOrderDb = createFakeSupabase(world);
+  g.__fakeOrderDb = undefined;
 
-  const r = await createOrderServer(happyOrderInput());
-  assert.equal(r.success, true);
-  assert.equal(world.tables.orders.length, 1);
-  assert.equal(world.tables.orders[0].voucher_id, VOUCHER_ID);
-  assert.equal(world.tables.orders[0].voucher_discount, 15000);
+  const r = await createOrderServer(atomicInput());
+  assert.equal(r.success, false);
+  assert.ok(r.error);
+  assert.equal(r.orderId, undefined);
+  assert.equal(r.orderCode, undefined);
+  assert.equal(tableWrites(world).length, 0);
 });
 
-test("T16 — M5A: đơn không dùng voucher → voucher_id null", async () => {
+test("T15 — M5A: đơn có voucher gửi voucher_code cho RPC và nhận identity từ máy chủ", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
+  world.rpcHandler = (_name, args) => {
+    const payload = rpcPayloadOf(args);
+    assert.equal(payload.voucher_code, "CAS15K");
+    assert.equal(payload.voucher_id, undefined, "client không tự chọn voucher_id");
+    assert.equal(payload.voucher_discount, undefined, "client không tự tính discount");
+    assert.equal(payload.final_amount, undefined, "client không tự quyết định tổng tiền");
+    return okRpcResult();
+  };
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer({
-    buyer_name: "No Voucher",
-    buyer_phone: "0900000002",
-    items: [{ product_id: "prod-1", quantity: 1 }],
-  });
+  const r = await createOrderServer(atomicInput());
   assert.equal(r.success, true);
-  assert.equal(world.tables.orders[0].voucher_id, null);
-  assert.equal(world.tables.orders[0].voucher_discount, 0);
+  assert.equal(r.orderId, RPC_UUID);
+  assert.equal(r.finalAmount, 110000);
+  assert.equal(world.rpcCalls.length, 1);
+  assert.equal(tableWrites(world).length, 0);
+  assert.equal(world.tables.vouchers[0].times_used, 0, "quota chỉ do server tăng trong transaction");
+});
+
+test("T16 — M5A: đơn không dùng voucher → voucher_code null, không đụng bảng vouchers", async () => {
+  const world = emptyWorld();
+  seedHappyWorld(world);
+  world.rpcHandler = (_name, args) => {
+    assert.equal(rpcPayloadOf(args).voucher_code, null);
+    return okRpcResult();
+  };
+  g.__fakeOrderDb = createFakeSupabase(world);
+
+  const r = await createOrderServer(
+    atomicInput({
+      buyer_name: "No Voucher",
+      buyer_phone: "0900000002",
+      voucher_code: null,
+    })
+  );
+  assert.equal(r.success, true);
+  assert.equal(tableWrites(world).length, 0);
+  assert.equal(world.tables.vouchers[0].times_used, 0);
   assert.equal(countAction(world, "voucher-cas-increment"), 0);
 });
 
-test("T17 — M5A: CAS giữ chỗ thất bại → đơn tạo không gắn voucher_id, không tăng quota", async () => {
+test("T17 — M5A: voucher không khả dụng → fail closed, không tạo đơn, không tăng quota", async () => {
   const world = emptyWorld();
   seedHappyWorld(world);
-  world.force.voucherCasIncrementOverride = () => ({ rowsAffected: 0, error: null });
+  world.rpcHandler = () => errorRpcResult("D3:VOUCHER_UNAVAILABLE");
   g.__fakeOrderDb = createFakeSupabase(world);
 
-  const r = await createOrderServer(happyOrderInput());
-  assert.equal(r.success, true);
-  assert.equal(world.tables.orders[0].voucher_id, null);
-  assert.equal(world.tables.orders[0].voucher_discount, 0);
+  const r = await createOrderServer(atomicInput());
+  assert.equal(r.success, false);
+  assert.match(r.error || "", /Voucher không hợp lệ/);
+  assert.equal(world.rpcCalls.length, 1);
+  assert.equal(tableWrites(world).length, 0);
+  assert.equal(world.tables.orders.length, 0);
   assert.equal(world.tables.vouchers[0].times_used, 0);
 });
 
