@@ -25,6 +25,8 @@ import {
   DEFAULT_SETTINGS,
 } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
+import { computePricing, isVoucherApplicable } from "@/lib/pricing";
+import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
 
 function getCookieRef(): string | null {
   if (typeof document === "undefined") return null;
@@ -172,28 +174,25 @@ function CheckoutContent() {
     return () => window.removeEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
   }, []);
 
-  const rawShippingFee = deliveryType !== "home_delivery" ? 0 : siteSettings.flatShippingFee;
-
-  const discountAmount = useMemo(() => {
+  const activeVoucher = useMemo(() => {
     const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
-    if (!code || vouchers.length === 0) return 0;
+    if (!code || vouchers.length === 0) return null;
     const found = vouchers.find((v) => v.code === code && v.status === "active");
-    if (!found) return 0;
-    if (found.min_order_value && subtotal < found.min_order_value) return 0;
-    if (found.min_items_count && totalItemCount < found.min_items_count) return 0;
+    if (!found) return null;
+    if (found.min_items_count && totalItemCount < found.min_items_count) return null;
+    if (!isVoucherApplicable(found, subtotal)) return null;
+    return found;
+  }, [voucherApplied, formData.voucher_code, vouchers, subtotal, totalItemCount]);
 
-    if (found.discount_type === "freeship") {
-      return rawShippingFee;
-    }
-    if (found.discount_type === "percentage") {
-      const calc = Math.round((subtotal * found.discount_value) / 100);
-      return found.max_discount_amount ? Math.min(calc, found.max_discount_amount) : calc;
-    }
-    return Math.min(subtotal, found.discount_value);
-  }, [voucherApplied, formData.voucher_code, vouchers, subtotal, totalItemCount, rawShippingFee]);
+  const isFreeshipVoucher = activeVoucher?.discount_type === "freeship";
 
-  const shippingFee = rawShippingFee;
-  const finalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+  const { shippingFee, voucherDiscount: discountAmount, finalAmount } = computePricing({
+    subtotal,
+    baseShippingFee: siteSettings.flatShippingFee,
+    deliveryType,
+    freeShippingThreshold: siteSettings.freeShippingThreshold,
+    voucher: activeVoucher,
+  });
 
   const handleApplyVoucher = useCallback((codeOverride?: string) => {
     setVoucherError(null);
@@ -217,6 +216,10 @@ function CheckoutContent() {
       setVoucherError(
         `Mã ${found.code} yêu cầu mua từ ${found.min_items_count} món trở lên (hiện có ${totalItemCount} món)`
       );
+      return;
+    }
+    if (!isVoucherApplicable(found, subtotal)) {
+      setVoucherError("Mã giảm giá không hợp lệ hoặc đã hết hạn");
       return;
     }
     setVoucherApplied(found.code);
@@ -387,7 +390,7 @@ function CheckoutContent() {
       introducer_info: finalIntroducerText,
       customer_note: formData.note || "",
       items: items.map((it) => ({
-        product_id: it.product_id,
+        product_id: it.combo_id ? undefined : it.product_id,
         variant_id: it.variant_id || null,
         combo_id: it.combo_id || null,
         quantity: it.quantity,
@@ -396,10 +399,11 @@ function CheckoutContent() {
 
     (async () => {
       try {
+        const idempotencyKey = await getOrCreateOrderAttemptKey("checkout", orderPayload);
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(orderPayload),
+          body: JSON.stringify({ ...orderPayload, idempotency_key: idempotencyKey }),
         });
 
         const result = await response.json();
@@ -410,6 +414,7 @@ function CheckoutContent() {
 
         const serverOrderCode = result.orderCode;
         const serverFinalAmount = result.finalAmount ?? finalAmount;
+        clearOrderAttemptKey("checkout");
 
         // Build local order snapshot for client cache
         const newOrderRecord: Order = {
@@ -460,7 +465,7 @@ function CheckoutContent() {
         };
 
         // Cache order in local device storage
-        saveNewOrder(newOrderRecord);
+        saveNewOrder(newOrderRecord, { syncToServer: false });
 
         // Update local customer profile and store proof token
         try {
@@ -957,9 +962,16 @@ function CheckoutContent() {
                   <p className="text-[11px] text-red-600 font-medium">{voucherError}</p>
                 )}
 
-                {voucherApplied && discountAmount > 0 && (
+                {voucherApplied && (discountAmount > 0 || isFreeshipVoucher) && (
                   <div className="text-xs text-emerald-700 font-semibold flex items-center justify-between bg-emerald-50 p-2 rounded-xl border border-emerald-100">
-                    <span>✓ Đã áp mã &quot;{voucherApplied}&quot; (-<MoneyDisplay amount={discountAmount} />)</span>
+                    <span>
+                      ✓ Đã áp mã &quot;{voucherApplied}&quot;
+                      {isFreeshipVoucher ? (
+                        <> (Miễn phí vận chuyển)</>
+                      ) : (
+                        <> (-<MoneyDisplay amount={discountAmount} />)</>
+                      )}
+                    </span>
                     <button
                       type="button"
                       onClick={() => {

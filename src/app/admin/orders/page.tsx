@@ -133,9 +133,13 @@ function AdminOrdersContent() {
     buyerName: string;
   } | null>(null);
 
-  const handleConfirmStatusChange = () => {
+  const handleConfirmStatusChange = async () => {
     if (!pendingStatusChange) return;
-    updateStoredOrderStatus(pendingStatusChange.orderId, pendingStatusChange.newStatus);
+    const result = await updateStoredOrderStatus(pendingStatusChange.orderId, pendingStatusChange.newStatus);
+    if (!result.ok) {
+      alert(result.error || "Không thể cập nhật trạng thái đơn hàng.");
+      return;
+    }
     setOrders((prev) =>
       prev.map((o) =>
         o.order_id === pendingStatusChange.orderId

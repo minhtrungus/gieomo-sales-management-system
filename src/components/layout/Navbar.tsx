@@ -61,7 +61,7 @@ export function Navbar() {
                 <span className="w-2 h-2 rounded-full bg-[#FFB98A] inline-block" />
               </div>
               <span className="text-[10px] text-[#7E7068] font-medium tracking-wide leading-tight mt-0.5">
-                Gom từng mảnh nhỏ, dệt thành giấc mơ
+                Gom từng mảnh nhỏ, dệt thành yêu thương
               </span>
             </div>
           </Link>

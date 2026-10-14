@@ -188,7 +188,7 @@ export default function ContactPage() {
             </div>
 
             <div className="pt-6 border-t border-emerald-900 text-xs text-soft-pink font-medium">
-              ✨ &quot;Gom từng mảnh nhỏ, dệt thành giấc mơ&quot;
+              ✨ &quot;Gom từng mảnh nhỏ, dệt thành yêu thương&quot;
             </div>
           </div>
 

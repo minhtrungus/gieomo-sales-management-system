@@ -56,6 +56,8 @@ export default function AdminPosPage() {
 
   const [lastCompletedOrder, setLastCompletedOrder] = useState<string | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Initialize with first product if cart empty
   useEffect(() => {
@@ -173,9 +175,12 @@ export default function AdminPosPage() {
     setActiveQrModal(null);
   };
 
-  const handleCheckoutSubmit = (e: React.FormEvent) => {
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (cartItems.length === 0 || subtotal <= 0) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrderId = `ord-${Date.now()}`;
@@ -237,26 +242,53 @@ export default function AdminPosPage() {
       updated_at: new Date().toISOString(),
     };
 
-    saveNewOrder(newOrder);
+    try {
+      // Decision 3: đơn chỉ được coi là TẠO khi máy chủ trả về kết quả đã commit.
+      // Khóa idempotency được lưu trong sessionStorage và chỉ xoá sau thành công,
+      // nên retry sau timeout/mất kết nối dùng lại đúng khoá + đúng payload.
+      const result = await saveNewOrder(newOrder, { idempotencyFlow: "admin-pos-order" });
 
-    if (isCash) {
-      setLastCompletedOrder(randomCode);
-      resetFormForNextCustomer();
-    } else {
-      // Build VietQR dynamic URL
-      const qrUrl =
-        settings.qrMode === "upload" && settings.qrImageUrl
-          ? settings.qrImageUrl
-          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${subtotal}&addInfo=${randomCode}&accountName=${encodeURIComponent(
-              settings.bankHolder || "CLB MAM MO GIEO MO"
-            )}`;
+      if (!result.ok) {
+        setSubmitError(
+          result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại."
+        );
+        return;
+      }
 
-      setActiveQrModal({
-        orderCode: randomCode,
-        orderId: newOrderId,
-        amount: subtotal,
-        qrUrl,
-      });
+      const createdOrderId = result.orderId || newOrder.order_id;
+      const createdOrderCode = result.orderCode || newOrder.order_code;
+      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
+
+      newOrder.order_id = createdOrderId;
+      newOrder.order_code = createdOrderCode;
+      newOrder.final_amount = createdFinalAmount;
+      newOrder.items = (newOrder.items || []).map((item, idx) => ({
+        ...item,
+        order_id: createdOrderId,
+        order_item_id: `item-${createdOrderId}-${idx + 1}`,
+      }));
+
+      if (isCash) {
+        setLastCompletedOrder(createdOrderCode);
+        resetFormForNextCustomer();
+      } else {
+        // Build VietQR dynamic URL
+        const qrUrl =
+          settings.qrMode === "upload" && settings.qrImageUrl
+            ? settings.qrImageUrl
+            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${createdFinalAmount}&addInfo=${createdOrderCode}&accountName=${encodeURIComponent(
+                settings.bankHolder || "CLB MAM MO GIEO MO"
+              )}`;
+
+        setActiveQrModal({
+          orderCode: createdOrderCode,
+          orderId: createdOrderId,
+          amount: createdFinalAmount,
+          qrUrl,
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -325,6 +357,14 @@ export default function AdminPosPage() {
 
       {/* Main Grid */}
       <form onSubmit={handleCheckoutSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {submitError && (
+          <div
+            role="alert"
+            className="lg:col-span-12 bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold"
+          >
+            {submitError}
+          </div>
+        )}
         {/* Left Column: Product Table & Fast Add */}
         <div className="lg:col-span-7 space-y-6">
           {/* Quick Item Picker Chips */}
@@ -594,20 +634,24 @@ export default function AdminPosPage() {
               {paymentMode === "cash" ? (
                 <button
                   type="submit"
-                  disabled={subtotal <= 0}
-                  className="w-full py-3.5 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3]"
+                  disabled={subtotal <= 0 || isSubmitting}
+                  className="w-full py-3.5 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Banknote className="w-4 h-4" />
-                  <span>Thu tiền mặt {subtotal.toLocaleString("vi-VN")}đ & Hoàn tất</span>
+                  <span>
+                    {isSubmitting
+                      ? "Đang xử lý..."
+                      : `Thu tiền mặt ${subtotal.toLocaleString("vi-VN")}đ & Hoàn tất`}
+                  </span>
                 </button>
               ) : (
                 <button
                   type="submit"
-                  disabled={subtotal <= 0}
-                  className="w-full py-3.5 px-4 rounded-full bg-[#16381D] hover:bg-[#204e2a] text-white font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  disabled={subtotal <= 0 || isSubmitting}
+                  className="w-full py-3.5 px-4 rounded-full bg-[#16381D] hover:bg-[#204e2a] text-white font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <QrCode className="w-4 h-4 text-[#BFE9C3]" />
-                  <span>Xuất mã VietQR cho khách quét ➔</span>
+                  <span>{isSubmitting ? "Đang xử lý..." : "Xuất mã VietQR cho khách quét ➔"}</span>
                 </button>
               )}
             </div>

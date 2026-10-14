@@ -2,6 +2,7 @@
 
 import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
 import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
+import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
 
 export type { ExtendedProduct, ExtendedCombo };
 
@@ -116,8 +117,20 @@ export function getStoredOrders(): Order[] {
   }
 }
 
-export function saveNewOrder(newOrder: Order): void {
-  if (typeof window === "undefined") return;
+export interface SaveOrderResult {
+  ok: boolean;
+  orderId?: string;
+  orderCode?: string;
+  finalAmount?: number;
+  replayed?: boolean;
+  error?: string;
+}
+
+export async function saveNewOrder(
+  newOrder: Order,
+  options: { syncToServer?: boolean; idempotencyFlow?: string } = {}
+): Promise<SaveOrderResult> {
+  if (typeof window === "undefined") return { ok: false, error: "SSR" };
   try {
     // Auto-assign fulfillment warehouse if not specified
     if (!newOrder.warehouse_id) {
@@ -126,6 +139,63 @@ export function saveNewOrder(newOrder: Order): void {
       if (defaultWh) {
         newOrder.warehouse_id = defaultWh.warehouse_id;
         newOrder.warehouse_name = defaultWh.name;
+      }
+    }
+
+    const idempotencyFlow = options.idempotencyFlow || "order";
+    let replayed = false;
+    if (options.syncToServer !== false) {
+      const attemptPayload = {
+        buyer_name: newOrder.buyer_name,
+        buyer_phone: newOrder.buyer_phone,
+        buyer_email: newOrder.buyer_email,
+        recipient_name: newOrder.recipient_name,
+        recipient_phone: newOrder.recipient_phone,
+        delivery_type: newOrder.delivery_type,
+        address_detail: newOrder.address_detail,
+        district: newOrder.district,
+        province: newOrder.province,
+        customer_note: newOrder.customer_note,
+        voucher_code: newOrder.voucher_code,
+        referral_code: newOrder.referral_code,
+        seller_id: newOrder.seller_id,
+        introducer_info: newOrder.introducer_info,
+        source_type: newOrder.source_type,
+        payment_method: newOrder.payment_method,
+        items: (newOrder.items || []).map((item) => ({
+          product_id: item.product_id || undefined,
+          variant_id: item.variant_id || undefined,
+          combo_id: item.combo_id || undefined,
+          quantity: item.quantity,
+        })),
+      };
+      const idempotencyKey = await getOrCreateOrderAttemptKey(idempotencyFlow, attemptPayload);
+
+      try {
+        const response = await fetch("/api/orders", {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ ...attemptPayload, idempotency_key: idempotencyKey }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success || !result?.orderId || !result?.orderCode) {
+          const serverError = result?.error || `HTTP ${response.status}`;
+          console.warn("[saveNewOrder] Server rejected order:", response.status, serverError);
+          return { ok: false, orderCode: newOrder.order_code, error: serverError };
+        }
+
+        newOrder.order_id = result.orderId;
+        newOrder.order_code = result.orderCode;
+        newOrder.final_amount = Number(result.finalAmount);
+        replayed = result.replayed === true;
+        clearOrderAttemptKey(idempotencyFlow);
+      } catch (err: unknown) {
+        console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
+        return {
+          ok: false,
+          orderCode: newOrder.order_code,
+          error: err instanceof Error ? err.message : "Network error",
+        };
       }
     }
 
@@ -249,24 +319,58 @@ export function saveNewOrder(newOrder: Order): void {
     // Automatic push notifications are disabled
 
 
-    // Sync order to Supabase PostgreSQL database
-    fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newOrder),
-    }).catch((err) => {
-      console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
-    });
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
+
+    return {
+      ok: true,
+      orderId: newOrder.order_id,
+      orderCode: newOrder.order_code,
+      finalAmount: newOrder.final_amount,
+      replayed,
+    };
   } catch (e) {
     console.error("Error saving new order", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
-export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus): void {
-  if (typeof window === "undefined") return;
+export async function updateStoredOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined") return { ok: false, error: "Browser context is required." };
   try {
+    // Cancellation is a server-authoritative, multi-entity transaction. Do not
+    // publish optimistic local status or inventory effects before it commits.
+    if (newStatus === "cancelled") {
+      const response = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ orderId, orderStatus: newStatus }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        return { ok: false, error: result.error || `Cancellation failed (${response.status})` };
+      }
+
+      const committedAt = new Date().toISOString();
+      const committedOrders = getStoredOrders().map((order) =>
+        order.order_id === orderId || order.order_code === orderId
+          ? {
+              ...order,
+              order_status: "cancelled" as const,
+              status_timestamps: { ...(order.status_timestamps || {}), cancelled: committedAt },
+              cancelled_at: committedAt,
+              updated_at: committedAt,
+            }
+          : order
+      );
+      cachedOrders = committedOrders;
+      localStorage.setItem("gieomo_orders", JSON.stringify(committedOrders));
+      window.dispatchEvent(new Event("gieomo_orders_updated"));
+      return { ok: true };
+    }
+
     const orders = getStoredOrders();
     const nowIso = new Date().toISOString();
     const updated = orders.map((o: any) => {
@@ -279,7 +383,7 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
           status_timestamps: timestamps,
           confirmed_at: newStatus === "confirmed" ? nowIso : o.confirmed_at,
           completed_at: newStatus === "completed" ? nowIso : o.completed_at,
-          cancelled_at: newStatus === "cancelled" ? nowIso : o.cancelled_at,
+          cancelled_at: o.cancelled_at,
           updated_at: nowIso,
         };
       }
@@ -300,56 +404,11 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
       console.warn("[updateStoredOrderStatus] Failed to sync status to Supabase:", err);
     });
 
-    // Restore stock if order is cancelled
-    if (newStatus === "cancelled") {
-      const cancelledOrder = orders.find((o: any) => o.order_id === orderId || o.order_code === orderId);
-      if (cancelledOrder && cancelledOrder.items && cancelledOrder.items.length > 0) {
-        try {
-          const prods = getStoredProducts();
-          const targetWhId = cancelledOrder.warehouse_id || "wh-1";
-          let prodsChanged = false;
-          const restored = prods.map((prod) => {
-            let prodModified = false;
-            const updatedVariants = prod.variants?.map((v) => {
-              const matchingItem = cancelledOrder.items?.find(
-                (it: any) => it.product_id === prod.product_id && (it.variant_id ? it.variant_id === v.variant_id : true)
-              );
-              if (matchingItem) {
-                prodModified = true;
-                prodsChanged = true;
-                const qty = matchingItem.quantity || 1;
-                const stocks = { ...(v.warehouse_stocks || {}) };
-                let wh1 = v.stock_warehouse_1 ?? 0;
-                let wh2 = v.stock_warehouse_2 ?? 0;
-                if (targetWhId === "wh-1") wh1 += qty;
-                else if (targetWhId === "wh-2") wh2 += qty;
-                stocks[targetWhId] = (stocks[targetWhId] ?? 0) + qty;
-                return {
-                  ...v,
-                  stock: (v.stock || 0) + qty,
-                  stock_warehouse_1: wh1,
-                  stock_warehouse_2: wh2,
-                  warehouse_stocks: stocks,
-                };
-              }
-              return v;
-            });
-            return prodModified ? { ...prod, variants: updatedVariants } : prod;
-          });
-          if (prodsChanged) {
-            cachedProducts = restored;
-            localStorage.setItem("gieomo_products", JSON.stringify(restored));
-            window.dispatchEvent(new Event("gieomo_products_updated"));
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
+    return { ok: true };
   } catch (e) {
     console.error("Error updating order status", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
@@ -1373,9 +1432,35 @@ export function getStoredVouchers(): Voucher[] {
   }
 }
 
-export function saveNewVoucher(voucher: Voucher): void {
+async function requestVoucherMutation(path: string, init: RequestInit): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : "Không thể kết nối máy chủ");
+  }
+  if (!response.ok) {
+    let serverError = "";
+    try {
+      const body = (await response.json()) as { error?: unknown };
+      if (typeof body?.error === "string") serverError = body.error;
+    } catch {
+      // non-JSON error body — fall back to the status code below
+    }
+    throw new Error(serverError || `Máy chủ từ chối yêu cầu (HTTP ${response.status})`);
+  }
+}
+
+export async function saveNewVoucher(voucher: Voucher): Promise<void> {
   const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
+
+  await requestVoucherMutation("/api/vouchers", {
+    method: "POST",
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(voucherToSave),
+  });
+
   try {
     const list = getStoredVouchers();
     const updated = [
@@ -1385,21 +1470,21 @@ export function saveNewVoucher(voucher: Voucher): void {
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/vouchers", {
-      method: "POST",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(voucherToSave),
-    }).catch((err) => console.warn("Could not persist voucher to server:", err));
   } catch (e) {
     console.error("Error saving new voucher", e);
   }
 }
 
-export function updateStoredVoucher(voucher: Voucher): void {
+export async function updateStoredVoucher(voucher: Voucher): Promise<void> {
   const voucherToSave = { ...voucher, visibility: voucher.visibility || "public" };
   if (typeof window === "undefined") return;
+
+  await requestVoucherMutation("/api/vouchers", {
+    method: "POST",
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(voucherToSave),
+  });
+
   try {
     const list = getStoredVouchers();
     const updated = list.map((v) =>
@@ -1408,34 +1493,28 @@ export function updateStoredVoucher(voucher: Voucher): void {
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/vouchers", {
-      method: "POST",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(voucherToSave),
-    }).catch((err) => console.warn("Could not update voucher on server:", err));
   } catch (e) {
     console.error("Error updating voucher", e);
   }
 }
 
-export function deleteStoredVoucher(voucherId: string): void {
+export async function deleteStoredVoucher(voucherId: string): Promise<void> {
   if (typeof window === "undefined") return;
+
+  const existing = getStoredVouchers();
+  const target = existing.find((v) => v.voucher_id === voucherId);
+  const idToDelete = target?.code || voucherId;
+
+  await requestVoucherMutation(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
   try {
-    const list = getStoredVouchers();
-    const target = list.find((v) => v.voucher_id === voucherId);
-    const updated = list.filter((v) => v.voucher_id !== voucherId);
+    const updated = getStoredVouchers().filter((v) => v.voucher_id !== voucherId);
     cachedVouchers = updated;
     localStorage.setItem("gieomo_vouchers", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_vouchers_updated"));
-
-    // Sync DELETE to Supabase
-    const idToDelete = target?.code || voucherId;
-    fetch(`/api/vouchers?id=${encodeURIComponent(idToDelete)}`, {
-      method: "DELETE",
-      headers: getAuthHeaders(),
-    }).catch((err) => console.warn("Could not delete voucher on server:", err));
   } catch (e) {
     console.error("Error deleting voucher", e);
   }

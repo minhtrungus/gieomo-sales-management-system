@@ -1,0 +1,42 @@
+-- ========================================================
+-- GIEO MƠ — DATABASE MIGRATION 014
+-- Bổ sung giá trị 'freeship' vào enum discount_type
+-- ========================================================
+-- Lý do: App (freeshop patch) ghi vouchers.discount_type
+--   = 'freeship' khi tạo voucher miễn phí vận chuyển.
+--   Enum hiện tại (migration 001, dòng 29) chỉ có
+--   ('percentage', 'fixed_amount') → INSERT sẽ lỗi
+--   22P02 (invalid input value for enum discount_type)
+--   nếu thiếu giá trị này. Đã xác minh trên staging:
+--   public.discount_type hiện có percentage, fixed_amount.
+--
+-- An toàn: ADDITIVE — chỉ thêm 1 giá trị enum.
+--   * Không drop/recreate enum (tránh rewrite bảng,
+--     mất dữ liệu voucher hiện có).
+--   * Không sửa / không xóa bất kỳ voucher nào.
+--   * Idempotent — chạy lại an toàn nhờ IF NOT EXISTS.
+--
+-- Lưu ý PostgreSQL / transaction:
+--   * PG < 12: ALTER TYPE ... ADD VALUE KHÔNG được chạy
+--     trong transaction block → phải chạy standalone
+--     (Supabase Dashboard SQL Editor chạy standalone: OK).
+--   * PG >= 12: chạy được trong transaction, NHƯNG giá trị
+--     enum mới chỉ được dùng SAU KHI transaction commit
+--     (dùng trước → lỗi "unsafe use of new value").
+--     Vì vậy verification query bên dưới được đặt trong
+--     comment và phải chạy SAU khi apply.
+--   * Rollback: giá trị mới chỉ DROP được khi chưa voucher
+--     nào dùng nó (ALTER TYPE ... DROP VALUE 'freeship').
+--     Đây là thay đổi additive, thực tế thường giữ nguyên.
+--
+-- Thứ tự triển khai: chạy migration TRƯỚC khi deploy/kiểm
+--   thử tính năng tạo voucher freeship.
+-- ========================================================
+
+-- 1) Thêm giá trị enum (lệnh duy nhất được thực thi):
+ALTER TYPE public.discount_type ADD VALUE IF NOT EXISTS 'freeship';
+
+-- 2) Verification query (Playbook rule 16) — READ-ONLY,
+--    chạy SAU khi apply, tách riêng khỏi lệnh ALTER ở trên:
+-- SELECT unnest(enum_range(NULL::public.discount_type)) AS discount_type_value;
+-- Kỳ vọng: percentage | fixed_amount | freeship

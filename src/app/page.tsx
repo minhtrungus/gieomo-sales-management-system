@@ -66,7 +66,7 @@ export default function HomePage() {
                     Gom từng mảnh nhỏ,
                     <br />
                     <span className="bg-gradient-to-r from-[#2D6338] via-[#E2884E] to-[#D95B88] bg-clip-text text-transparent">
-                      dệt thành giấc mơ
+                      dệt thành yêu thương
                     </span>
                   </h1>
                   <p className="text-sm sm:text-base text-[#6B5A50] max-w-xl mx-auto lg:mx-0 leading-relaxed font-medium text-justify hyphens-auto break-words">
@@ -98,14 +98,14 @@ export default function HomePage() {
 
               {/* Right Column: The Signature Artwork Cover */}
               <div className="lg:col-span-6 flex justify-center">
-                <div className="relative w-full max-w-lg aspect-4/3 rounded-3xl overflow-hidden border-4 border-white shadow-dreamy p-2 bg-gradient-to-br from-[#CFE8FF]/30 to-[#FFD1E1]/30">
+                <div className="relative w-full max-w-lg aspect-[2658/984] rounded-3xl overflow-hidden border-4 border-white shadow-dreamy p-2 bg-gradient-to-br from-[#CFE8FF]/30 to-[#FFD1E1]/30">
                   <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-inner">
                     <Image
-                      src="/images/cover_gieomo.jpg"
+                      src="/images/Cover Gieo Mơ.png"
                       alt="Gieo Mơ — Mầm trong chiếc túi Pouch may vá"
                       fill
                       sizes="(max-width: 1024px) 100vw, 50vw"
-                      className="object-cover hover:scale-105 transition-transform duration-700"
+                      className="object-contain hover:scale-105 transition-transform duration-700"
                       priority
                     />
                   </div>
@@ -139,7 +139,7 @@ export default function HomePage() {
                 <span>Ý nghĩa thương hiệu</span>
               </div>
               <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#231B16] text-balance">
-                Gom từng mảnh nhỏ, dệt thành giấc mơ
+                Gom từng mảnh nhỏ, dệt thành yêu thương
               </h2>
               <p className="text-xs sm:text-sm text-[#7E7068] text-center text-balance leading-relaxed max-w-xl mx-auto">
                 Mỗi món đồ tại Tạp hóa Gieo Mơ đều bắt đầu từ những điều rất nhỏ. Cũng như một giấc mơ, để trở thành một điều lớn hơn, luôn cần những điều nhỏ bé được vun đắp qua thời gian. Đó là cách Tạp hóa Gieo Mơ tin vào những điều nhỏ bé: mỗi mảnh ghép đều có ý nghĩa khi được đặt cạnh nhau.
