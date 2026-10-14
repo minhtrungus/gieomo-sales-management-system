@@ -54,6 +54,8 @@ export default function AdminCreateOrderPage() {
     qrUrl: string;
   } | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
@@ -148,8 +150,11 @@ export default function AdminCreateOrderPage() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
     const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrderId = `ord-${Date.now()}`;
 
@@ -216,24 +221,38 @@ export default function AdminCreateOrderPage() {
       updated_at: new Date().toISOString(),
     };
 
-    saveNewOrder(newOrder);
+    try {
+      const result = await saveNewOrder(newOrder, { idempotencyFlow: "admin-create-order" });
 
-    if (paymentMethod === "banking") {
-      const qrUrl =
-        settings.qrMode === "upload" && settings.qrImageUrl
-          ? settings.qrImageUrl
-          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${finalAmount}&addInfo=${randomCode}&accountName=${encodeURIComponent(
-              settings.bankHolder || "CLB MAM MO GIEO MO"
-            )}`;
+      if (!result.ok) {
+        setSubmitError(result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại.");
+        return;
+      }
+      const createdOrderId = result.orderId || newOrder.order_id;
+      const createdOrderCode = result.orderCode || newOrder.order_code;
+      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
 
-      setActiveQrModal({
-        orderCode: randomCode,
-        orderId: newOrderId,
-        amount: finalAmount,
-        qrUrl,
-      });
-    } else {
-      router.push("/admin/orders");
+      if (paymentMethod === "banking") {
+        const qrUrl =
+          settings.qrMode === "upload" && settings.qrImageUrl
+            ? settings.qrImageUrl
+            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${createdFinalAmount}&addInfo=${createdOrderCode}&accountName=${encodeURIComponent(
+                settings.bankHolder || "CLB MAM MO GIEO MO"
+              )}`;
+
+        setActiveQrModal({
+          orderCode: createdOrderCode,
+          orderId: createdOrderId,
+          amount: createdFinalAmount,
+          qrUrl,
+        });
+      } else {
+        router.push("/admin/orders");
+      }
+    } catch {
+      setSubmitError("Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -282,6 +301,11 @@ export default function AdminCreateOrderPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {submitError && (
+          <div className="lg:col-span-12 bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold">
+            {submitError}
+          </div>
+        )}
         {/* Left Form Column */}
         <div className="lg:col-span-8 space-y-6">
           {/* Customer & Source Info */}
@@ -556,8 +580,12 @@ export default function AdminCreateOrderPage() {
               </div>
             </div>
 
-            <Button type="submit" variant="primary" fullWidth size="lg">
-              {paymentMethod === "banking" ? "Tạo đơn & Xuất mã VietQR ➔" : "Tạo đơn giao COD ➔"}
+            <Button type="submit" variant="primary" fullWidth size="lg" loading={isSubmitting}>
+              {isSubmitting
+                ? "Đang tạo đơn..."
+                : paymentMethod === "banking"
+                ? "Tạo đơn & Xuất mã VietQR ➔"
+                : "Tạo đơn giao COD ➔"}
             </Button>
           </div>
         </div>

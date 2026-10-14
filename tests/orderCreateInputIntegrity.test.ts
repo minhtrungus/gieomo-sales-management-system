@@ -41,7 +41,7 @@ export async function load(url, context, nextLoad) {
     return {
       format: "module",
       shortCircuit: true,
-      source: 'export function createAdminClient() { globalThis.__p0a3AdminClientCalls += 1; throw new Error("database access must not occur"); }',
+      source: 'export function createAdminClient() { globalThis.__p0a3AdminClientCalls += 1; if (globalThis.__p0a3Rpc) return { rpc: globalThis.__p0a3Rpc }; throw new Error("database access must not occur"); }',
     };
   }
   if (url === "mock:config-service") {
@@ -56,7 +56,10 @@ export async function load(url, context, nextLoad) {
 
 register(`data:text/javascript,${encodeURIComponent(hooksSource)}`, import.meta.url);
 
-const runtime = globalThis as typeof globalThis & { __p0a3AdminClientCalls: number };
+const runtime = globalThis as typeof globalThis & {
+  __p0a3AdminClientCalls: number;
+  __p0a3Rpc?: (name: string, args: { p: Record<string, unknown> }) => Promise<{ data: unknown; error: { message: string } | null }>;
+};
 runtime.__p0a3AdminClientCalls = 0;
 
 const { validateOrderCreateLines } = await import("../src/lib/orderCreateInput.ts");
@@ -134,6 +137,63 @@ test("createOrderServer rejects invalid lines before constructing a database cli
   assert.equal(result.success, false);
   assert.match(result.error || "", /số lượng phải là số nguyên dương an toàn/);
   assert.equal(runtime.__p0a3AdminClientCalls, 0);
+});
+
+test("createOrderServer requires a UUID attempt key before database access", async () => {
+  runtime.__p0a3AdminClientCalls = 0;
+  const result = await createOrderServer({ buyer_phone: "0900000000", items: [validProductLine] });
+  assert.equal(result.success, false);
+  assert.match(result.error || "", /Khóa gửi đơn/);
+  assert.equal(runtime.__p0a3AdminClientCalls, 0);
+});
+
+test("server derives scope and hash and returns the committed RPC identity", async () => {
+  let captured: { p: Record<string, unknown> } | undefined;
+  runtime.__p0a3Rpc = async (name, args) => {
+    assert.equal(name, "create_order_atomic");
+    captured = args;
+    return {
+      data: {
+        outcome: "created",
+        order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        order_code: "GM-261014-000001",
+        final_amount: 125000,
+        replayed: false,
+      },
+      error: null,
+    };
+  };
+  const result = await createOrderServer({
+    buyer_name: "Guest",
+    buyer_phone: "0900 000 000",
+    idempotency_key: "11111111-1111-4111-8111-111111111111",
+    items: [validProductLine],
+    scope_key: "member:attacker",
+    request_hash: "attacker",
+  } as never);
+  delete runtime.__p0a3Rpc;
+
+  assert.equal(result.success, true);
+  assert.equal(result.orderId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.match(String(captured?.p.scope_key), /^guest:[0-9a-f]{64}$/);
+  assert.match(String(captured?.p.request_hash), /^[0-9a-f]{64}$/);
+  assert.notEqual(captured?.p.request_hash, "attacker");
+});
+
+test("RPC hash mismatch is surfaced as an HTTP 409 conflict", async () => {
+  runtime.__p0a3Rpc = async () => ({ data: null, error: { message: "D3:HASH_MISMATCH" } });
+  const response = await POST(new Request("http://localhost/api/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      buyer_phone: "0900000000",
+      idempotency_key: "22222222-2222-4222-8222-222222222222",
+      items: [validProductLine],
+    }),
+  }));
+  delete runtime.__p0a3Rpc;
+  assert.equal(response.status, 409);
+  assert.equal(((await response.json()) as { success: boolean }).success, false);
 });
 
 test("POST returns an explicit 400 client error without database access", async () => {

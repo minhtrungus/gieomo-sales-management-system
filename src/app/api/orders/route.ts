@@ -38,12 +38,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const result = await createOrderServer(body);
+    const user = await getAuthenticatedUser(request);
+    const result = await createOrderServer(body, { memberId: user?.memberId ?? null });
 
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error || "Không thể tạo đơn hàng" },
-        { status: 400 }
+        { status: result.conflict ? 409 : 400 }
       );
     }
 
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       orderCode: result.orderCode,
       finalAmount: result.finalAmount,
       proofToken: result.proofToken,
+      replayed: result.replayed,
     });
   } catch (error: any) {
     return NextResponse.json(

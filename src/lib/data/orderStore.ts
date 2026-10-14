@@ -2,6 +2,7 @@
 
 import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
 import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
+import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
 
 export type { ExtendedProduct, ExtendedCombo };
 
@@ -116,8 +117,20 @@ export function getStoredOrders(): Order[] {
   }
 }
 
-export function saveNewOrder(newOrder: Order): void {
-  if (typeof window === "undefined") return;
+export interface SaveOrderResult {
+  ok: boolean;
+  orderId?: string;
+  orderCode?: string;
+  finalAmount?: number;
+  replayed?: boolean;
+  error?: string;
+}
+
+export async function saveNewOrder(
+  newOrder: Order,
+  options: { syncToServer?: boolean; idempotencyFlow?: string } = {}
+): Promise<SaveOrderResult> {
+  if (typeof window === "undefined") return { ok: false, error: "SSR" };
   try {
     // Auto-assign fulfillment warehouse if not specified
     if (!newOrder.warehouse_id) {
@@ -126,6 +139,63 @@ export function saveNewOrder(newOrder: Order): void {
       if (defaultWh) {
         newOrder.warehouse_id = defaultWh.warehouse_id;
         newOrder.warehouse_name = defaultWh.name;
+      }
+    }
+
+    const idempotencyFlow = options.idempotencyFlow || "order";
+    let replayed = false;
+    if (options.syncToServer !== false) {
+      const attemptPayload = {
+        buyer_name: newOrder.buyer_name,
+        buyer_phone: newOrder.buyer_phone,
+        buyer_email: newOrder.buyer_email,
+        recipient_name: newOrder.recipient_name,
+        recipient_phone: newOrder.recipient_phone,
+        delivery_type: newOrder.delivery_type,
+        address_detail: newOrder.address_detail,
+        district: newOrder.district,
+        province: newOrder.province,
+        customer_note: newOrder.customer_note,
+        voucher_code: newOrder.voucher_code,
+        referral_code: newOrder.referral_code,
+        seller_id: newOrder.seller_id,
+        introducer_info: newOrder.introducer_info,
+        source_type: newOrder.source_type,
+        payment_method: newOrder.payment_method,
+        items: (newOrder.items || []).map((item) => ({
+          product_id: item.product_id || undefined,
+          variant_id: item.variant_id || undefined,
+          combo_id: item.combo_id || undefined,
+          quantity: item.quantity,
+        })),
+      };
+      const idempotencyKey = await getOrCreateOrderAttemptKey(idempotencyFlow, attemptPayload);
+
+      try {
+        const response = await fetch("/api/orders", {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ ...attemptPayload, idempotency_key: idempotencyKey }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success || !result?.orderId || !result?.orderCode) {
+          const serverError = result?.error || `HTTP ${response.status}`;
+          console.warn("[saveNewOrder] Server rejected order:", response.status, serverError);
+          return { ok: false, orderCode: newOrder.order_code, error: serverError };
+        }
+
+        newOrder.order_id = result.orderId;
+        newOrder.order_code = result.orderCode;
+        newOrder.final_amount = Number(result.finalAmount);
+        replayed = result.replayed === true;
+        clearOrderAttemptKey(idempotencyFlow);
+      } catch (err: unknown) {
+        console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
+        return {
+          ok: false,
+          orderCode: newOrder.order_code,
+          error: err instanceof Error ? err.message : "Network error",
+        };
       }
     }
 
@@ -249,18 +319,18 @@ export function saveNewOrder(newOrder: Order): void {
     // Automatic push notifications are disabled
 
 
-    // Sync order to Supabase PostgreSQL database
-    fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newOrder),
-    }).catch((err) => {
-      console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
-    });
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
+
+    return {
+      ok: true,
+      orderId: newOrder.order_id,
+      orderCode: newOrder.order_code,
+      finalAmount: newOrder.final_amount,
+      replayed,
+    };
   } catch (e) {
     console.error("Error saving new order", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 

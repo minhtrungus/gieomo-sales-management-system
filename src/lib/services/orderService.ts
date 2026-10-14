@@ -3,6 +3,11 @@ import { getSystemSettingsServer } from "@/lib/services/configService";
 import { createOrderProofToken } from "@/lib/auth/serverAuth";
 import { computePricing, isVoucherApplicable, type PricingVoucher } from "@/lib/pricing";
 import { validateOrderCreateLines } from "@/lib/orderCreateInput";
+import {
+  buildCanonicalOrderPayload,
+  buildOrderIdempotencyScope,
+  hashCanonicalOrderPayload,
+} from "@/lib/services/orderRequestHash";
 
 /**
  * Server-Side Order Creation with Complete Price, Voucher, and Inventory Integrity.
@@ -186,7 +191,7 @@ export function createVoucherCasOps(supabase: ReturnType<typeof createAdminClien
   };
 }
 
-export async function createOrderServer(orderInput: {
+export interface OrderCreateInput {
   buyer_name?: string;
   buyer_phone?: string;
   buyer_email?: string | null;
@@ -201,20 +206,126 @@ export async function createOrderServer(orderInput: {
   referral_code?: string | null;
   seller_id?: string | null;
   introducer_info?: string;
+  source_type?: string;
+  payment_method?: string;
+  idempotency_key?: string;
   items: Array<{
     product_id?: string;
     variant_id?: string | null;
     combo_id?: string | null;
     quantity: number;
   }>;
-}): Promise<{
+}
+
+export interface CreateOrderResult {
   success: boolean;
   orderId?: string;
   orderCode?: string;
   finalAmount?: number;
   proofToken?: string;
+  replayed?: boolean;
+  conflict?: boolean;
   error?: string;
-}> {
+}
+
+interface AtomicOrderRpcResult {
+  outcome?: string;
+  order_id?: string;
+  order_code?: string;
+  final_amount?: number | string;
+  replayed?: boolean;
+}
+
+function orderRpcError(message: string): CreateOrderResult {
+  if (message.includes("D3:HASH_MISMATCH")) {
+    return {
+      success: false,
+      conflict: true,
+      error: "Khóa gửi đơn này đã được dùng với nội dung khác. Vui lòng bắt đầu một đơn hàng mới.",
+    };
+  }
+
+  const knownErrors: Record<string, string> = {
+    "D3:INVALID_IDEMPOTENCY_KEY": "Khóa gửi đơn không hợp lệ. Vui lòng tải lại trang và thử lại.",
+    "D3:INVALID_ITEMS": "Giỏ hàng không có sản phẩm hợp lệ.",
+    "D3:INVALID_PHONE": "Số điện thoại người nhận không hợp lệ.",
+    "D3:INVALID_DELIVERY_TYPE": "Hình thức giao hàng không hợp lệ.",
+    "D3:INVALID_PAYMENT_METHOD": "Phương thức thanh toán không hợp lệ.",
+    "D3:INVALID_QUANTITY": "Số lượng sản phẩm không hợp lệ.",
+    "D3:INVALID_LINE_IDENTITY": "Một dòng sản phẩm có định danh không hợp lệ.",
+    "D3:INVALID_PRODUCT": "Một sản phẩm không còn kinh doanh.",
+    "D3:INVALID_VARIANT": "Một phân loại sản phẩm không còn kinh doanh.",
+    "D3:VARIANT_PRODUCT_MISMATCH": "Phân loại sản phẩm không thuộc sản phẩm đã chọn.",
+    "D3:INVALID_COMBO": "Một combo không còn kinh doanh.",
+    "D3:INVALID_COMBO_COMPONENT": "Một thành phần combo không còn kinh doanh.",
+    "D3:COMBO_COMPONENTS_UNMAPPED": "Combo chưa được cấu hình đầy đủ thành phần tồn kho.",
+    "D3:VOUCHER_UNAVAILABLE": "Voucher không hợp lệ, đã hết lượt hoặc chưa đủ điều kiện.",
+    "D3:STOCK_INSUFFICIENT": "Sản phẩm không còn đủ tồn kho cho đơn hàng này.",
+    "D3:INVALID_ACTOR": "Phiên người tạo đơn không còn hợp lệ.",
+  };
+
+  const match = Object.entries(knownErrors).find(([code]) => message.includes(code));
+  return { success: false, error: match?.[1] || "Không thể tạo đơn hàng nguyên tử." };
+}
+
+export async function createOrderServer(
+  orderInput: OrderCreateInput,
+  identity?: { memberId?: string | null }
+): Promise<CreateOrderResult> {
+  const lineValidation = validateOrderCreateLines(orderInput);
+  if (!lineValidation.ok) {
+    return { success: false, error: lineValidation.error };
+  }
+
+  const idempotencyKey = orderInput.idempotency_key?.trim();
+  if (!idempotencyKey || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
+    return orderRpcError("D3:INVALID_IDEMPOTENCY_KEY");
+  }
+
+  const canonicalPayload = buildCanonicalOrderPayload({ ...orderInput }, lineValidation.items);
+  const scopeKey = buildOrderIdempotencyScope(identity?.memberId, canonicalPayload.buyer_phone);
+  const requestHash = hashCanonicalOrderPayload(canonicalPayload);
+  const rpcPayload = {
+    ...canonicalPayload,
+    idempotency_key: idempotencyKey,
+    scope_key: scopeKey,
+    request_hash: requestHash,
+    actor_member_id: identity?.memberId ?? null,
+  };
+
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc("create_order_atomic", { p: rpcPayload });
+    if (error) return orderRpcError(error.message);
+
+    const result = data as AtomicOrderRpcResult | null;
+    if (
+      result?.outcome !== "created" ||
+      typeof result.order_id !== "string" ||
+      typeof result.order_code !== "string"
+    ) {
+      return { success: false, error: "Máy chủ không trả về kết quả tạo đơn hợp lệ." };
+    }
+
+    const finalAmount = Number(result.final_amount);
+    if (!Number.isFinite(finalAmount) || finalAmount < 0) {
+      return { success: false, error: "Máy chủ trả về tổng tiền không hợp lệ." };
+    }
+
+    return {
+      success: true,
+      orderId: result.order_id,
+      orderCode: result.order_code,
+      finalAmount,
+      proofToken: createOrderProofToken(result.order_code, result.order_id),
+      replayed: result.replayed === true,
+    };
+  } catch (error) {
+    return orderRpcError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function createOrderServerLegacy(orderInput: OrderCreateInput): Promise<CreateOrderResult> {
   const lineValidation = validateOrderCreateLines(orderInput);
   if (!lineValidation.ok) {
     return { success: false, error: lineValidation.error };

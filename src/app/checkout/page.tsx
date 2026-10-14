@@ -26,6 +26,7 @@ import {
 } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 import { computePricing, isVoucherApplicable } from "@/lib/pricing";
+import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
 
 function getCookieRef(): string | null {
   if (typeof document === "undefined") return null;
@@ -389,7 +390,7 @@ function CheckoutContent() {
       introducer_info: finalIntroducerText,
       customer_note: formData.note || "",
       items: items.map((it) => ({
-        product_id: it.product_id,
+        product_id: it.combo_id ? undefined : it.product_id,
         variant_id: it.variant_id || null,
         combo_id: it.combo_id || null,
         quantity: it.quantity,
@@ -398,10 +399,11 @@ function CheckoutContent() {
 
     (async () => {
       try {
+        const idempotencyKey = await getOrCreateOrderAttemptKey("checkout", orderPayload);
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(orderPayload),
+          body: JSON.stringify({ ...orderPayload, idempotency_key: idempotencyKey }),
         });
 
         const result = await response.json();
@@ -412,6 +414,7 @@ function CheckoutContent() {
 
         const serverOrderCode = result.orderCode;
         const serverFinalAmount = result.finalAmount ?? finalAmount;
+        clearOrderAttemptKey("checkout");
 
         // Build local order snapshot for client cache
         const newOrderRecord: Order = {
@@ -462,7 +465,7 @@ function CheckoutContent() {
         };
 
         // Cache order in local device storage
-        saveNewOrder(newOrderRecord);
+        saveNewOrder(newOrderRecord, { syncToServer: false });
 
         // Update local customer profile and store proof token
         try {

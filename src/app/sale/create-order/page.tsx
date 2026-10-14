@@ -96,6 +96,8 @@ function SaleCreateOrderForm() {
   } | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [orderCreatedSuccess, setOrderCreatedSuccess] = useState<Order | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
@@ -193,8 +195,9 @@ function SaleCreateOrderForm() {
   const shippingFee = deliveryType === "home_delivery" ? (isFreeship ? 0 : baseShippingFee) : 0;
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!buyerName.trim() || !buyerPhone.trim()) {
       alert("Vui lòng điền họ tên và số điện thoại của người đặt hàng!");
       return;
@@ -210,6 +213,7 @@ function SaleCreateOrderForm() {
       return;
     }
 
+    setIsSubmitting(true);
     const finalRecipientName = isOrderingForOther && recipientName.trim() ? recipientName.trim() : buyerName.trim();
     const finalRecipientPhone = isOrderingForOther && recipientPhone.trim() ? recipientPhone.trim() : buyerPhone.trim();
 
@@ -284,22 +288,37 @@ function SaleCreateOrderForm() {
       updated_at: new Date().toISOString(),
     };
 
-    saveNewOrder(newOrder);
-    setOrderCreatedSuccess(newOrder);
+    try {
+      const result = await saveNewOrder(newOrder, { idempotencyFlow: "sale-create-order" });
 
-    const qrUrl =
-      settings.qrMode === "upload" && settings.qrImageUrl
-        ? settings.qrImageUrl
-        : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(
-            `${randomCode} ${buyerPhone}`
-          )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
+      if (!result.ok) {
+        setSubmitError(result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại.");
+        return;
+      }
+      const createdOrderId = result.orderId || newOrder.order_id;
+      const createdOrderCode = result.orderCode || newOrder.order_code;
+      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
 
-    setActiveQrModal({
-      orderCode: randomCode,
-      orderId: newOrderId,
-      amount: finalAmount,
-      qrUrl,
-    });
+      setOrderCreatedSuccess(newOrder);
+
+      const qrUrl =
+        settings.qrMode === "upload" && settings.qrImageUrl
+          ? settings.qrImageUrl
+          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${createdFinalAmount}&addInfo=${encodeURIComponent(
+              `${createdOrderCode} ${buyerPhone}`
+            )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
+
+      setActiveQrModal({
+        orderCode: createdOrderCode,
+        orderId: createdOrderId,
+        amount: createdFinalAmount,
+        qrUrl,
+      });
+    } catch {
+      setSubmitError("Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetForm = () => {
@@ -374,6 +393,11 @@ function SaleCreateOrderForm() {
 
       {/* Main Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        {submitError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold">
+            {submitError}
+          </div>
+        )}
         {/* Attribution Card */}
         <div className="bg-white rounded-3xl p-5 border border-emerald-100/90 shadow-xs flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -764,10 +788,11 @@ function SaleCreateOrderForm() {
 
           <button
             type="submit"
-            className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
+            disabled={isSubmitting}
+            className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckCircle className="w-5 h-5" />
-            <span>Xác nhận & Xuất mã VietQR ➔</span>
+            <span>{isSubmitting ? "Đang xử lý..." : "Xác nhận & Xuất mã VietQR ➔"}</span>
           </button>
         </div>
       </form>
