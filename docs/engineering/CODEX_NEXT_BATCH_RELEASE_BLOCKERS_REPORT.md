@@ -1,5 +1,53 @@
 # CODEX — RELEASE BLOCKER CLOSURE WITHOUT DEPLOYMENT
 
+## Migration-chain reconciliation update - 2026-10-14
+
+This update supersedes older migration sequence and Git-state statements in
+this report. Audit of the main workspace, candidate worktree and fetched remote
+refs found a worktree/branch mismatch: local `main` held untracked 013-020,
+while the remote feature held 021/025/026 and the candidate held untracked
+023/024. Untracked files do not cross worktrees or appear in a clean clone.
+
+The reconciled feature chain is continuous and uniquely numbered 001-026:
+historical 013-020 were preserved byte-for-byte; 021 remains the V015 bridge;
+022 closes runtime direct DML; 023/024 provide the payment ledger and cash/replay
+repair; 025 installs atomic creation; and 026 installs reservation provenance
+plus atomic cancellation. The two root-worktree `.sql.draft` proposals are
+superseded and excluded from every runner.
+
+Operator evidence says 001-020 are applied with 020 latest. No staging or
+production ledger/catalog was accessed, so applied state there remains
+`UNKNOWN`. Clean-checkout disposable replay and release-gate evidence for this
+chain are recorded in the final batch handoff. Staging and production remain
+`NO-GO` until the ledger, preflight, backup/restore, owners, maintenance window
+and staging smoke requirements in `DATABASE_MIGRATION_RUNBOOK.md` are complete.
+
+### Clean-checkout evidence for the reconciled chain
+
+- Audited refs before this batch: local `main` at
+  `1c51af625a575a41733d59b29cc9be9ae0892c60`; `origin/main` at
+  `9fdfc7011ca100facb5203800c10247155c7ab05`; candidate and remote feature at
+  `f469b90f9593deaefa7e69059b1a7bbfa0f74940`.
+- A clean tree exported from the prospective commit index contained exactly 26
+  numbered SQL migrations. Fresh disposable PostgreSQL 18.6 replayed 001-020,
+  the read-only detector returned `V015`, then replayed 021-026 and returned
+  `V025`. All migration commands exited 0.
+- Focused migration/create/payment/cancel tests: 39 passed, 0 failed, 0 skipped,
+  exit 0. Full clean suite: 135 passed, 0 failed, 0 skipped, exit 0.
+- `next typegen`: exit 0. `tsc --noEmit`: exit 0. Next.js 16.3.5 production
+  build: exit 0, 48/48 static pages. Missing Supabase environment variables
+  were logged by guarded static data fetches but did not fail the build.
+- ESLint: exit 1 with 270 errors and 192 warnings; both added test files have
+  0 errors and 0 warnings. No rule was disabled and no auto-fix was run.
+- Staged `git diff --check`: exit 0. Targeted staged-diff secret patterns and
+  prohibited-license strings: 0 matches. `gitleaks` is not installed.
+- No staging/production database, deployment, main merge, legacy `.tmp`
+  PostgreSQL process, reset, stash, clean or force-push was used.
+
+The migration chain itself is proven on a clean checkout. This removes the
+chain-completeness merge blocker, but the repository-wide lint gate remains
+non-zero and release remains `NO-GO` pending target-environment evidence.
+
 ## Final migration reconciliation addendum (authoritative)
 
 This addendum supersedes older migration-state statements later in this report.
