@@ -3,8 +3,17 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 import type { Voucher } from "../src/types/database";
 
+const SRC_ROOT = new URL("../src/", import.meta.url).href;
 const hooksSource = `
 export async function resolve(specifier, context, nextResolve) {
+  if (specifier.startsWith("@/")) {
+    const sub = "./" + specifier.slice(2);
+    try {
+      return await nextResolve(sub, { ...context, parentURL: "${SRC_ROOT}" });
+    } catch {
+      return nextResolve(sub + ".ts", { ...context, parentURL: "${SRC_ROOT}" });
+    }
+  }
   try {
     return await nextResolve(specifier, context);
   } catch (err) {
