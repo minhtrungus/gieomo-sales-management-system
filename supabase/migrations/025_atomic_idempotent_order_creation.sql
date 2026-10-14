@@ -328,7 +328,17 @@ BEGIN
        OR v_subtotal < v_voucher.min_order_value THEN
       RAISE EXCEPTION 'D3:VOUCHER_UNAVAILABLE';
     END IF;
-    IF v_voucher.discount_type = 'percentage' THEN
+    -- Voucher semantics must stay identical to src/lib/pricing.ts computePricing:
+    --   freeship     -> shipping waived, no amount discount
+    --   percentage   -> share of the subtotal
+    --   fixed_amount -> amount off the subtotal (never more than the subtotal)
+    -- discount_type is compared as text so the statement stays valid on
+    -- environments whose discount_type enum does not (yet) contain 'freeship'
+    -- (value added by dashboard-only migration 014).
+    IF v_voucher.discount_type::text = 'freeship' THEN
+      v_discount := 0;
+      v_shipping_fee := 0;
+    ELSIF v_voucher.discount_type::text = 'percentage' THEN
       v_discount := round(v_subtotal * least(100, greatest(0, v_voucher.discount_value)) / 100);
     ELSE
       v_discount := least(v_subtotal, greatest(0, v_voucher.discount_value));

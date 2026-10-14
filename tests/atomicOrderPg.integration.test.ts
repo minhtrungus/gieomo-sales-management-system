@@ -108,6 +108,13 @@ test("Decision 3 atomic order PostgreSQL contract", { skip: !databaseUrl, timeou
     ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value;
   `);
 
+  // Test-only setup. The tracked migration chain (001-012, 021, 025) keeps
+  // discount_type = ('percentage','fixed_amount'); the 'freeship' label comes
+  // from dashboard-only migration 014, which is deliberately not part of the
+  // tracked chain. Disposable test databases therefore add it explicitly so
+  // the freeship pricing contract below can be exercised.
+  query(`ALTER TYPE public.discount_type ADD VALUE IF NOT EXISTS 'freeship';`);
+
   await t.test("creates one complete order using server prices", () => {
     const item = createCatalog("valid");
     const request = payload({ label: `valid-${randomUUID()}`, variantId: item.variantId });
@@ -233,6 +240,47 @@ test("Decision 3 atomic order PostgreSQL contract", { skip: !databaseUrl, timeou
       query(`SELECT subtotal || '|' || shipping_fee || '|' || voucher_discount || '|' || final_amount FROM public.orders WHERE idempotency_key=${literal(request.key)}::uuid;`),
       "90000|25000|0|115000"
     );
+  });
+
+  await t.test("freeship voucher waives shipping and invents no monetary discount", () => {
+    const item = createCatalog("freeship");
+    const code = `D3-${randomUUID()}`;
+    query(`INSERT INTO public.vouchers(code,discount_type,discount_value,usage_limit,status) VALUES (${literal(code)},'freeship',1,5,'active');`);
+    const request = payload({ label: `freeship-${randomUUID()}`, variantId: item.variantId, voucherCode: code });
+
+    const created = JSON.parse(query(rpc(request.value)));
+    assert.equal(created.outcome, "created");
+    assert.equal(created.replayed, false);
+    // 90000 subtotal + 0 shipping (freeship) - 0 discount (freeship has no
+    // monetary reduction). Treating freeship as fixed_amount would instead
+    // produce 90000 + 25000 - 1 = 114999.
+    assert.equal(created.final_amount, 90000);
+    assert.equal(
+      query(`SELECT subtotal || '|' || shipping_fee || '|' || voucher_discount || '|' || final_amount FROM public.orders WHERE idempotency_key=${literal(request.key)}::uuid;`),
+      "90000|0|0|90000"
+    );
+    assert.equal(orderCounts(request.key), "1|1|1|1|1");
+    assert.equal(query(`SELECT stock FROM public.product_variants WHERE variant_id=${literal(item.variantId)}::uuid;`), "19");
+    assert.equal(query(`SELECT times_used FROM public.vouchers WHERE code=${literal(code)};`), "1");
+
+    const replay = JSON.parse(query(rpc(request.value)));
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.order_id, created.order_id);
+    assert.equal(replay.final_amount, created.final_amount);
+    assert.equal(orderCounts(request.key), "1|1|1|1|1");
+    assert.equal(query(`SELECT stock FROM public.product_variants WHERE variant_id=${literal(item.variantId)}::uuid;`), "19");
+    assert.equal(query(`SELECT times_used FROM public.vouchers WHERE code=${literal(code)};`), "1");
+  });
+
+  await t.test("failed freeship order rolls back usage and inventory", () => {
+    const item = createCatalog("freeship-fail", 0);
+    const code = `D3-${randomUUID()}`;
+    query(`INSERT INTO public.vouchers(code,discount_type,discount_value,usage_limit,status) VALUES (${literal(code)},'freeship',1,5,'active');`);
+    const request = payload({ label: `freeship-fail-${randomUUID()}`, variantId: item.variantId, voucherCode: code });
+    assert.throws(() => query(rpc(request.value)));
+    assert.equal(orderCounts(request.key), "0|0|0|0|0");
+    assert.equal(query(`SELECT stock FROM public.product_variants WHERE variant_id=${literal(item.variantId)}::uuid;`), "0");
+    assert.equal(query(`SELECT times_used FROM public.vouchers WHERE code=${literal(code)};`), "0");
   });
 
   await t.test("combo without a component variant fails closed", () => {
