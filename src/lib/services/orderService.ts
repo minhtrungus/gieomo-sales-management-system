@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSystemSettingsServer } from "@/lib/services/configService";
 import { createOrderProofToken } from "@/lib/auth/serverAuth";
 import { computePricing, isVoucherApplicable, type PricingVoucher } from "@/lib/pricing";
+import { validateOrderCreateLines } from "@/lib/orderCreateInput";
 
 /**
  * Server-Side Order Creation with Complete Price, Voucher, and Inventory Integrity.
@@ -214,6 +215,11 @@ export async function createOrderServer(orderInput: {
   proofToken?: string;
   error?: string;
 }> {
+  const lineValidation = validateOrderCreateLines(orderInput);
+  if (!lineValidation.ok) {
+    return { success: false, error: lineValidation.error };
+  }
+
   let voucherSlotHeld = false;
   let reservedVoucherId: string | null = null;
   let voucherSupabase: ReturnType<typeof createAdminClient> | null = null;
@@ -243,10 +249,6 @@ export async function createOrderServer(orderInput: {
       return { success: false, error: "Số điện thoại người nhận không hợp lệ (cần từ 9 - 11 chữ số)" };
     }
 
-    if (!orderInput.items || !Array.isArray(orderInput.items) || orderInput.items.length === 0) {
-      return { success: false, error: "Giỏ hàng không có sản phẩm nào để đặt" };
-    }
-
     // 2. Fetch Actual Products, Variants & Combos from Database to Re-calculate Subtotal
     let calculatedSubtotal = 0;
     const verifiedOrderItems: Array<{
@@ -262,8 +264,8 @@ export async function createOrderServer(orderInput: {
       actualStock: number;
     }> = [];
 
-    for (const item of orderInput.items) {
-      const qty = Math.max(1, Math.min(99, Math.floor(Number(item.quantity) || 1)));
+    for (const item of lineValidation.items) {
+      const qty = item.quantity;
 
       // Combo item
       if (item.combo_id) {
@@ -847,6 +849,10 @@ function maskAddressStr(addr?: string | null): string {
   return `***, ${parts.slice(1).join(",").trim()}`;
 }
 
+export function canExposeOrderPaymentProof(isAdmin: boolean, hasPhoneVerification: boolean): boolean {
+  return isAdmin || hasPhoneVerification;
+}
+
 /**
  * Fetch orders from Supabase.
  * - Admin: Full access with unmasked PII.
@@ -970,7 +976,7 @@ export async function getOrdersServer(options?: {
         internal_note: isAdmin ? row.internal_note : undefined,
         payment_proof: (() => {
           const parsed = row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] || null;
-          return (isAdmin || options?.code) ? parsed : undefined;
+          return canExposeOrderPaymentProof(isAdmin, hasPhoneVerification) ? parsed : undefined;
         })(),
         has_payment_proof: Boolean(
           row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] ||
