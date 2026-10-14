@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Worktree:** `C:\Users\MT\Workspaces\gieomo-sales-management-system-worktrees\integrated-candidate`
 **Branch:** `integrated/r1-recon-p0a3-security`
-**Conclusion:** `NO-GO — CODE BLOCKERS` (PostgreSQL evidence also not yet produced; see §7–§9)
+**Conclusion:** `READY FOR STAGING VALIDATION` (evidence in §11; earlier checkpoint verdicts in §10 and below are superseded)
 
 ---
 
@@ -135,3 +135,96 @@ Zero migrations were applied to this cluster (001–012, 023, 024, 025 all unapp
 - Staging/production migration history for 023/024/025 remains unknown. No staging or production database was queried or changed.
 
 **Conclusion: `NO-GO — CODE BLOCKERS`.** Database atomicity, concurrency, rollback, and replay are proven locally, but POS integration, legacy code/tests, full-suite failures, and the isolated build rerun remain open. This is not production-ready or `READY FOR STAGING VALIDATION`.
+
+---
+
+## 11. Blocker-closure continuation — 2026-10-14 (OpenCode)
+
+### 11.1 Git state
+
+- Start of this session: local HEAD = remote = `83665d63eaead93cdeae50fa16c404b56d4fc629`; no stash; ~65 pre-existing dirty/untracked entries from other workstreams (payment, reconciliation, PII, security, docs). None of them were staged, edited, reverted, or deleted.
+
+| Commit | Message | Files |
+|---|---|---|
+| `c18f193` | fix(tests): resolve @/ path alias in orderStore voucher loader | `tests/orderStore.voucher.test.ts` |
+| `e2abe90` | refactor(orders): remove unused legacy order creation path | `src/lib/services/orderService.ts` (−616) |
+| `d47862e` | test(orders): rewrite voucher reservation suite against atomic RPC contract | `tests/voucherReservation.test.ts` |
+| `c5cf8ff` | fix(db): freeship vouchers waive shipping inside create_order_atomic | `supabase/migrations/025_atomic_idempotent_order_creation.sql`, `tests/atomicOrderPg.integration.test.ts` |
+| `39fd344` | feat(orders): POS advances only after the atomic RPC commits the order | `src/app/admin/orders/pos/page.tsx` (D3-only), `tests/orderSubmitGuards.test.ts` (new), `tests/orderStoreOrderSync.test.ts` |
+
+- `git ls-remote origin refs/heads/integrated/r1-recon-p0a3-security` after push = `39fd3440400bd5daf249cc9c034cd3158ef138df` = local HEAD. No force push; `main`/`master` untouched.
+- `src/app/admin/orders/pos/page.tsx` and `tests/orderSubmitGuards.test.ts` were staged **index-only** from hand-built blobs (`git hash-object -w --path …` + `git update-index --cacheinfo`) because their working-tree versions contain unrelated payment work. The committed POS page was verified free of `paymentConfirm` / `confirmCashPayment`; the payment version remains uncommitted. The working tree was restored byte-identical (SHA-256 checked) after the temporary swap used for verification.
+
+### 11.2 POS — P0 closed
+
+Committed POS checkout handler now:
+
+- is `async`, guards re-entry (`if (isSubmitting) return;`) and releases the guard in `finally`;
+- calls `await saveNewOrder(newOrder, { idempotencyFlow: "admin-pos-order" })` — a stable, POS-specific attempt key, so a timeout retry reuses the same key;
+- branches on `if (!result.ok)` and renders the server's own error text in a `role="alert"` banner instead of advancing;
+- adopts `result.orderId` / `result.orderCode` / `result.finalAmount` (client placeholders are used only if the server omits them) and rewrites item `order_id`/`order_item_id` to match;
+- advances `setLastCompletedOrder` / the VietQR modal only after the commit, using the committed code, id and amount;
+- disables both submit buttons while in flight.
+
+HEAD cash semantics (`payment_status: paid` for cash) were kept: cash=paid synchronisation belongs to Decision 6 and its uncommitted payment workstream.
+
+Tests added:
+
+- `tests/orderSubmitGuards.test.ts` (new, committed as a Decision-3-only subset via index-only staging; the working tree also holds an unrelated F6/`orderUi` block from another workstream that is deliberately not committed here) — POS source invariants (server identity adoption, no advance before the failure branch, server error text surfaced), admin/sale guard patterns, and the `saveNewOrder` response.ok contract.
+- `tests/orderStoreOrderSync.test.ts` — new behavioural test: an HTTP 409 (hash/conflict) and an HTTP 500 both return `ok:false`, write nothing to the local order cache, keep the attempt key, reuse the same key on retry, and surface the server message.
+
+### 11.3 Legacy path removed
+
+`createOrderServerLegacy` (614 lines) and its now-unused imports were deleted in `e2abe90`. `npx tsc --noEmit` exit 0 immediately afterwards.
+
+### 11.4 Loader and voucher suites
+
+- `tests/orderStore.voucher.test.ts`: `@/` resolver added to the loader hooks → **8/8 pass**.
+- `tests/voucherReservation.test.ts`: the eight legacy multi-write tests were converted to the atomic RPC contract (FakeWorld `rpcHandler` + `rpcCalls`, `createAdminClient` that throws `"database access must not occur"` when no fake world is installed, `atomicInput()` carrying `idempotency_key`) → **18/18 pass**. T1–T6 (CAS reserve/release primitives) are unchanged and still pass; `reserveVoucherSlot` has no remaining `src` caller and is kept only because it is exported and covered by T1–T6.
+
+### 11.5 Freeship pricing contract
+
+- Divergence confirmed: `src/lib/pricing.ts computePricing` implements `freeship` as shipping 0 / discount 0, while the RPC fell through to the `fixed_amount` branch (`discount_value` is stored as `1` for freeship) and still charged shipping.
+- Fix in migration 025 (undeployed, branch-only): a dedicated `freeship` branch sets `v_discount := 0` and `v_shipping_fee := 0`. `discount_type` is compared as `::text`, so the statement stays valid on environments whose enum does not contain `freeship`.
+- No enum value was added to 025 (that would contradict the dashboard-only 013–020 policy). The PostgreSQL test adds `ALTER TYPE public.discount_type ADD VALUE IF NOT EXISTS 'freeship'` as documented test-only setup, mirroring untracked migration 014.
+- `max_discount_amount` is never written by the application (`buildVoucherPayload` excludes it; the voucher route test asserts that exclusion), so the RPC's lack of a cap is theoretical only — documented, not changed.
+
+### 11.6 PostgreSQL evidence (disposable cluster only)
+
+- Cluster: `C:\Users\MT\AppData\Local\Temp\codex-d3-pg-20261014-1430\data`, PostgreSQL 18.6 x86_64-windows, `127.0.0.1:55434`, trust auth. Identity verified with `show data_directory` and `SELECT version()`. Migrations 001–012 + 021 + 025 (+ 023/024 from the payment workstream) were already applied; migration 025 was re-applied from the edited file with exit 0, and the live `create_order_atomic` was verified to contain the new freeship branch. No staging or production database was contacted.
+
+| Suite | Result |
+|---|---|
+| `tests/atomicOrderPg.integration.test.ts` | **16/16 pass, 0 skip** (includes the 2 new freeship tests) |
+| `tests/paymentCashPg.integration.test.ts` | **11/11 pass, 0 skip** |
+| `tests/cancelVoucherRelease.test.ts` | **9/9 pass, 0 skip** |
+
+Freeship assertions: order row `90000|0|0|90000` (`subtotal|shipping_fee|voucher_discount|final_amount`) — no invented monetary discount, shipping waived; an idempotent replay returns the same `order_id` and `final_amount` with stock and `times_used` unchanged; a failed freeship order leaves `0|0|0|0|0` rows, stock and `times_used` untouched. Treating `freeship` as `fixed_amount` would have produced `114999` and fails the assertion.
+
+### 11.7 Full verification
+
+| Command | Result |
+|---|---|
+| Full suite `node --test "tests/*.test.ts"` with `ATOMIC_PG_URL` set | **266 tests, 266 pass, 0 fail, 0 skipped**, exit 0 (baseline before this session: 232 tests / 9 fail / 2 skipped) |
+| Committed-tree suite (detached `git worktree` at `39fd344`, junction to the shared `node_modules`, `ATOMIC_PG_URL` set) | **111 tests, 111 pass, 0 fail, 0 skipped** |
+| Focused application tests | 38/38 pass |
+| `npx tsc --noEmit` | PASS (exit 0) |
+| `npx eslint` (whole project) | 447 problems (262 errors, 185 warnings) — all pre-existing, from other workstreams' dirty files |
+| `npx eslint` on Decision-3 files | 2 errors + 2 warnings, all pre-existing at HEAD (`orderService.ts:442,489` `row: any` / `it: any`; `voucherReservation.test.ts:485` unused vars in untouched T5). The two `as any` casts inside the new guards test were replaced with `Parameters<typeof saveNewOrder>[0]` before commit. |
+| `git diff --check` and `git diff --cached --check` | clean (exit 0) |
+
+### 11.8 Isolated build
+
+- In-worktree `npx next build` **fails** with `TurbopackInternalError: Symlink [project]/node_modules is invalid, it points out of the filesystem root`. The worktree's `node_modules` is a **junction** to `C:\Users\MT\Workspaces\gieomo-sales-management-system\node_modules`, i.e. outside the Turbopack project root. This is an environment/tooling limitation, not a source failure.
+- Isolated run: the worktree was copied to `%TEMP%\opencode\d3build` with a real `node_modules` directory (copy, not a link; the shared `node_modules` was not modified) and `npx next build` was run there with the default Turbopack bundler: **exit 0** — "Compiled successfully in 23.0s", TypeScript phase finished, 49/49 static pages generated, all routes present including `/admin/orders/pos`. Two `Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL` messages appear during static generation because the repository contains no `.env*` files at all; they are a credentials artifact of the isolated copy, not a build failure. No dependency or lockfile change was made.
+
+### 11.9 Still unverified
+
+- Migration history on **staging and production** for 013–020 (dashboard-only by policy), 021–022 (drafts), 023, 024 and 025. This cannot be established from the repository and must be confirmed as the first step of staging validation.
+- ~70 working-tree entries from other workstreams remain uncommitted, including the POS payment version, `src/lib/paymentConfirm.ts`, payment hunks in `src/lib/data/orderStore.ts` and `src/app/api/orders/route.ts`, `tests/cancelVoucherRelease.test.ts`, migrations 023/024 and the F6/`orderUi` block inside `tests/orderSubmitGuards.test.ts`. They belong to those workstreams and were left untouched.
+
+### 11.10 Verdict
+
+**`READY FOR STAGING VALIDATION`.**
+
+All Decision-3 code blockers are closed: order creation goes through a single atomic RPC; the POS, admin, sale and public call sites only advance after the committed server result; the legacy multi-write path is gone; the voucher suites test the atomic contract; freeship pricing now matches the application; the full suite, an isolated production build and the TypeScript check are green; and PostgreSQL atomicity, concurrency, replay, rollback and freeship-pricing evidence is real rather than mocked. The remaining unknowns are deployment-side (migration history on staging/production) and belong to staging validation, not to this code blocker closure.
