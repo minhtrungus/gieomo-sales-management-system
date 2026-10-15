@@ -72,7 +72,7 @@ export default function AdminVouchersPage() {
   const [minItemsCount, setMinItemsCount] = useState<number>(0);
   const [isGiftVoucher, setIsGiftVoucher] = useState<boolean>(false);
   const [giftMinOrderValue, setGiftMinOrderValue] = useState<number>(150000);
-  const [usageLimit, setUsageLimit] = useState<number>(50);
+  const [usageLimit] = useState<number>(50);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [status, setStatus] = useState<"active" | "inactive">("active");
 

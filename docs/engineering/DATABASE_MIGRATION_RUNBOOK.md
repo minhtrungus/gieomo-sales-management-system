@@ -1,10 +1,10 @@
 # DATABASE MIGRATION RUNBOOK
 
-## Authoritative 001-026 reconciliation - 2026-10-14
+## Authoritative 001-027 reconciliation - 2026-10-15
 
 This section supersedes every older sequence or Git-state statement below it.
 The feature branch now carries exactly one executable `.sql` migration for each
-number from 001 through 026. Migrations 001-020 are the immutable historical
+number from 001 through 027. Migrations 001-020 are the immutable historical
 baseline. The operator reports that 001-020 were applied and that 020 is the
 latest applied migration; this is operator evidence, not a verified database
 ledger. Staging and production remain `UNKNOWN` until their owners export both
@@ -12,7 +12,7 @@ the migration ledger and the catalog checks required by the preflight.
 
 The pending order for an exact post-020/V015 target is:
 
-`021_reconcile_v015_idempotency.sql -> 022_revoke_runtime_order_dml.sql -> 023_payment_integrity.sql -> 024_repair_payment_cash_contract.sql -> 025_atomic_idempotent_order_creation.sql -> 026_atomic_order_cancellation.sql`
+`021_reconcile_v015_idempotency.sql -> 022_revoke_runtime_order_dml.sql -> 023_payment_integrity.sql -> 024_repair_payment_cash_contract.sql -> 025_atomic_idempotent_order_creation.sql -> 026_atomic_order_cancellation.sql -> 027_close_runtime_read_and_rpc_bypasses.sql`
 
 | Range | Classification | Dependency / purpose |
 |---|---|---|
@@ -24,6 +24,7 @@ The pending order for an exact post-020/V015 target is:
 | 024 | required, pending | requires 023 `apply_payment_event(jsonb)`; repairs its cash/replay contract |
 | 025 | required, pending | requires the exact V025 prerequisite emitted by 021; installs atomic creation |
 | 026 | required, pending | requires 025 writer/schema; adds reservation provenance and atomic cancellation |
+| 027 | required, pending | requires 021-026; removes authenticated PII reads, legacy stock-RPC execution and permissive future-object defaults |
 | `proposals/021_*.draft` | superseded draft; never run | numbering collided with 021; its security intent is implemented by 022 |
 | `proposals/022_*.draft` | superseded draft; never run | inbound-event design is reconciled into 023/024 |
 
@@ -38,7 +39,7 @@ The pending order for an exact post-020/V015 target is:
 5. Run `supabase/013_025_read_only_preflight.sql` with `psql -X -v
    ON_ERROR_STOP=1 -f ...`. It must report the expected V015/post-020 shape.
    Stop on `MIXED`, `UNKNOWN`, missing 019/020 objects, or unexpected objects.
-6. On disposable PostgreSQL, replay 001-026 from the clean approved commit and
+6. On disposable PostgreSQL, replay 001-027 from the clean approved commit and
    run the real-PG create, payment and cancellation suites without skips.
 
 Example disposable validation (never point this block at staging/production):
@@ -48,10 +49,10 @@ $env:ATOMIC_PG_URL = '<disposable-postgres-url>'
 Get-ChildItem supabase/migrations -File -Filter '*.sql' |
   Sort-Object Name |
   ForEach-Object { & psql.exe -X -v ON_ERROR_STOP=1 -d $env:ATOMIC_PG_URL -f $_.FullName }
-node --test tests/migrationChain.test.ts tests/atomicOrderPg.integration.test.ts tests/paymentCashPg.integration.test.ts tests/cancelOrderAtomicPg.integration.test.ts
+node --test tests/migrationChain.test.ts tests/migrationSecurityPg.integration.test.ts tests/atomicOrderPg.integration.test.ts tests/paymentCashPg.integration.test.ts tests/cancelOrderAtomicPg.integration.test.ts tests/sepayWebhookAuth.test.ts
 ```
 
-After apply, verify the ledger contains 021-026 once and in order; rerun the
+After apply, verify the ledger contains 021-027 once and in order; rerun the
 preflight and verify V025; inspect runtime grants/policies; then run COD,
 banking, duplicate-delivery, create replay, concurrent create/cancel, voucher,
 combo-reservation, paid-cancel/refund-required and rollback smoke tests.

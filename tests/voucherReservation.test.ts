@@ -482,7 +482,7 @@ test("T5 — CAS thua 1 lần rồi thắng → retry, ok=true", async () => {
   let incCalls = 0;
   const ops = makeOps({
     readSnapshot: async () => ({ row: { times_used: 3, usage_limit: 10 }, error: null }),
-    casIncrement: async (_id, snapshot) => {
+    casIncrement: async () => {
       incCalls++;
       return incCalls === 1 ? { rowsAffected: 0, error: null } : { rowsAffected: 1, error: null };
     },

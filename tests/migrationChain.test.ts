@@ -31,13 +31,21 @@ const expected = [
   "024_repair_payment_cash_contract.sql",
   "025_atomic_idempotent_order_creation.sql",
   "026_atomic_order_cancellation.sql",
+  "027_close_runtime_read_and_rpc_bypasses.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 026", () => {
+test("the migration chain has exactly one SQL file for 001 through 027", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();
   assert.deepEqual(actual, expected);
+});
+
+test("migration 027 closes authenticated reads and the legacy stock RPC", () => {
+  const sql = readFileSync(join(migrationDirectory, expected[26]), "utf8");
+  assert.match(sql, /REVOKE SELECT ON public\.orders FROM anon, authenticated/);
+  assert.match(sql, /deduct_variant_stock_atomic\(UUID, INTEGER\)/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
 });
 
 test("migration 022 closes direct runtime order writes", () => {

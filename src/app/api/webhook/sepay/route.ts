@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+function apiKeysMatch(provided: string, configured: string): boolean {
+  const providedDigest = createHash("sha256").update(provided, "utf8").digest();
+  const configuredDigest = createHash("sha256").update(configured, "utf8").digest();
+  return timingSafeEqual(providedDigest, configuredDigest);
+}
 
 export async function POST(request: Request) {
   try {
@@ -7,23 +14,23 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get("authorization") || request.headers.get("x-api-key") || "";
     const configuredApiKey = (process.env.SEPAY_API_KEY || "").trim();
 
-    if (configuredApiKey) {
-      const token = authHeader.replace(/^(Apikey|Bearer|apikey)\s+/i, "").trim();
-      if (!token || token !== configuredApiKey) {
-        console.warn(`[SePay Webhook] 401 Unauthorized: Received token '${token}'`);
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Unauthorized: Invalid or missing SePay API Key",
-          },
-          { status: 401 }
-        );
-      }
-    } else if (process.env.NODE_ENV === "production") {
+    if (!configuredApiKey) {
       console.error("[SePay Webhook] SEPAY_API_KEY environment variable is missing in production.");
       return NextResponse.json(
         { success: false, error: "Server Misconfiguration: SEPAY_API_KEY not configured" },
         { status: 500 }
+      );
+    }
+
+    const token = authHeader.replace(/^(Apikey|Bearer|apikey)\s+/i, "").trim();
+    if (!token || !apiKeysMatch(token, configuredApiKey)) {
+      console.warn("[SePay Webhook] 401 Unauthorized: invalid or missing token.");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized: Invalid or missing SePay API Key",
+        },
+        { status: 401 }
       );
     }
 

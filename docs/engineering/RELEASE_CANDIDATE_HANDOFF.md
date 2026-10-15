@@ -1,5 +1,30 @@
 # RELEASE CANDIDATE HANDOFF
 
+## 2026-10-15 PR-review addendum (authoritative)
+
+- Starting feature/remote HEAD was verified at `7c95b22fb0f01194319519cf9320f6f52875568f`;
+  `origin/main` remained `9fdfc7011ca100facb5203800c10247155c7ab05`.
+- The recorded 7c95b22 artifact passed 135/135 tests. This review adds eight
+  security assertions; the prospective clean artifact passes 143/143, with all
+  PostgreSQL integration tests configured and 0 skipped.
+- Fresh disposable PostgreSQL 18.6 replayed 001-027 with exit 0; preflight
+  reported `V025`. Migration 027 additively closes authenticated PII reads,
+  legacy stock-RPC execution, and permissive future-object defaults discovered
+  during catalog review of 021-026.
+- Next typegen and TypeScript exit 0. Production build exits 0 with 48/48 static
+  pages. ESLint still fails: 270 errors/188 warnings versus `origin/main`
+  278/188; full findings are in `CODEX_PR_ESLINT_FINDINGS.csv`.
+- No real database migration ledger/catalog was obtained. Operator confirmation
+  of 001-020 is not equivalent to ledger evidence; staging and production are
+  still `UNKNOWN`/`NO-GO`.
+- Draft PR/code review is allowed after commit and push. Merge remains blocked
+  on lint disposition and review; staging additionally requires ledger/schema,
+  backup/restore, execution/rollback owners, configuration and smoke evidence.
+
+This addendum supersedes older test counts, sequence, ACL and readiness claims
+below where they conflict.
+
+
 ## 2026-10-14 clean-chain reconciliation (supersedes older sequence text)
 
 - The feature now contains one migration per number for 001-026. The pending
