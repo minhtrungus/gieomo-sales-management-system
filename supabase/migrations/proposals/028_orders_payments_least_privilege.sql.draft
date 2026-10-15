@@ -1,0 +1,251 @@
+-- ========================================================
+-- GIEO MO - DATABASE MIGRATION 028 (DRAFT - proposals/ only, NOT auto-applied)
+-- Least-privilege close for order-domain tables
+-- ========================================================
+-- Migration 022 revoked INSERT/UPDATE/DELETE and migration 027 revoked
+-- SELECT for anon and authenticated on customers, orders, order_items,
+-- payments and order_status_history. NEITHER migration - nor any migration
+-- in 001-027 - ever revoked TRUNCATE, TRIGGER or REFERENCES on those
+-- tables, and 002:16 granted ALL ON ALL SEQUENCES (order_code_seq) which
+-- no migration revokes for existing objects (027 only closes future
+-- defaults via ALTER DEFAULT PRIVILEGES). Operator Production evidence
+-- (2026-10-15) confirms anon/authenticated still hold TRUNCATE and TRIGGER
+-- on orders/payments plus the 013-era permissive INSERT/SELECT policies,
+-- because 021-027 are not applied there yet.
+--
+-- RLS does NOT apply to TRUNCATE: a retained TRUNCATE grant lets any
+-- holder wipe orders/payments outright (P0 data destruction).
+--
+-- The application never uses runtime roles: every src/ caller of
+-- .from("orders") / .from("payments") uses createAdminClient (service
+-- role); src/lib/supabase/client.ts and server.ts have zero importers.
+-- Static guard: tests/ordersPaymentsLeastPrivilege.test.ts.
+--
+-- STATUS: DRAFT. Apply only after, in order on the same target:
+--   [ ] migrations 021-027 applied and supabase_migrations ledger verified
+--   [ ] operator approval (revokes platform-held grants on live tables)
+--   [ ] disposable-DB replay 001-028 + node --test (incl. the two
+--       ordersPayments* test files) all green
+--   [ ] backup taken and restore path verified
+-- ROLLBACK / FORWARD-FIX: see end of file.
+-- ========================================================
+
+-- 1. TABLE-LEVEL: revoke the complete privilege surface (ALL = SELECT,
+--    INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER) from runtime
+--    roles on the order domain. Idempotent; REVOKE of an absent privilege
+--    is a no-op, not an error.
+REVOKE ALL ON public.customers FROM anon, authenticated;
+REVOKE ALL ON public.orders FROM anon, authenticated;
+REVOKE ALL ON public.order_items FROM anon, authenticated;
+REVOKE ALL ON public.payments FROM anon, authenticated;
+REVOKE ALL ON public.order_status_history FROM anon, authenticated;
+
+-- 2. COLUMN-LEVEL: Production evidence shows column-level INSERT grants
+--    on orders/payments sensitive columns (status, amount, cancel
+--    timestamps). Table-level REVOKE above removes derived column access,
+--    but explicit column ACL entries are stored separately - sweep them.
+DO $$
+DECLARE
+  v_rec record;
+BEGIN
+  FOR v_rec IN
+    SELECT c.table_name, c.column_name
+    FROM information_schema.columns c
+    WHERE c.table_schema = 'public'
+      AND c.table_name IN ('orders', 'payments')
+  LOOP
+    EXECUTE format(
+      'REVOKE ALL PRIVILEGES (%I) ON public.%I FROM anon, authenticated',
+      v_rec.column_name,
+      v_rec.table_name
+    );
+  END LOOP;
+END $$;
+
+-- 3. SEQUENCES: 002:16 granted ALL ON ALL SEQUENCES to anon/authenticated;
+--    order_code_seq (001:397) is the order-code generator and no prior
+--    migration revokes the existing grant. Runtime roles must not call
+--    nextval() on it (order-code prediction / gap injection).
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+
+-- 4. POLICIES: re-assert the drops from 013-era permissive policies
+--    (022/027 already drop them; IF EXISTS keeps this idempotent when 028
+--    runs after them and still closes the surface if run standalone).
+DROP POLICY IF EXISTS "Public insert customers" ON public.customers;
+DROP POLICY IF EXISTS "Authenticated read customers" ON public.customers;
+DROP POLICY IF EXISTS "Public insert orders" ON public.orders;
+DROP POLICY IF EXISTS "Authenticated read orders" ON public.orders;
+DROP POLICY IF EXISTS "Public insert order_items" ON public.order_items;
+DROP POLICY IF EXISTS "Authenticated read order_items" ON public.order_items;
+DROP POLICY IF EXISTS "Public insert payments" ON public.payments;
+DROP POLICY IF EXISTS "Authenticated read payments" ON public.payments;
+DROP POLICY IF EXISTS "Public insert order_status_history" ON public.order_status_history;
+DROP POLICY IF EXISTS "Authenticated read order_status_history" ON public.order_status_history;
+
+-- 5. FAIL-CLOSED ASSERTIONS - the migration aborts (transaction rolls back)
+--    if any runtime privilege or permissive policy survives, or if
+--    service_role / RLS regressions are detected.
+
+-- 5a. No effective table privilege for runtime roles (all 7 types).
+DO $$
+DECLARE
+  v_table text;
+  v_priv text;
+  v_failures text[] := ARRAY[]::text[];
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY[
+    'customers', 'orders', 'order_items', 'payments', 'order_status_history'
+  ]
+  LOOP
+    FOREACH v_priv IN ARRAY ARRAY[
+      'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+    ]
+    LOOP
+      IF has_table_privilege('anon', format('public.%I', v_table), v_priv) THEN
+        v_failures := array_append(v_failures, 'anon:' || v_table || ':' || v_priv);
+      END IF;
+      IF has_table_privilege('authenticated', format('public.%I', v_table), v_priv) THEN
+        v_failures := array_append(v_failures, 'authenticated:' || v_table || ':' || v_priv);
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  IF cardinality(v_failures) > 0 THEN
+    RAISE EXCEPTION '028: runtime table privileges remain: %',
+      array_to_string(v_failures, ', ');
+  END IF;
+END $$;
+
+-- 5b. No effective column privilege on orders/payments for runtime roles.
+DO $$
+DECLARE
+  v_rec record;
+  v_role text;
+  v_priv text;
+  v_failures text[] := ARRAY[]::text[];
+BEGIN
+  FOR v_rec IN
+    SELECT c.table_name, c.column_name
+    FROM information_schema.columns c
+    WHERE c.table_schema = 'public'
+      AND c.table_name IN ('orders', 'payments')
+  LOOP
+    FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+      FOREACH v_priv IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'] LOOP
+        IF has_column_privilege(
+          v_role,
+          format('public.%I', v_rec.table_name),
+          v_rec.column_name,
+          v_priv
+        ) THEN
+          v_failures := array_append(
+            v_failures,
+            v_role || ':' || v_rec.table_name || '.' || v_rec.column_name || ':' || v_priv
+          );
+        END IF;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+
+  IF cardinality(v_failures) > 0 THEN
+    RAISE EXCEPTION '028: runtime column privileges remain: %',
+      array_to_string(v_failures, ', ');
+  END IF;
+END $$;
+
+-- 5c. Runtime roles cannot touch order_code_seq.
+DO $$
+DECLARE
+  v_role text;
+  v_priv text;
+  v_failures text[] := ARRAY[]::text[];
+BEGIN
+  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    FOREACH v_priv IN ARRAY ARRAY['USAGE', 'SELECT', 'UPDATE'] LOOP
+      IF has_sequence_privilege(v_role, 'public.order_code_seq', v_priv) THEN
+        v_failures := array_append(v_failures, v_role || ':order_code_seq:' || v_priv);
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  IF cardinality(v_failures) > 0 THEN
+    RAISE EXCEPTION '028: runtime sequence privileges remain: %',
+      array_to_string(v_failures, ', ');
+  END IF;
+END $$;
+
+-- 5d. No permissive policy for public/anon/authenticated on the order domain.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'customers', 'orders', 'order_items', 'payments', 'order_status_history'
+      )
+      AND (roles && ARRAY['public', 'anon', 'authenticated']::name[])
+  ) THEN
+    RAISE EXCEPTION
+      '028: permissive runtime policy remains on an order-domain table';
+  END IF;
+END $$;
+
+-- 5e. RLS stays enabled on the order domain (guards against a future
+--     "fix" that disables RLS instead of granting properly).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname IN (
+        'customers', 'orders', 'order_items', 'payments', 'order_status_history'
+      )
+      AND NOT c.relrowsecurity
+  ) THEN
+    RAISE EXCEPTION '028: RLS is disabled on an order-domain table';
+  END IF;
+END $$;
+
+-- 5f. Regression net: service_role keeps full DML on the tables the
+--     checkout RPC, admin routes and SePay webhook write to. If this
+--     fires, the revokes leaked onto service_role - do not deploy.
+DO $$
+DECLARE
+  v_table text;
+  v_priv text;
+  v_failures text[] := ARRAY[]::text[];
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY['orders', 'payments'] LOOP
+    FOREACH v_priv IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+      IF NOT has_table_privilege('service_role', format('public.%I', v_table), v_priv) THEN
+        v_failures := array_append(v_failures, 'service_role:' || v_table || ':' || v_priv);
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  IF cardinality(v_failures) > 0 THEN
+    RAISE EXCEPTION '028: service_role lost order-domain access: %',
+      array_to_string(v_failures, ', ');
+  END IF;
+END $$;
+
+-- ========================================================
+-- ROLLBACK / FORWARD-FIX
+-- ========================================================
+-- This migration only REMOVES runtime-role privileges and drops
+-- permissive policies; it creates no objects and mutates no rows. No
+-- application path depends on anon/authenticated access to these tables
+-- (statically enforced by tests/ordersPaymentsLeastPrivilege.test.ts).
+--
+-- If a legitimate runtime-role need is discovered after apply: do NOT
+-- edit or renumber this file. FORWARD-FIX with a new migration that
+-- re-grants the minimum (e.g. GRANT SELECT ON <specific table> TO ...)
+-- plus a scoped RLS policy (USING limited to non-PII columns), and extend
+-- assertions 5a-5d to carve out exactly that privilege. Emergency
+-- rollback of the whole migration is the inverse REVOKE->GRANT set from
+-- migrations 002/013 and requires operator sign-off - it reopens the P0
+-- exposure documented above.
+-- ========================================================
