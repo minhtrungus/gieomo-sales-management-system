@@ -434,7 +434,9 @@ export async function getOrdersServer(options?: {
     const { data, error } = await query;
     if (error) {
       console.error("[getOrdersServer] DB Error:", error);
-      return [];
+      // P0: throw instead of returning [] — an empty array is indistinguishable
+      // from "no orders", which makes API clients wipe locally cached orders.
+      throw new Error(`order_query_failed: ${error.message || "database error"}`);
     }
 
     const hasPhoneVerification = Boolean(options?.phone && options.phone.trim().length >= 9);
@@ -502,6 +504,8 @@ export async function getOrdersServer(options?: {
     });
   } catch (err) {
     console.error("[getOrdersServer] Exception:", err);
-    return [];
+    // P0: rethrow so the API route returns success:false and clients
+    // never treat a failed query as an empty order list.
+    throw err;
   }
 }

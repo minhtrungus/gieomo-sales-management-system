@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -52,23 +52,29 @@ function SaleCreateOrderForm() {
     };
   }, []);
 
+  const hasUserEditedItemsRef = useRef(false);
+  const appliedQueryProductRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (queryProductId && availableProducts.length > 0) {
-      const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
-      if (targetProd) {
-        const firstVar = targetProd.variants?.[0];
-        setOrderItems([
-          {
-            productId: targetProd.product_id,
-            variantId: firstVar?.variant_id,
-            name: targetProd.name,
-            variantName: firstVar?.name,
-            price: firstVar?.price || targetProd.price,
-            quantity: 1,
-          },
-        ]);
-      }
-    }
+    if (!queryProductId || availableProducts.length === 0) return;
+    // P0: never overwrite items the sale staff already edited,
+    // and never re-apply the same ?productId after the products re-sync.
+    if (hasUserEditedItemsRef.current) return;
+    if (appliedQueryProductRef.current === queryProductId) return;
+    const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
+    if (!targetProd) return;
+    const firstVar = targetProd.variants?.[0];
+    setOrderItems([
+      {
+        productId: targetProd.product_id,
+        variantId: firstVar?.variant_id,
+        name: targetProd.name,
+        variantName: firstVar?.name,
+        price: firstVar?.price || targetProd.price,
+        quantity: 1,
+      },
+    ]);
+    appliedQueryProductRef.current = queryProductId;
   }, [queryProductId, availableProducts]);
 
   // Buyer Information
@@ -123,6 +129,7 @@ function SaleCreateOrderForm() {
   const handleAddItem = () => {
     if (availableProducts.length === 0) return;
     const p = availableProducts[0];
+    hasUserEditedItemsRef.current = true;
     setOrderItems((prev) => [
       ...prev,
       {
@@ -136,6 +143,7 @@ function SaleCreateOrderForm() {
 
   const handleRemoveItem = (index: number) => {
     if (orderItems.length <= 1) return;
+    hasUserEditedItemsRef.current = true;
     setOrderItems((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -143,6 +151,7 @@ function SaleCreateOrderForm() {
     const selectedProd = availableProducts.find((p) => p.product_id === prodId);
     if (!selectedProd) return;
 
+    hasUserEditedItemsRef.current = true;
     setOrderItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
@@ -162,6 +171,7 @@ function SaleCreateOrderForm() {
   };
 
   const handleVariantChange = (index: number, variantId: string) => {
+    hasUserEditedItemsRef.current = true;
     setOrderItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
@@ -180,6 +190,7 @@ function SaleCreateOrderForm() {
   };
 
   const handleQuantityChange = (index: number, qty: number) => {
+    hasUserEditedItemsRef.current = true;
     setOrderItems((prev) =>
       prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, qty) } : item))
     );

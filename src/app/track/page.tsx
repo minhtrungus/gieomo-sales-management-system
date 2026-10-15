@@ -119,6 +119,7 @@ function TrackContent() {
             product_name_snapshot: it.product_name || it.item_name_snapshot || "Sản phẩm",
             item_name_snapshot: it.item_name_snapshot || it.product_name || "Sản phẩm",
             variant_name_snapshot: it.variant_name || it.variant_name_snapshot || null,
+            sku_snapshot: it.sku || it.sku_snapshot || null,
             price_snapshot: Number(it.price ?? it.unit_price) || 0,
             quantity: Number(it.quantity) || 1,
             subtotal:
@@ -136,6 +137,7 @@ function TrackContent() {
             product_name_snapshot: it.item_name_snapshot || "Sản phẩm",
             item_name_snapshot: it.item_name_snapshot || "Sản phẩm",
             variant_name_snapshot: it.variant_name_snapshot || null,
+            sku_snapshot: it.sku_snapshot || null,
             price_snapshot: Number(it.unit_price) || 0,
             quantity: Number(it.quantity) || 1,
             subtotal: Number(it.subtotal) || 0,
@@ -639,6 +641,9 @@ function TrackContent() {
                       </span>
                       {item.variant_name_snapshot && (
                         <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
+                      )}
+                      {item.sku_snapshot && (
+                        <span className="text-gray-400 text-[11px] block">Mã: {item.sku_snapshot}</span>
                       )}
                       <span className="text-gray-500 text-[11px]">
                         Số lượng: <strong>{item.quantity}</strong> • Đơn giá:{" "}

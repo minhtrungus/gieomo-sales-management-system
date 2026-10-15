@@ -162,6 +162,12 @@ export const useCartStore = create<CartState>()(
             return { removedCount: 0, updatedCount: 0 };
           }
 
+          // P0: If the catalog is not yet loaded (sync failed or still empty),
+          // do NOT wipe the cart. An empty catalog means "unknown", not "all deleted".
+          if (products.length === 0 && combos.length === 0) {
+            return { removedCount: 0, updatedCount: 0 };
+          }
+
           let removedCount = 0;
           let updatedCount = 0;
           const validItems: CartItem[] = [];
