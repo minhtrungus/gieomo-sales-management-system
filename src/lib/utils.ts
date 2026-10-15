@@ -106,6 +106,14 @@ export function cn(...classes: (string | boolean | undefined | null)[]): string 
 }
 
 /**
+ * Natural locale-aware comparison so embedded numbers sort numerically
+ * ("SP-2" < "SP-10") and Vietnamese names compare correctly.
+ */
+export function naturalCompare(a: string, b: string): number {
+  return String(a).localeCompare(String(b), "vi", { numeric: true, sensitivity: "base" });
+}
+
+/**
  * Debounce a function call.
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(

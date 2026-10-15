@@ -14,6 +14,7 @@ import {
   getAdminSession,
   type AdminSession,
 } from "@/lib/data/orderStore";
+import { naturalCompare } from "@/lib/utils";
 import type { Order, OrderItem, DeliveryType } from "@/types/database";
 import {
   ArrowLeft,
@@ -197,6 +198,10 @@ function SaleCreateOrderForm() {
   };
 
   // Calculations
+  const sortedProducts = useMemo(
+    () => [...availableProducts].sort((a, b) => naturalCompare(a.name, b.name)),
+    [availableProducts]
+  );
   const subtotal = useMemo(
     () => orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
     [orderItems]
@@ -554,7 +559,7 @@ function SaleCreateOrderForm() {
                       value={item.productId}
                       onChange={(e) => handleProductChange(idx, e.target.value)}
                     >
-                      {availableProducts.map((p) => {
+                      {sortedProducts.map((p) => {
                         const totalStock = p.variants?.reduce((sum, vr) => sum + (vr.stock || 0), 0) ?? 0;
                         return (
                           <option key={p.product_id} value={p.product_id}>

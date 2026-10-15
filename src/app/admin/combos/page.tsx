@@ -17,6 +17,7 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check, Upload, Loader2 } from "lucide-react";
 import { uploadAsset } from "@/lib/services/uploadService";
+import { naturalCompare } from "@/lib/utils";
 
 interface ComboItemSelection {
   product_id: string;
@@ -134,6 +135,11 @@ export default function AdminCombosPage() {
       window.removeEventListener("gieomo_products_updated", handleUpdate);
     };
   }, []);
+
+  const sortedProducts = useMemo(
+    () => [...availableProducts].sort((a, b) => naturalCompare(a.name, b.name)),
+    [availableProducts]
+  );
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -1018,7 +1024,7 @@ export default function AdminCombosPage() {
                           }}
                           className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
                         >
-                          {availableProducts.map((p) => (
+                          {sortedProducts.map((p) => (
                             <option key={p.product_id} value={p.product_id}>
                               {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
                             </option>
@@ -1319,7 +1325,7 @@ export default function AdminCombosPage() {
                         }}
                         className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
                       >
-                        {availableProducts.map((p) => (
+                        {sortedProducts.map((p) => (
                           <option key={p.product_id} value={p.product_id}>
                             {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
                           </option>

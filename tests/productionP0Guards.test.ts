@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { naturalCompare } from "../src/lib/utils.ts";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -94,6 +95,72 @@ describe("track page SKU display — order detail must show canonical SKU snapsh
     assert.ok(
       trackSource.includes("item.sku_snapshot &&"),
       "SKU render must be conditional on presence"
+    );
+  });
+});
+
+describe("F4 natural product sort — order-entry pickers sort by name with numeric collation", () => {
+  test("naturalCompare orders embedded numbers numerically (SP-2 before SP-10)", () => {
+    const names = ["SP-10", "SP-2", "SP-1"];
+    const sorted = [...names].sort(naturalCompare);
+    assert.deepEqual(sorted, ["SP-1", "SP-2", "SP-10"]);
+  });
+
+  test("naturalCompare is diacritic/base-insensitive for Vietnamese product names", () => {
+    const names = ["Bánh", "Áo", "Cây"];
+    const sorted = [...names].sort(naturalCompare);
+    assert.deepEqual(sorted, ["Áo", "Bánh", "Cây"]);
+  });
+
+  test("sale create-order picker renders sortedProducts, not raw availableProducts", () => {
+    const pageSource = read("src/app/sale/create-order/page.tsx");
+    assert.ok(pageSource.includes("naturalCompare"), "sale page must import naturalCompare");
+    assert.ok(pageSource.includes("sortedProducts.map"), "sale picker must map sortedProducts");
+    assert.ok(!pageSource.includes("availableProducts.map("), "sale picker must not map raw list");
+  });
+
+  test("admin create-order picker renders sortedProducts, not raw availableProducts", () => {
+    const pageSource = read("src/app/admin/orders/create/page.tsx");
+    assert.ok(pageSource.includes("naturalCompare"), "admin create page must import naturalCompare");
+    assert.ok(pageSource.includes("sortedProducts.map"), "admin create picker must map sortedProducts");
+    assert.ok(!pageSource.includes("availableProducts.map("), "admin create picker must not map raw list");
+  });
+
+  test("admin combos pickers render sortedProducts, not raw availableProducts", () => {
+    const pageSource = read("src/app/admin/combos/page.tsx");
+    assert.ok(pageSource.includes("naturalCompare"), "combos page must import naturalCompare");
+    assert.ok(pageSource.includes("sortedProducts.map"), "combos pickers must map sortedProducts");
+    assert.ok(!pageSource.includes("availableProducts.map("), "combos pickers must not map raw list");
+  });
+});
+
+describe("admin create-order preselect — P0: ?productId must not overwrite admin edits", () => {
+  const pageSource = read("src/app/admin/orders/create/page.tsx");
+
+  test("preselect effect reads window.location.search productId once and is guarded", () => {
+    assert.ok(pageSource.includes("hasUserEditedItemsRef"), "page must track user edits via ref");
+    assert.ok(
+      pageSource.includes('window.location.search).get("productId")'),
+      "preselect must read ?productId from the URL"
+    );
+    assert.ok(
+      pageSource.includes("appliedQueryProductRef.current === queryProductId"),
+      "preselect must re-apply guard for the same queryProductId"
+    );
+    assert.ok(
+      pageSource.includes("if (hasUserEditedItemsRef.current || availableProducts.length === 0) return;"),
+      "preselect effect must bail out once admin edited items"
+    );
+  });
+
+  test("setOrderItems wrapper marks every item mutation as user-edited", () => {
+    assert.ok(
+      pageSource.includes("const setOrderItems: typeof setOrderItemsState"),
+      "page must wrap setOrderItems with a user-edit marker"
+    );
+    assert.ok(
+      pageSource.includes("hasUserEditedItemsRef.current = true"),
+      "setOrderItems wrapper must set hasUserEditedItemsRef"
     );
   });
 });
