@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
+import { FeaturedCombosSection } from "@/components/home/FeaturedCombosSection";
 import { Sparkles, ArrowRight, Heart, Compass } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -126,6 +127,7 @@ export default function HomePage() {
             FEATURED PRODUCTS: REAL HANDMADE PRODUCTS
             ======================================================== */}
         <FeaturedProductsSection />
+        <FeaturedCombosSection />
 
 
         {/* ========================================================
