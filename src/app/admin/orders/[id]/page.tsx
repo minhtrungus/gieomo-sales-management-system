@@ -375,6 +375,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                           {item.variant_name_snapshot && (
                             <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
                           )}
+                          {item.sku_snapshot && (
+                            <span className="text-gray-500 text-[11px] block">Mã: {item.sku_snapshot}</span>
+                          )}
                           <span className="text-gray-500">
                             Đơn giá:{" "}
                             <MoneyDisplay amount={item.price_snapshot ?? item.unit_price ?? 85000} /> x{" "}
