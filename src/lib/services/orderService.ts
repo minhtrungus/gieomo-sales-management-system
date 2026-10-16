@@ -414,6 +414,18 @@ export async function getOrdersServer(options?: {
           quantity,
           unit_price,
           subtotal
+        ),
+        order_inventory_reservations (
+          variant_id,
+          quantity,
+          product_variants!variant_id (
+            variant_id,
+            name,
+            sku,
+            products!product_id (
+              name
+            )
+          )
         )
       `)
       .order("created_at", { ascending: false });
@@ -434,7 +446,9 @@ export async function getOrdersServer(options?: {
     const { data, error } = await query;
     if (error) {
       console.error("[getOrdersServer] DB Error:", error);
-      return [];
+      // P0: throw instead of returning [] — an empty array is indistinguishable
+      // from "no orders", which makes API clients wipe locally cached orders.
+      throw new Error(`order_query_failed: ${error.message || "database error"}`);
     }
 
     const hasPhoneVerification = Boolean(options?.phone && options.phone.trim().length >= 9);
@@ -490,18 +504,48 @@ export async function getOrdersServer(options?: {
           order_item_id: it.order_item_id,
           order_id: row.order_id,
           item_name_snapshot: it.item_name_snapshot,
+          product_name_snapshot: it.item_name_snapshot,
+          variant_name_snapshot: it.variant_name_snapshot ?? null,
           product_name: it.item_name_snapshot,
           variant_name: it.variant_name_snapshot,
           sku: it.sku_snapshot,
+          sku_snapshot: it.sku_snapshot,
           quantity: it.quantity,
           unit_price: it.unit_price,
           price: it.unit_price,
           subtotal: it.subtotal,
         })),
+        packing_items: (row.order_inventory_reservations || []).map((reservation: {
+          variant_id: string;
+          quantity: number;
+          product_variants?: {
+            name?: string | null;
+            sku?: string | null;
+            products?: { name?: string | null } | Array<{ name?: string | null }> | null;
+          } | Array<{
+            name?: string | null;
+            sku?: string | null;
+            products?: { name?: string | null } | Array<{ name?: string | null }> | null;
+          }> | null;
+        }) => {
+          const variant = Array.isArray(reservation.product_variants)
+            ? reservation.product_variants[0]
+            : reservation.product_variants;
+          const product = Array.isArray(variant?.products) ? variant.products[0] : variant?.products;
+          return {
+            variant_id: reservation.variant_id,
+            product_name: product?.name || "Sản phẩm",
+            variant_name: variant?.name || "Phân loại",
+            sku: variant?.sku || null,
+            quantity: reservation.quantity,
+          };
+        }),
       };
     });
   } catch (err) {
     console.error("[getOrdersServer] Exception:", err);
-    return [];
+    // P0: rethrow so the API route returns success:false and clients
+    // never treat a failed query as an empty order list.
+    throw err;
   }
 }

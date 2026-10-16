@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -13,11 +13,13 @@ import {
   getActiveReferralMembers,
   getStoredPickupPoints,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredOrderStatusLocal,
+  syncStoredPaymentStatusLocal,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { Order, OrderItem, PickupPoint } from "@/types/database";
+import { naturalCompare } from "@/lib/utils";
 import { ArrowLeft, Plus, Trash2, QrCode, Copy, Check, CheckCircle, ExternalLink } from "lucide-react";
 
 export default function AdminCreateOrderPage() {
@@ -33,6 +35,62 @@ export default function AdminCreateOrderPage() {
     setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
     setSettings(getStoredSettings());
   }, []);
+
+  const hasUserEditedItemsRef = useRef(false);
+  const appliedQueryProductRef = useRef<string | null>(null);
+  const [orderItems, setOrderItemsState] = useState<
+    Array<{
+      productId: string;
+      variantId: string;
+      name: string;
+      variantName: string;
+      price: number;
+      quantity: number;
+    }>
+  >(() => {
+    const first = getStoredProducts()[0] || {
+      product_id: "prod-1",
+      name: "Sản phẩm",
+      price: 85000,
+      variants: [],
+    };
+    const firstVar = first.variants?.[0];
+    return [
+      {
+        productId: first.product_id,
+        variantId: firstVar?.variant_id || "",
+        name: first.name,
+        variantName: firstVar?.name || "",
+        price: first.price,
+        quantity: 1,
+      },
+    ];
+  });
+
+  const setOrderItems: typeof setOrderItemsState = (value) => {
+    hasUserEditedItemsRef.current = true;
+    setOrderItemsState(value);
+  };
+
+  useEffect(() => {
+    if (hasUserEditedItemsRef.current || availableProducts.length === 0) return;
+    const queryProductId = new URLSearchParams(window.location.search).get("productId");
+    if (!queryProductId || appliedQueryProductRef.current === queryProductId) return;
+    const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
+    if (!targetProd) return;
+    const firstVar = targetProd.variants?.[0];
+    setOrderItemsState([
+      {
+        productId: targetProd.product_id,
+        variantId: firstVar?.variant_id || "",
+        name: targetProd.name,
+        variantName: firstVar?.name || "",
+        price: firstVar?.price || targetProd.price,
+        quantity: 1,
+      },
+    ]);
+    appliedQueryProductRef.current = queryProductId;
+  }, [availableProducts]);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -56,33 +114,18 @@ export default function AdminCreateOrderPage() {
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [, setPaidConfirmError] = useState<string | null>(null);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
-
-  // Selected Order Items
-  const [orderItems, setOrderItems] = useState<
-    Array<{
-      productId: string;
-      variantId: string;
-      name: string;
-      variantName: string;
-      price: number;
-      quantity: number;
-    }>
-  >([
-    {
-      productId: defaultProd.product_id,
-      variantId: defaultProd.variants?.[0]?.variant_id || "",
-      name: defaultProd.name,
-      variantName: defaultProd.variants?.[0]?.name || "",
-      price: defaultProd.price,
-      quantity: 1,
-    },
-  ]);
 
   const subtotal = useMemo(
     () => orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [orderItems]
+  );
+  const sortedProducts = useMemo(
+    () => [...availableProducts].sort((a, b) => naturalCompare(a.name, b.name)),
+    [availableProducts]
   );
   const isFreeship = (settings?.freeShippingThreshold ?? 0) > 0 && subtotal >= (settings?.freeShippingThreshold ?? 0);
   const flatShippingFee = isFreeship ? 0 : (settings?.flatShippingFee ?? 15000);
@@ -256,11 +299,33 @@ export default function AdminCreateOrderPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "confirmed");
-    router.push("/admin/orders");
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const outcome = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+      if (outcome.ok) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+        syncStoredOrderStatusLocal(activeQrModal.orderCode, "confirmed");
+        router.push("/admin/orders");
+        return;
+      }
+      if (outcome.paymentStatusIsPaid) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      }
+      setPaidConfirmError(outcome.message);
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {
@@ -393,7 +458,7 @@ export default function AdminCreateOrderPage() {
                         onChange={(e) => handleProductSelect(idx, e.target.value)}
                         className="w-full p-2 rounded-xl border border-gray-200 text-xs font-bold bg-white text-gray-800 outline-none"
                       >
-                        {availableProducts.map((p) => (
+                        {sortedProducts.map((p) => (
                           <option key={p.product_id} value={p.product_id}>
                             {p.name} - {p.price.toLocaleString("vi-VN")}đ
                           </option>

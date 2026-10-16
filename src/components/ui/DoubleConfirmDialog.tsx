@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 import { Modal } from "./Modal";
-import { Button } from "./Button";
 import { Input } from "./Input";
 
 interface DoubleConfirmDialogProps {

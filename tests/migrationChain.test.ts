@@ -31,13 +31,51 @@ const expected = [
   "024_repair_payment_cash_contract.sql",
   "025_atomic_idempotent_order_creation.sql",
   "026_atomic_order_cancellation.sql",
+  "027_close_runtime_read_and_rpc_bypasses.sql",
+  "028_orders_payments_least_privilege.sql",
+  "029_atomic_payment_rejection.sql",
+  "030_atomic_combo_persistence.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 026", () => {
+test("the migration chain has exactly one SQL file for 001 through 030", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();
   assert.deepEqual(actual, expected);
+});
+
+test("migration 027 closes authenticated reads and the legacy stock RPC", () => {
+  const sql = readFileSync(join(migrationDirectory, expected[26]), "utf8");
+  assert.match(sql, /REVOKE SELECT ON public\.orders FROM anon, authenticated/);
+  assert.match(sql, /deduct_variant_stock_atomic\(UUID, INTEGER\)/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
+});
+
+test("no enum type is defined unguarded by more than one migration", () => {
+  const owners = new Map<string, string[]>();
+  for (const name of expected) {
+    const sql = readFileSync(join(migrationDirectory, name), "utf8");
+    const doBlocks = [...sql.matchAll(/DO \$\$([\s\S]*?)END \$\$\;/g)].map((m) => m[0]);
+    for (const match of sql.matchAll(/CREATE TYPE\s+(\w+)\s+AS ENUM/g)) {
+      const typeName = match[1];
+      const enclosingBlock = doBlocks.find(
+        (block) => block.indexOf(match[0]) !== -1
+      );
+      const guarded =
+        enclosingBlock !== undefined &&
+        /EXCEPTION\s+WHEN duplicate_object/.test(enclosingBlock);
+      if (!guarded) {
+        owners.set(typeName, [...(owners.get(typeName) ?? []), name]);
+      }
+    }
+  }
+  const duplicated = [...owners.entries()].filter(([, files]) => files.length > 1);
+  assert.deepEqual(
+    duplicated,
+    [],
+    `unguarded duplicate CREATE TYPE found: ${JSON.stringify(duplicated)}`
+  );
+  assert.deepEqual(owners.get("order_status"), ["001_initial_schema.sql"]);
 });
 
 test("migration 022 closes direct runtime order writes", () => {

@@ -3,6 +3,7 @@
 import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
 import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
 import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
+import { sortProductVariants } from "@/lib/productVariantOrder";
 
 export type { ExtendedProduct, ExtendedCombo };
 
@@ -412,17 +413,12 @@ export async function updateStoredOrderStatus(
   }
 }
 
-export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
+export function syncStoredPaymentStatusLocal(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
-    let justPaidOrder: Order | null = null;
-
     const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
-        if (o.payment_status !== "paid" && paymentStatus === "paid") {
-          justPaidOrder = { ...o, payment_status: paymentStatus };
-        }
         return {
           ...o,
           payment_status: paymentStatus,
@@ -435,24 +431,34 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
-    // Automatic push notifications are disabled
-
-
-    // Sync payment status to Supabase
-    fetch("/api/orders", {
-      method: "PATCH",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        orderId: orderCodeOrId,
-        paymentStatus,
-      }),
-    }).catch((err) => {
-      console.warn("[updateStoredPaymentStatus] Failed to sync payment status to Supabase:", err);
-    });
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
-    console.error("Error updating payment status", e);
+    console.error("Error syncing payment status locally", e);
+  }
+}
+
+export function syncStoredOrderStatusLocal(orderCodeOrId: string, orderStatus: OrderStatus): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const nowIso = new Date().toISOString();
+    const updated = orders.map((o) => {
+      if (o.order_id !== orderCodeOrId && o.order_code !== orderCodeOrId) return o;
+      const timestamps = { ...(o.status_timestamps || {}), [orderStatus]: nowIso };
+      return {
+        ...o,
+        order_status: orderStatus,
+        status_timestamps: timestamps,
+        confirmed_at: orderStatus === "confirmed" ? nowIso : o.confirmed_at,
+        completed_at: orderStatus === "completed" ? nowIso : o.completed_at,
+        updated_at: nowIso,
+      };
+    });
+    cachedOrders = updated;
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error syncing order status locally", e);
   }
 }
 
@@ -659,7 +665,7 @@ export function approveStoredPayment(paymentId: string): void {
     localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
 
     if (approvedOrderCode) {
-      updateStoredPaymentStatus(approvedOrderCode, "paid");
+      syncStoredPaymentStatusLocal(approvedOrderCode, "paid");
     }
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -909,45 +915,6 @@ export function deleteStoredContactMessage(id: string): void {
     }).catch((err) => console.warn("Could not delete contact message on server:", err));
   } catch (e) {
     console.error("Error deleting contact message", e);
-  }
-}
-
-// === SEPAY WEBHOOK PAYMENT CONFIRMATION HELPER ===
-
-export function confirmOrderPaymentFromWebhook(orderCode: string, amount: number, transactionId: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const orders = getStoredOrders();
-    const normalizedCode = orderCode.trim().toUpperCase();
-    const target = orders.find((o) => o.order_code.toUpperCase() === normalizedCode);
-
-    if (!target) return false;
-
-    // Update order
-    updateStoredPaymentStatus(target.order_code, "paid");
-    if (target.order_status === "pending") {
-      updateStoredOrderStatus(target.order_code, "confirmed");
-    }
-
-    // Update payment record
-    const payments = getStoredPayments();
-    const newPay: PaymentRecord = {
-      paymentId: `pay-sepay-${transactionId}`,
-      orderCode: target.order_code,
-      amount: amount,
-      paymentMethod: "banking",
-      transactionCode: `SEPAY-${transactionId}`,
-      status: "paid",
-      createdAt: new Date().toLocaleString("vi-VN"),
-    };
-    localStorage.setItem("gieomo_payments", JSON.stringify([newPay, ...payments.filter((p) => p.orderCode !== target.order_code)]));
-
-    // Automatic push notifications are disabled
-    window.dispatchEvent(new Event("gieomo_orders_updated"));
-    return true;
-  } catch (e) {
-    console.error("Error confirming payment via webhook helper", e);
-    return false;
   }
 }
 
@@ -1533,7 +1500,12 @@ export function syncProductsFromServer(force = false): Promise<ExtendedProduct[]
     .then((data) => {
       if (data?.success && Array.isArray(data.products)) {
         hasSyncedProductsWithServer = true;
-        const merged = data.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        const merged = data.products
+          .map((product) => ({
+            ...product,
+            variants: sortProductVariants(product.variants),
+          }))
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         cachedProducts = merged;
         try {
           localStorage.setItem("gieomo_products", JSON.stringify(merged));
@@ -1574,7 +1546,12 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
-    const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+    const products: ExtendedProduct[] = raw
+      ? (JSON.parse(raw) as ExtendedProduct[]).map((product) => ({
+          ...product,
+          variants: sortProductVariants(product.variants),
+        }))
+      : [];
     cachedProducts = products;
     return products;
   } catch (e) {
@@ -1610,6 +1587,7 @@ export async function saveNewProduct(
       stock: total,
       stock_warehouse_1: wh1,
       stock_warehouse_2: wh2,
+      sort_order: v.sort_order ?? i + 1,
     };
   });
 
@@ -2553,8 +2531,16 @@ export function getStoredCombos(): ExtendedCombo[] {
   }
 }
 
-export function saveNewCombo(combo: ExtendedCombo): void {
-  if (typeof window === "undefined") return;
+export type ComboSyncResult = {
+  success: boolean;
+  error?: string;
+  // "http" = server trả 4xx/5xx (từ chối xác định, state cục bộ đã hoàn nguyên nếu ghi trước);
+  // "network" = không nhận được response (trạng thái server không xác định, giữ state cục bộ).
+  kind?: "http" | "network";
+};
+
+export function saveNewCombo(combo: ExtendedCombo): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return Promise.resolve({ success: true });
   try {
     const combos = getStoredCombos();
     const updated = [
@@ -2565,19 +2551,54 @@ export function saveNewCombo(combo: ExtendedCombo): void {
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
 
-    // Sync to Supabase in background
-    fetch("/api/combos", {
+    // Sync to Supabase in background — KHÔNG coi là thành công khi server từ chối.
+    return fetch("/api/combos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(combo),
-    }).catch((err) => console.warn("Could not persist combo to server:", err));
+    })
+      .then(async (res): Promise<ComboSyncResult> => {
+        if (res.ok) return { success: true };
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const error = body?.error || `HTTP ${res.status}`;
+        console.warn("Server rejected combo save:", error);
+        // Server từ chối xác định → hoàn nguyên state cục bộ về trước khi ghi
+        // (chỉ khi chưa có ghi đè khác giữa chừng) để UI không hiển thị như đã lưu.
+        if (cachedCombos === updated) {
+          try {
+            if (localStorage.getItem("gieomo_combos") === JSON.stringify(updated)) {
+              cachedCombos = combos;
+              localStorage.setItem("gieomo_combos", JSON.stringify(combos));
+              window.dispatchEvent(new Event("gieomo_combos_updated"));
+            }
+          } catch {}
+        }
+        return { success: false, error, kind: "http" };
+      })
+      .catch((err): ComboSyncResult => {
+        // Lỗi mạng: không xác định được server đã nhận request hay chưa → giữ state cục bộ.
+        console.warn("Could not persist combo to server:", err);
+        return {
+          success: false,
+          error: err?.message || "Không thể kết nối máy chủ",
+          kind: "network",
+        };
+      });
   } catch (e) {
     console.error("Error saving new combo", e);
+    return Promise.resolve({
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    });
   }
 }
 
-export function updateStoredCombo(combo: ExtendedCombo): void {
-  if (typeof window === "undefined") return;
+export function updateStoredCombo(
+  combo: ExtendedCombo,
+  options?: { includeItems?: boolean }
+): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return Promise.resolve({ success: true });
   try {
     const combos = getStoredCombos();
     const updated = combos.map((c) => (c.combo_id === combo.combo_id ? combo : c));
@@ -2585,22 +2606,88 @@ export function updateStoredCombo(combo: ExtendedCombo): void {
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
 
-    // Sync to Supabase in background
-    fetch("/api/combos", {
+    // Sync to Supabase in background.
+    // Mặc định KHÔNG gửi items: các thao tác sửa trường không liên quan
+    // (đổi tên, bật/tắt status...) không được phép động đến combo_items.
+    // Chỉ luồng sửa thành phần truyền { includeItems: true }.
+    const { items: _items, ...comboHeader } = combo;
+    const serverPayload = options?.includeItems === true ? combo : comboHeader;
+    return fetch("/api/combos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(combo),
-    }).catch((err) => console.warn("Could not update combo on server:", err));
+      body: JSON.stringify(serverPayload),
+    })
+      .then(async (res): Promise<ComboSyncResult> => {
+        if (res.ok) return { success: true };
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const error = body?.error || `HTTP ${res.status}`;
+        console.warn("Server rejected combo update:", error);
+        // Server từ chối xác định → hoàn nguyên state cục bộ về trước khi ghi
+        // (chỉ khi chưa có ghi đè khác giữa chừng) để UI không hiển thị như đã lưu.
+        if (cachedCombos === updated) {
+          try {
+            if (localStorage.getItem("gieomo_combos") === JSON.stringify(updated)) {
+              cachedCombos = combos;
+              localStorage.setItem("gieomo_combos", JSON.stringify(combos));
+              window.dispatchEvent(new Event("gieomo_combos_updated"));
+            }
+          } catch {}
+        }
+        return { success: false, error, kind: "http" };
+      })
+      .catch((err): ComboSyncResult => {
+        // Lỗi mạng: không xác định được server đã nhận request hay chưa → giữ state cục bộ.
+        console.warn("Could not update combo on server:", err);
+        return {
+          success: false,
+          error: err?.message || "Không thể kết nối máy chủ",
+          kind: "network",
+        };
+      });
   } catch (e) {
     console.error("Error updating combo", e);
+    return Promise.resolve({
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    });
   }
 }
 
-export function deleteStoredCombo(comboId: string): void {
-  if (typeof window === "undefined") return;
+export async function deleteStoredCombo(comboId: string): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return { success: true };
   try {
     const combos = getStoredCombos();
     const target = combos.find((c) => c.combo_id === comboId || c.slug === comboId);
+
+    const params = new URLSearchParams();
+    if (target?.combo_id) params.set("id", target.combo_id);
+    else params.set("id", comboId);
+    if (target?.slug) params.set("slug", target.slug);
+
+    // Xác nhận server xóa TRƯỚC khi cập nhật local: local (kể cả prune giỏ hàng)
+    // chỉ phản ánh trạng thái thật khi server trả về thành công.
+    let res: Response;
+    try {
+      res = await fetch(`/api/combos?${params.toString()}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      // Lỗi mạng: không xác định được server đã xóa hay chưa → giữ local, báo lỗi.
+      console.warn("Could not delete combo on server:", err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+        kind: "network",
+      };
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      const error = body?.error || `HTTP ${res.status}`;
+      console.warn("Server rejected combo delete:", error);
+      return { success: false, error, kind: "http" };
+    }
+
     const updated = combos.filter((c) => c.combo_id !== comboId && c.slug !== comboId);
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
@@ -2625,17 +2712,14 @@ export function deleteStoredCombo(comboId: string): void {
 
     window.dispatchEvent(new Event("gieomo_combos_updated"));
     window.dispatchEvent(new Event("gieomo_cart_updated"));
-
-    const params = new URLSearchParams();
-    if (target?.combo_id) params.set("id", target.combo_id);
-    else params.set("id", comboId);
-    if (target?.slug) params.set("slug", target.slug);
-
-    fetch(`/api/combos?${params.toString()}`, {
-      method: "DELETE",
-    }).catch((err) => console.warn("Could not delete combo on server:", err));
+    return { success: true };
   } catch (e) {
     console.error("Error deleting combo", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    };
   }
 }
 
