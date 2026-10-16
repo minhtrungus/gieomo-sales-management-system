@@ -13,10 +13,11 @@ import {
   getActiveReferralMembers,
   getStoredPickupPoints,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredOrderStatusLocal,
+  syncStoredPaymentStatusLocal,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { Order, OrderItem, PickupPoint } from "@/types/database";
 import { naturalCompare } from "@/lib/utils";
 import { ArrowLeft, Plus, Trash2, QrCode, Copy, Check, CheckCircle, ExternalLink } from "lucide-react";
@@ -113,6 +114,8 @@ export default function AdminCreateOrderPage() {
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [, setPaidConfirmError] = useState<string | null>(null);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
@@ -296,11 +299,33 @@ export default function AdminCreateOrderPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "confirmed");
-    router.push("/admin/orders");
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const outcome = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+      if (outcome.ok) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+        syncStoredOrderStatusLocal(activeQrModal.orderCode, "confirmed");
+        router.push("/admin/orders");
+        return;
+      }
+      if (outcome.paymentStatusIsPaid) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      }
+      setPaidConfirmError(outcome.message);
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {

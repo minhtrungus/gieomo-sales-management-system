@@ -27,6 +27,11 @@ import {
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 import { computePricing, isVoucherApplicable } from "@/lib/pricing";
 import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
+import {
+  NO_INTRODUCER_VALUE,
+  normalizeIntroducerValue,
+  validateIntroducerInfo,
+} from "@/lib/checkout/introducer";
 
 function getCookieRef(): string | null {
   if (typeof document === "undefined") return null;
@@ -253,7 +258,7 @@ function CheckoutContent() {
     setSelectedMember(null);
     setMemberSearchQuery("");
     setNoIntroducer(true);
-    setFormData((prev) => ({ ...prev, introducer_info: "Trực tiếp (Website)" }));
+    setFormData((prev) => ({ ...prev, introducer_info: NO_INTRODUCER_VALUE }));
     if (typeof window !== "undefined") {
       localStorage.removeItem("gieomo_referral_code");
       document.cookie = "gieomo_referral_code=; path=/; max-age=0; SameSite=Lax";
@@ -331,8 +336,14 @@ function CheckoutContent() {
       }
     }
 
-    if (deliveryType === "member_delivery" && !selectedMember && !formData.introducer_info.trim()) {
-      setErrors({ introducer_info: "Vui lòng chọn hoặc nhập tên thành viên Mầm Mơ giao hàng cho bạn" });
+    const introducerText = selectedMember
+      ? `${selectedMember.fullName} (${selectedMember.referralCode})`
+      : noIntroducer
+        ? NO_INTRODUCER_VALUE
+        : formData.introducer_info;
+    const introducerError = validateIntroducerInfo(introducerText);
+    if (introducerError) {
+      setErrors({ introducer_info: introducerError });
       return;
     }
 
@@ -347,7 +358,7 @@ function CheckoutContent() {
     let finalReferralCode = selectedMember ? selectedMember.referralCode : null;
 
     if (!selectedMember && !noIntroducer) {
-      const candidate = storedRef || (formData.introducer_info !== "Trực tiếp (Website)" ? formData.introducer_info : null);
+      const candidate = storedRef || formData.introducer_info.trim() || null;
       if (candidate) {
         const cleanCandidate = candidate.trim().toUpperCase();
         const matched = activeMembers.find(
@@ -369,8 +380,8 @@ function CheckoutContent() {
       : finalReferralCode
       ? `Mã giới thiệu: ${finalReferralCode}`
       : noIntroducer
-      ? "Trực tiếp (Website)"
-      : formData.introducer_info || "Trực tiếp (Website)";
+      ? NO_INTRODUCER_VALUE
+      : normalizeIntroducerValue(formData.introducer_info);
 
     const orderPayload = {
       buyer_name: formData.buyer_name.trim(),

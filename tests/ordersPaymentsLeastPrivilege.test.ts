@@ -4,12 +4,11 @@ import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
-const draftPath = join(
+const migrationPath = join(
   root,
   "supabase",
   "migrations",
-  "proposals",
-  "028_orders_payments_least_privilege.sql.draft"
+  "028_orders_payments_least_privilege.sql"
 );
 
 function walkSourceFiles(dir: string, out: string[] = []): string[] {
@@ -26,8 +25,8 @@ function walkSourceFiles(dir: string, out: string[] = []): string[] {
 
 const sourceFiles = walkSourceFiles(join(root, "src"));
 
-test("028 draft revokes the full runtime privilege surface on order tables", () => {
-  const sql = readFileSync(draftPath, "utf8");
+test("028 revokes the full runtime privilege surface on order tables", () => {
+  const sql = readFileSync(migrationPath, "utf8");
   for (const table of [
     "customers",
     "orders",
@@ -55,16 +54,12 @@ test("028 draft revokes the full runtime privilege surface on order tables", () 
   assert.match(sql, /028: service_role lost order-domain access/);
 });
 
-test("028 draft lives in proposals/ so no migration runner auto-applies it", () => {
-  assert.ok(draftPath.includes(join("supabase", "migrations", "proposals")));
-  assert.ok(draftPath.endsWith(".sql.draft"));
+test("028 is canonical and auto-applied after approval", () => {
+  assert.ok(migrationPath.endsWith("028_orders_payments_least_privilege.sql"));
   const migrationFiles = readdirSync(join(root, "supabase", "migrations")).filter((name) =>
     /^\d{3}_.*\.sql$/.test(name)
   );
-  assert.ok(
-    !migrationFiles.some((name) => name.startsWith("028_")),
-    "028 must not exist as an applied .sql migration until promoted and applied in order"
-  );
+  assert.ok(migrationFiles.includes("028_orders_payments_least_privilege.sql"));
 });
 
 test("every orders/payments PostgREST callsite uses the service-role admin client", () => {

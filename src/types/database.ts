@@ -287,9 +287,19 @@ export interface Order {
   customer?: Customer;
   seller?: Member;
   items?: OrderItem[];
+  /** Exact variant quantities reserved by the atomic order RPC for packing. */
+  packing_items?: OrderPackingItem[];
   payments?: Payment[];
   shipment?: Shipment;
   status_history?: OrderStatusHistory[];
+}
+
+export interface OrderPackingItem {
+  variant_id: string;
+  product_name: string;
+  variant_name: string;
+  sku: string | null;
+  quantity: number;
 }
 
 export interface OrderItem {

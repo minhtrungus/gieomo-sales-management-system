@@ -1,5 +1,33 @@
 export const VOUCHER_DISCOUNT_TYPES = ["percentage", "fixed_amount", "freeship"];
 
+const UNSUPPORTED_VOUCHER_DEFAULTS: Record<string, unknown> = {
+  min_items_count: 0,
+  is_gift_voucher: false,
+  gift_min_order_value: 0,
+  visibility: "public",
+  max_discount_amount: 0,
+};
+
+/**
+ * These fields are present in the admin model but do not exist in the
+ * canonical 001-027 database schema. Default values are harmless because
+ * they preserve the schema's current behaviour; non-default values must fail
+ * closed so the API never reports a successful save while silently dropping
+ * a business rule.
+ */
+export function findUnsupportedVoucherFields(body: Record<string, unknown>): string[] {
+  return Object.entries(UNSUPPORTED_VOUCHER_DEFAULTS)
+    .filter(([field, defaultValue]) => {
+      if (!(field in body) || body[field] === null || body[field] === undefined) return false;
+      if (typeof defaultValue === "number") {
+        const value = Number(body[field]);
+        return !Number.isFinite(value) || value !== defaultValue;
+      }
+      return body[field] !== defaultValue;
+    })
+    .map(([field]) => field);
+}
+
 export interface VoucherPayloadInput {
   code: string;
   voucher_id?: string;

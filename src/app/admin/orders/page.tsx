@@ -16,6 +16,7 @@ import {
   type StoredMember,
   type AdminSession,
 } from "@/lib/data/orderStore";
+import { isNoIntroducerValue } from "@/lib/checkout/introducer";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
@@ -252,7 +253,7 @@ function AdminOrdersContent() {
         if (
           introducerFilter === "direct" &&
           ord.introducer_info &&
-          ord.introducer_info !== "Trực tiếp (Website)"
+          !isNoIntroducerValue(ord.introducer_info)
         ) {
           return false;
         }

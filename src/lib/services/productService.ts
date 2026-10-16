@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { ProductVariant } from "@/types/database";
+import { sortProductVariants } from "@/lib/productVariantOrder";
 
 
 
@@ -97,7 +98,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 
       // Map variants with warehouse calculations
       const rawVariants = p.product_variants || p.variants || [];
-      const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+      const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
       const variants: ProductVariant[] = variantsList.map((v: any) => {
         const stock = v.stock ?? 0;
         const wh1 = Math.ceil(stock * 0.7);
@@ -209,7 +210,7 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
         const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
 
         const rawVariants = (p as any).product_variants || (p as any).variants || [];
-        const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+        const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
         const variants: ProductVariant[] = variantsList.map((v: any) => {
           const stock = v.stock ?? 0;
           const wh1 = Math.ceil(stock * 0.7);

@@ -1,230 +1,170 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthenticatedUser, requireAdmin, requireAuth } from "@/lib/auth/serverAuth";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
+
+const REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _\-/]{2,63}$/;
+
+function normalizeReference(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function validBankReference(value: string): boolean {
+  return REFERENCE_PATTERN.test(value) && !/^ADMIN-CONFIRM/i.test(value);
+}
 
 export async function POST(request: Request) {
   try {
     const authCheck = await requireAdmin(request);
-    if (!authCheck.authorized) {
-      return authCheck.response;
-    }
+    if (!authCheck.authorized) return authCheck.response;
 
     const body = await request.json();
-    const { orderId, orderCode, action, reason } = body;
-
+    const { orderId, orderCode, action } = body;
     if (!orderId && !orderCode) {
-      return NextResponse.json(
-        { success: false, error: "Thiếu orderId hoặc orderCode" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Thiếu orderId hoặc orderCode" }, { status: 400 });
     }
 
     const supabase = createAdminClient();
-
-    // Find order
-    let query = supabase.from("orders").select(`
-      order_id,
-      order_code,
-      payment_status,
-      order_status,
-      final_amount,
-      customer_id,
-      internal_note
-    `);
-
-    if (orderCode) {
-      query = query.eq("order_code", orderCode.trim().toUpperCase());
-    } else if (orderId) {
-      query = query.eq("order_id", orderId);
-    }
-
+    let query = supabase
+      .from("orders")
+      .select("order_id, order_code, payment_status, order_status, final_amount, internal_note");
+    query = orderCode
+      ? query.eq("order_code", String(orderCode).trim().toUpperCase())
+      : query.eq("order_id", orderId);
     const { data: order, error: findError } = await query.maybeSingle();
-
     if (findError || !order) {
-      return NextResponse.json(
-        { success: false, error: `Không tìm thấy đơn hàng` },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: "Không tìm thấy đơn hàng" }, { status: 404 });
     }
 
-    // Check current state
-    if (order.payment_status === "paid") {
-      return NextResponse.json({
-        success: false,
-        error: "Đơn hàng này đã được xác nhận thanh toán trước đó.",
-        isAlreadyPaid: true,
-      });
-    }
-
-    // Business rule: Only "pending" orders can be confirmed
-    if (order.order_status !== "pending" && action === "confirm") {
-      return NextResponse.json({
-        success: false,
-        error: "Đơn hàng không ở trạng thái pending, không thể xác nhận thanh toán.",
-      });
-    }
-
-    // CONFIRM ACTION
     if (action === "confirm") {
-      // Verify amount - in real system, would check payment gateway
-      // For now, admin confirmation marks as paid
-      const newPaymentStatus = "paid";
-      const newOrderStatus = order.order_status === "pending" ? "confirmed" : order.order_status;
-
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({
-          payment_status: newPaymentStatus,
-          order_status: newOrderStatus,
-          confirmed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("order_id", order.order_id);
-
-      if (updateError) {
-        console.error("[POST /api/orders/payment] DB error:", updateError);
-        return NextResponse.json(
-          { success: false, error: "Lỗi cập nhật trạng thái thanh toán" },
-          { status: 500 }
-        );
+      const method = String(body.paymentMethod || "banking").toLowerCase();
+      if (!["banking", "cod", "cash"].includes(method)) {
+        return NextResponse.json({ success: false, error: "Phương thức thanh toán không hợp lệ" }, { status: 400 });
+      }
+      const isCash = method === "cod" || method === "cash";
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json({ success: false, error: "Bắt buộc số tiền thực nhận (amount > 0)" }, { status: 400 });
       }
 
-      // Insert payment record
-      await supabase.from("payments").insert([
-        {
-          order_id: order.order_id,
-          amount: order.final_amount || 0,
-          payment_method: "banking",
-          transaction_code: `ADMIN-CONFIRM-${order.order_code}`,
-          status: "paid",
-          confirmed_at: new Date().toISOString(),
-        },
-      ]);
-
-      // Insert audit log
-      await supabase.from("order_status_history").insert({
-        order_id: order.order_id,
-        status_type: "payment",
-        from_status: order.payment_status,
-        to_status: newPaymentStatus,
-        note: `Xác nhận thanh toán thủ công bởi admin`,
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Đã xác nhận thanh toán đơn hàng #${order.order_code} thành công.`,
-        orderId: order.order_id,
-        orderCode: order.order_code,
-        paymentStatus: newPaymentStatus,
-        orderStatus: newOrderStatus,
-      });
-    }
-
-    // REJECT ACTION
-    if (action === "reject") {
-      if (!reason) {
+      const reference = normalizeReference(body.referenceNumber ?? body.reference_number);
+      if (isCash && reference) {
         return NextResponse.json(
-          { success: false, error: "Lý do từ chối là bắt buộc" },
+          { success: false, error: "Xác nhận tiền mặt không nhận referenceNumber; máy chủ tự tạo identity" },
+          { status: 400 }
+        );
+      }
+      if (!isCash && !validBankReference(reference)) {
+        return NextResponse.json(
+          { success: false, error: "Bắt buộc mã giao dịch ngân hàng thật (3-64 ký tự)" },
           { status: 400 }
         );
       }
 
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({
-          payment_status: "failed",
-          order_status: order.order_status, // Keep order status unchanged
-          internal_note: order.internal_note
-            ? `${order.internal_note} | [HỦY THANH TOÁN] Lý do: ${reason}`
-            : `[HỦY THANH TOÁN] Lý do: ${reason}`,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("order_id", order.order_id);
+      const transactionCode = isCash ? `CASH-${order.order_code}` : reference;
+      const { data: result, error: rpcError } = await supabase.rpc("apply_payment_event", {
+        p: {
+          order_code: order.order_code,
+          amount,
+          transaction_code: transactionCode,
+          payment_method: isCash ? "cod" : "banking",
+          provider: isCash ? "cash" : "bank",
+          source: "admin",
+          admin_member_id: authCheck.user.memberId,
+          note: isCash ? "Thu tiền mặt tại quầy" : "Admin xác nhận từ bằng chứng ngân hàng",
+        },
+      });
 
-      if (updateError) {
-        console.error("[POST /api/orders/payment] DB error:", updateError);
+      if (rpcError) {
+        console.error("[POST /api/orders/payment] apply_payment_event failed:", rpcError.message);
         return NextResponse.json(
-          { success: false, error: "Lỗi cập nhật trạng thái từ chối" },
+          { success: false, error: "Không ghi nhận được thanh toán; toàn bộ thay đổi đã rollback" },
           { status: 500 }
         );
       }
+      if (!result || typeof result.outcome !== "string") {
+        return NextResponse.json({ success: false, error: "Kết quả payment RPC không hợp lệ" }, { status: 500 });
+      }
 
-      // Insert audit log
-      await supabase.from("order_status_history").insert({
-        order_id: order.order_id,
-        status_type: "payment",
-        from_status: order.payment_status,
-        to_status: "failed",
-        note: `Từ chối thanh toán bởi admin: ${reason}`,
-      });
+      if (result.outcome === "applied") {
+        return NextResponse.json({
+          success: true,
+          outcome: "applied",
+          orderId: result.order_id,
+          orderCode: result.order_code,
+          paymentStatus: result.payment_status,
+          orderStatus: result.order_status,
+          replayed: result.replayed === true,
+        });
+      }
 
-      return NextResponse.json({
-        success: true,
-        message: `Đã từ chối thanh toán đơn hàng #${order.order_code}.`,
-        orderId: order.order_id,
-        orderCode: order.order_code,
-        paymentStatus: "failed",
-        reason,
-      });
+      const status = result.outcome === "unmatched_order" ? 404 : 409;
+      return NextResponse.json(
+        {
+          success: false,
+          outcome: result.outcome,
+          error: result.message || "Giao dịch đã được lưu để đối soát nhưng không được áp dụng tự động",
+          needsReview: result.needs_review === true,
+          orderId: result.order_id,
+          orderCode: result.order_code,
+        },
+        { status }
+      );
     }
 
-    // INVALID ACTION
-    return NextResponse.json(
-      { success: false, error: "Hành động không hợp lệ. Chọn: confirm hoặc reject." },
-      { status: 400 }
-    );
-  } catch (error: any) {
-    console.error("[POST /api/orders/payment] Exception:", error);
-    return NextResponse.json(
-      { success: false, error: "Lỗi máy chủ khi xử lý thanh toán" },
-      { status: 500 }
-    );
+    if (action === "reject") {
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (!reason) {
+        return NextResponse.json({ success: false, error: "Lý do từ chối là bắt buộc" }, { status: 400 });
+      }
+      const { data: result, error } = await supabase.rpc("reject_payment_atomic", {
+        p: { order_id: order.order_id, reason, actor_member_id: authCheck.user.memberId },
+      });
+      if (error) {
+        console.error("[POST /api/orders/payment] reject_payment_atomic failed:", error.message);
+        return NextResponse.json(
+          { success: false, error: "Không thể từ chối thanh toán; toàn bộ thay đổi đã rollback" },
+          { status: 500 }
+        );
+      }
+      if (result?.outcome === "rejected" || result?.outcome === "already_rejected") {
+        return NextResponse.json({
+          success: true,
+          outcome: result.outcome,
+          orderId: result.order_id,
+          orderCode: result.order_code,
+          paymentStatus: result.payment_status,
+        });
+      }
+      const status = result?.outcome === "not_found" ? 404 : result?.outcome === "invalid_reason" ? 400 : 409;
+      return NextResponse.json(
+        { success: false, outcome: result?.outcome ?? "invalid_result", error: "Payment state không cho phép từ chối" },
+        { status }
+      );
+    }
+
+    return NextResponse.json({ success: false, error: "Hành động không hợp lệ" }, { status: 400 });
+  } catch (error) {
+    console.error("[POST /api/orders/payment] exception:", error);
+    return NextResponse.json({ success: false, error: "Lỗi máy chủ khi xử lý thanh toán" }, { status: 500 });
   }
 }
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const orderCode = searchParams.get("orderCode") || undefined;
-
-    if (!orderCode) {
-      return NextResponse.json(
-        { success: false, error: "Thiếu tham số orderCode" },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createAdminClient();
-
-    const { data: order, error } = await supabase
-      .from("orders")
-      .select(`
-        order_id,
-        order_code,
-        payment_status,
-        order_status,
-        final_amount,
-        customer_id,
-        internal_note
-      `)
-      .eq("order_code", orderCode.trim().toUpperCase())
-      .maybeSingle();
-
-    if (error || !order) {
-      return NextResponse.json(
-        { success: false, error: `Không tìm thấy đơn hàng #${orderCode}` },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true, order });
-  } catch (error: any) {
-    console.error("[GET /api/orders/payment] Exception:", error);
-    return NextResponse.json(
-      { success: false, error: "Lỗi máy chủ" },
-      { status: 500 }
-    );
+  const authCheck = await requireAdmin(request);
+  if (!authCheck.authorized) return authCheck.response;
+  const orderCode = new URL(request.url).searchParams.get("orderCode")?.trim().toUpperCase();
+  if (!orderCode) {
+    return NextResponse.json({ success: false, error: "Thiếu tham số orderCode" }, { status: 400 });
   }
+  const { data: order, error } = await createAdminClient()
+    .from("orders")
+    .select("order_id, order_code, payment_status, order_status, final_amount")
+    .eq("order_code", orderCode)
+    .maybeSingle();
+  if (error || !order) {
+    return NextResponse.json({ success: false, error: "Không tìm thấy đơn hàng" }, { status: 404 });
+  }
+  return NextResponse.json({ success: true, order });
 }

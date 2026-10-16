@@ -239,13 +239,13 @@ class CancelQuery {
 
 function createFakeSupabase(world: CancelWorld) {
   return {
-    async rpc(name: string, args: { p: Record<string, unknown> }) {
+    async rpc(name: string, args: Record<string, unknown>) {
       world.calls.push({ table: "rpc", action: name, payload: args });
       if (name !== "cancel_order_atomic") return { data: null, error: { message: "unexpected rpc" } };
       if (world.force.ordersUpdateError) return { data: null, error: world.force.ordersUpdateError };
 
       const order = world.orders.find((row) =>
-        args.p.order_id ? row.order_id === args.p.order_id : row.order_code === args.p.order_code
+        args.p_order_id ? row.order_id === args.p_order_id : row.order_code === args.p_order_code
       );
       if (!order) return { data: { outcome: "not_found" }, error: null };
       if (order.order_status === "cancelled") {
@@ -324,7 +324,7 @@ test("C1 — hủy đơn lần đầu có voucher: decrement đúng 1 lần, can
   assert.equal(res.status, 200);
   const body = (await res.json()) as { success: boolean; alreadyCancelled?: boolean };
   assert.equal(body.success, true);
-  assert.equal(body.alreadyCancelled, false);
+  assert.ok(!body.alreadyCancelled, "lần hủy đầu không phải alreadyCancelled");
   assert.equal(world.orders[0].order_status, "cancelled");
   assert.ok(world.orders[0].cancelled_at);
   assert.equal(countAction(world, "voucher-cas-decrement"), 1);
@@ -415,16 +415,17 @@ test("C7 — voucher đã xóa (voucher_id null do FK SET NULL): hủy thành c�
   assert.equal(countAction(world, "voucher-cas-decrement"), 0);
 });
 
-test("C8 — PATCH không phải cancel (paymentStatus): không đi nhánh release", async () => {
+test("C8 — PATCH paymentStatus → 400 toàn bộ (đóng bypass), không nhánh release", async () => {
   const world = emptyWorld();
   seedOrder(world, VOUCHER_ID);
   g.__fakeCancelDb = createFakeSupabase(world);
 
   const res = await patchRequest({ orderId: ORDER_ID, paymentStatus: "paid" });
-  assert.equal(res.status, 200);
+  // Batch 1 — PATCH closed: payment field → reject TOÀN BỘ request, 0 side-effect.
+  assert.equal(res.status, 400);
   assert.equal(countAction(world, "voucher-cas-decrement"), 0);
   assert.equal(world.orders[0].order_status, "pending");
-  assert.equal(world.orders[0].payment_status, "paid");
+  assert.equal(world.orders[0].payment_status, undefined);
 });
 
 test("C9 — hủy theo order_code thay vì orderId: vẫn idempotent", async () => {

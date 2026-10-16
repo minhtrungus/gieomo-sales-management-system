@@ -8,14 +8,16 @@ import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, DELIVERY_STATUS_LABELS } fr
 import {
   getStoredOrders,
   updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   updateStoredDeliveryStatus,
   updateStoredOrderNotes,
   updateStoredOrderWarehouse,
   getStoredMembers,
   updateOrderShipper,
+  getAuthHeaders,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
 
@@ -64,25 +66,52 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }, [resolvedParams.id]);
 
   // Handle changing payment status with explicit confirmation for 'paid'
-  const handlePaymentStatusChange = (newStatus: PaymentStatus) => {
+  const handlePaymentStatusChange = async (newStatus: PaymentStatus) => {
     if (newStatus === "paid" && paymentStatus !== "paid") {
       setPendingPaymentStatus("paid");
       setShowPaymentConfirmModal(true);
-    } else {
-      setPaymentStatus(newStatus);
+      return;
     }
+    if (newStatus === "failed" && paymentStatus === "pending" && order) {
+      const reason = window.prompt("Nhập lý do từ chối thanh toán:")?.trim();
+      if (!reason) return;
+      const response = await fetch("/api/orders/payment", {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ orderCode: order.order_code, action: "reject", reason }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.success !== true || result?.paymentStatus !== "failed") {
+        alert(result?.error || "Không thể từ chối thanh toán.");
+        return;
+      }
+      syncStoredPaymentStatusLocal(order.order_code, "failed");
+      setPaymentStatus("failed");
+      setOrder((current) => current ? { ...current, payment_status: "failed" } : current);
+      return;
+    }
+    if (newStatus !== paymentStatus) alert("Trạng thái thanh toán này chưa có contract atomic được phê duyệt.");
   };
 
-  const handleConfirmPaid = () => {
+  const handleConfirmPaid = async () => {
+    if (!order) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) return;
+    const outcome = await confirmPaymentServerFirst(order.order_code, {
+      amount: order.final_amount,
+      referenceNumber,
+    });
+    if (!outcome.ok && !outcome.paymentStatusIsPaid) {
+      alert(outcome.message);
+      return;
+    }
+    syncStoredPaymentStatusLocal(order.order_code, "paid");
     setPaymentStatus("paid");
     setShowPaymentConfirmModal(false);
     setPendingPaymentStatus(null);
-    if (order) {
-      updateStoredPaymentStatus(order.order_id, "paid");
-      setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
-      setIsSavedNotice(true);
-      setTimeout(() => setIsSavedNotice(false), 2500);
-    }
+    setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+    setIsSavedNotice(true);
+    setTimeout(() => setIsSavedNotice(false), 2500);
   };
 
   const handleSaveChanges = async () => {
@@ -100,7 +129,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       return;
     }
 
-    updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredDeliveryStatus(order.order_id, deliveryStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
     updateStoredOrderWarehouse(order.order_id, warehouseId);
@@ -131,6 +159,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       </div>
     );
   }
+
+  const voucherDiscount = (order.voucher_discount ?? order.discount_amount) || 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -392,6 +422,30 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       </div>
                     ))}
                   </div>
+
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-emerald-900 mb-2">
+                      Danh sách đóng gói theo tồn kho đã giữ
+                    </p>
+                    {order.packing_items && order.packing_items.length > 0 ? (
+                      <div className="space-y-2">
+                        {order.packing_items.map((packingItem) => (
+                          <div key={packingItem.variant_id} className="text-xs text-gray-700">
+                            <span className="font-bold text-gray-900">{packingItem.product_name}</span>
+                            <span> — Mẫu / màu sắc / phân loại: {packingItem.variant_name}</span>
+                            {packingItem.sku && (
+                              <span className="font-mono text-gray-500"> · SKU {packingItem.sku}</span>
+                            )}
+                            <span className="font-bold text-emerald-900"> · x{packingItem.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-800">
+                        Chưa có dữ liệu giữ tồn để lập danh sách đóng gói; cần đối chiếu thủ công với ảnh chụp đơn hàng.
+                      </p>
+                    )}
+                  </div>
                 </>
               );
             })()}
@@ -401,10 +455,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <span>Tạm tính tiền hàng:</span>
                 <MoneyDisplay amount={order.subtotal} className="font-bold text-gray-900" />
               </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Giảm giá voucher:</span>
-                <span>-<MoneyDisplay amount={order.discount_amount ?? 10000} /></span>
-              </div>
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Giảm giá voucher:</span>
+                  <span>-<MoneyDisplay amount={voucherDiscount} /></span>
+                </div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>Phí vận chuyển:</span>
                 <MoneyDisplay amount={order.shipping_fee} className="font-bold text-gray-900" />

@@ -9,12 +9,13 @@ import {
   getStoredProducts,
   getActiveReferralMembers,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredOrderStatusLocal,
+  syncStoredPaymentStatusLocal,
   type StoredMember,
   type ExtendedProduct,
 } from "@/lib/data/orderStore";
-import type { Order, OrderItem } from "@/types/database";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
+import type { Order, OrderItem, OrderStatus } from "@/types/database";
 
 export default function AdminPosPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -58,6 +59,8 @@ export default function AdminPosPage() {
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [, setPaidConfirmError] = useState<string | null>(null);
 
   // Initialize with first product if cart empty
   useEffect(() => {
@@ -221,8 +224,8 @@ export default function AdminPosPage() {
       district: "",
       province: "TP. Hồ Chí Minh",
       payment_method: isCash ? "cod" : "banking",
-      payment_status: isCash ? "paid" : "pending",
-      order_status: isCash ? "completed" : "pending",
+      payment_status: "pending",
+      order_status: "pending",
       delivery_status: "delivered",
       subtotal: subtotal,
       discount_amount: 0,
@@ -238,7 +241,7 @@ export default function AdminPosPage() {
       customer_note: quickNote ? `[Bán sự kiện] ${quickNote}` : "Bán trực tiếp tại sự kiện",
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
-      completed_at: isCash ? new Date().toISOString() : null,
+      completed_at: null,
       updated_at: new Date().toISOString(),
     };
 
@@ -269,6 +272,19 @@ export default function AdminPosPage() {
       }));
 
       if (isCash) {
+        const outcome = await confirmPaymentServerFirst(createdOrderCode, {
+          paymentMethod: "cod",
+          amount: createdFinalAmount,
+        });
+        if (!outcome.ok && outcome.kind !== "already_paid") {
+          setSubmitError(outcome.message);
+          return;
+        }
+        syncStoredPaymentStatusLocal(createdOrderCode, "paid");
+        syncStoredOrderStatusLocal(
+          createdOrderCode,
+          outcome.ok && outcome.orderStatus ? outcome.orderStatus as OrderStatus : "completed"
+        );
         setLastCompletedOrder(createdOrderCode);
         resetFormForNextCustomer();
       } else {
@@ -292,12 +308,37 @@ export default function AdminPosPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "completed");
-    setLastCompletedOrder(activeQrModal.orderCode);
-    resetFormForNextCustomer();
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const outcome = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+      if (outcome.ok || outcome.kind === "already_paid") {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+        syncStoredOrderStatusLocal(
+          activeQrModal.orderCode,
+          outcome.ok && outcome.orderStatus ? outcome.orderStatus as OrderStatus : "completed"
+        );
+        setLastCompletedOrder(activeQrModal.orderCode);
+        resetFormForNextCustomer();
+        return;
+      }
+      if (outcome.paymentStatusIsPaid) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      }
+      setPaidConfirmError(outcome.message);
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {

@@ -15,12 +15,15 @@ import {
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
+import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check, Upload, Loader2 } from "lucide-react";
 import { uploadAsset } from "@/lib/services/uploadService";
 import { naturalCompare } from "@/lib/utils";
+import { getComboVirtualStock as calculateComboVirtualStock, getDefaultComboVariantId } from "@/lib/comboInventory";
 
 interface ComboItemSelection {
   product_id: string;
+  variant_id: string | null;
   quantity: number;
 }
 
@@ -37,6 +40,13 @@ function getProductTotalStock(prod?: ExtendedProduct | null): number {
     return prod.variants.reduce((acc: number, v: { stock?: number }) => acc + (v.stock || 0), 0);
   }
   return 0;
+}
+
+function variantLabel(v: { name?: string | null; sku?: string | null }): string {
+  const name = (v.name || "").trim();
+  const sku = (v.sku || "").trim();
+  if (name && sku && sku !== name) return `${name} · SKU ${sku}`;
+  return name || sku || "Phân loại";
 }
 
 function normalizeText(str: string): string {
@@ -64,6 +74,7 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
       const unitPrice = found?.price ?? it.product?.price ?? it.price ?? 40000;
       return {
         product_id: found?.product_id || pId,
+        variant_id: it.variant_id ?? null,
         name: found?.name || pName || "Sản phẩm",
         quantity: qty,
         price: unitPrice,
@@ -104,6 +115,7 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
 
     items.push({
       product_id: foundProd?.product_id,
+      variant_id: null,
       name: foundProd?.name || itemName,
       quantity: qty,
       price,
@@ -116,6 +128,10 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
 export default function AdminCombosPage() {
   const [combos, setCombos] = useState<ExtendedCombo[]>([]);
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
+  const sortedProducts = useMemo(
+    () => [...availableProducts].sort((a, b) => naturalCompare(a.name, b.name)),
+    [availableProducts]
+  );
 
   useEffect(() => {
     setCombos(getStoredCombos());
@@ -136,15 +152,11 @@ export default function AdminCombosPage() {
     };
   }, []);
 
-  const sortedProducts = useMemo(
-    () => [...availableProducts].sort((a, b) => naturalCompare(a.name, b.name)),
-    [availableProducts]
-  );
-
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCombo, setEditingCombo] = useState<ExtendedCombo | null>(null);
   const [deletingCombo, setDeletingCombo] = useState<ExtendedCombo | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Quick inline rename states for combo name
   const [renamingComboId, setRenamingComboId] = useState<string | null>(null);
@@ -160,7 +172,11 @@ export default function AdminCombosPage() {
   const [comboItems, setComboItems] = useState<ComboItemSelection[]>(() => {
     const prods = getStoredProducts();
     if (prods.length > 0) {
-      return [{ product_id: prods[0].product_id, quantity: 1 }];
+      return [{
+        product_id: prods[0].product_id,
+        variant_id: getDefaultComboVariantId(prods[0]),
+        quantity: 1,
+      }];
     }
     return [];
   });
@@ -198,7 +214,11 @@ export default function AdminCombosPage() {
     if (availableProducts.length === 0) return;
     setComboItems([
       ...comboItems,
-      { product_id: availableProducts[0].product_id, quantity: 1 },
+      {
+        product_id: availableProducts[0].product_id,
+        variant_id: getDefaultComboVariantId(availableProducts[0]),
+        quantity: 1,
+      },
     ]);
   };
 
@@ -212,7 +232,11 @@ export default function AdminCombosPage() {
   const handleAddItemToEdit = () => {
     setEditComboItems([
       ...editComboItems,
-      { product_id: availableProducts[0]?.product_id || "prod-custom", quantity: 1 },
+      {
+        product_id: availableProducts[0]?.product_id || "prod-custom",
+        variant_id: getDefaultComboVariantId(availableProducts[0]),
+        quantity: 1,
+      },
     ]);
   };
 
@@ -234,13 +258,24 @@ export default function AdminCombosPage() {
       setEditComboItems(
         resolved.map((it: any) => ({
           product_id: it.product_id || availableProducts[0]?.product_id || "prod-1",
+          // Giữ nguyên mapping hiện có (kể cả null của component chưa map) —
+          // không tự gán variant khi thiếu dữ liệu.
+          variant_id: it.variant_id ?? null,
           quantity: it.quantity,
         }))
       );
     } else {
       setEditComboItems([
-        { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
-        { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
+        {
+          product_id: availableProducts[0]?.product_id || "prod-1",
+          variant_id: getDefaultComboVariantId(availableProducts[0]),
+          quantity: 1,
+        },
+        {
+          product_id: availableProducts[1]?.product_id || "prod-2",
+          variant_id: getDefaultComboVariantId(availableProducts[1]),
+          quantity: 1,
+        },
       ]);
     }
   };
@@ -256,15 +291,10 @@ export default function AdminCombosPage() {
   const createSavings = Math.max(0, createRetailTotal - price);
   const createSavingsPercent = createRetailTotal > 0 ? Math.round((createSavings / createRetailTotal) * 100) : 0;
 
-  const createVirtualStock = useMemo(() => {
-    if (comboItems.length === 0) return 0;
-    const stocks = comboItems.map((item) => {
-      const prod = availableProducts.find((p) => p.product_id === item.product_id);
-      const stock = getProductTotalStock(prod);
-      return Math.floor(stock / Math.max(1, item.quantity));
-    });
-    return Math.max(0, Math.min(...stocks));
-  }, [comboItems, availableProducts]);
+  const createVirtualStock = useMemo(
+    () => calculateComboVirtualStock(comboItems, availableProducts),
+    [comboItems, availableProducts]
+  );
 
   // Real-time calculations for Edit Modal
   const editRetailTotal = useMemo(() => {
@@ -277,26 +307,15 @@ export default function AdminCombosPage() {
   const editSavings = editingCombo ? Math.max(0, editRetailTotal - editingCombo.price) : 0;
   const editSavingsPercent = editRetailTotal > 0 ? Math.round((editSavings / editRetailTotal) * 100) : 0;
 
-  const editVirtualStock = useMemo(() => {
-    if (editComboItems.length === 0) return 0;
-    const stocks = editComboItems.map((item) => {
-      const prod = availableProducts.find((p) => p.product_id === item.product_id);
-      const stock = getProductTotalStock(prod);
-      return Math.floor(stock / Math.max(1, item.quantity));
-    });
-    return Math.max(0, Math.min(...stocks));
-  }, [editComboItems, availableProducts]);
+  const editVirtualStock = useMemo(
+    () => calculateComboVirtualStock(editComboItems, availableProducts),
+    [editComboItems, availableProducts]
+  );
 
   // Virtual stock calculation for table row
   const getComboVirtualStock = (cb: ExtendedCombo) => {
     const items = resolveAdminComboItems(cb, availableProducts);
-    if (items.length === 0) return 0;
-    const stocks = items.map((it: any) => {
-      const prod = availableProducts.find((p) => p.product_id === it.product_id);
-      const stock = getProductTotalStock(prod ?? it.product);
-      return Math.floor(stock / Math.max(1, it.quantity));
-    });
-    return Math.max(0, Math.min(...stocks));
+    return calculateComboVirtualStock(items, availableProducts);
   };
 
   const getComboRetailTotal = (cb: ExtendedCombo) => {
@@ -306,9 +325,26 @@ export default function AdminCombosPage() {
   };
 
   // Add Combo Submit
-  const handleCreateCombo = (e: React.FormEvent) => {
+  const handleCreateCombo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || comboItems.length === 0) return;
+
+    // Chặn submit khi thiếu phân loại hoặc sản phẩm không hợp lệ — không tự
+    // gán variant, không suy luận từ tên.
+    const unmappedIdx = comboItems.findIndex((it) => !it.variant_id);
+    if (unmappedIdx >= 0) {
+      alert(
+        `Thành phần #${unmappedIdx + 1} chưa chọn phân loại sản phẩm. Vui lòng chọn phân loại cho từng thành phần trước khi tạo Set Combo.`
+      );
+      return;
+    }
+    const missingProdIdx = comboItems.findIndex(
+      (it) => !availableProducts.some((p) => p.product_id === it.product_id)
+    );
+    if (missingProdIdx >= 0) {
+      alert(`Thành phần #${missingProdIdx + 1}: không tìm thấy sản phẩm đã chọn. Vui lòng chọn lại.`);
+      return;
+    }
 
     const slug = name
       .toLowerCase()
@@ -320,23 +356,11 @@ export default function AdminCombosPage() {
       .replace(/\s+/g, "-");
 
     const mappedItems = comboItems.map((item) => {
-      const p =
-        availableProducts.find((prod) => prod.product_id === item.product_id) ||
-        availableProducts[0] ||
-        ({
-          product_id: item.product_id,
-          name: "Sản phẩm ghép",
-          slug: "san-pham-ghep",
-          price: 0,
-          compare_at_price: null,
-          cost_price: null,
-          status: "active" as const,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        } as ExtendedProduct);
+      const p = availableProducts.find((prod) => prod.product_id === item.product_id)!;
       return {
         product: p,
         product_id: p.product_id,
+        variant_id: item.variant_id,
         slug: p.slug,
         name: p.name,
         price: p.price,
@@ -360,8 +384,17 @@ export default function AdminCombosPage() {
       items: mappedItems as any,
     };
 
-    saveNewCombo(newCb);
+    const result = await saveNewCombo(newCb);
     setCombos(getStoredCombos());
+    if (!result.success) {
+      // Không đóng modal, không reset form — admin thấy lỗi và lưu lại được.
+      alert(
+        result.kind === "network"
+          ? `Không thể kết nối máy chủ — Set Combo chỉ được lưu cục bộ: ${result.error}. Vui lòng thử lưu lại khi có kết nối.`
+          : `Máy chủ từ chối lưu Set Combo: ${result.error}. Vui lòng thử lại.`
+      );
+      return;
+    }
     setIsAddModalOpen(false);
     setName("");
     setDescription("");
@@ -369,34 +402,47 @@ export default function AdminCombosPage() {
     setStatus("active");
     setFeatured(true);
     setComboItems([
-      { product_id: availableProducts[0]?.product_id || "prod-1", quantity: 1 },
-      { product_id: availableProducts[1]?.product_id || "prod-2", quantity: 1 },
+      {
+        product_id: availableProducts[0]?.product_id || "prod-1",
+        variant_id: getDefaultComboVariantId(availableProducts[0]),
+        quantity: 1,
+      },
+      {
+        product_id: availableProducts[1]?.product_id || "prod-2",
+        variant_id: getDefaultComboVariantId(availableProducts[1]),
+        quantity: 1,
+      },
     ]);
   };
 
   // Save Edit Combo Submit
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCombo) return;
 
+    // Chặn submit khi thiếu phân loại hoặc sản phẩm không hợp lệ — không tự
+    // gán variant, không suy luận từ tên.
+    const unmappedIdx = editComboItems.findIndex((it) => !it.variant_id);
+    if (unmappedIdx >= 0) {
+      alert(
+        `Thành phần #${unmappedIdx + 1} chưa chọn phân loại sản phẩm. Vui lòng chọn phân loại cho từng thành phần trước khi lưu.`
+      );
+      return;
+    }
+    const missingProdIdx = editComboItems.findIndex(
+      (it) => !availableProducts.some((p) => p.product_id === it.product_id)
+    );
+    if (missingProdIdx >= 0) {
+      alert(`Thành phần #${missingProdIdx + 1}: không tìm thấy sản phẩm đã chọn. Vui lòng chọn lại.`);
+      return;
+    }
+
     const mappedItems = editComboItems.map((item) => {
-      const p =
-        availableProducts.find((prod) => prod.product_id === item.product_id) ||
-        availableProducts[0] ||
-        ({
-          product_id: item.product_id,
-          name: "Sản phẩm ghép",
-          slug: "san-pham-ghep",
-          price: 0,
-          compare_at_price: null,
-          cost_price: null,
-          status: "active" as const,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        } as ExtendedProduct);
+      const p = availableProducts.find((prod) => prod.product_id === item.product_id)!;
       return {
         product: p,
         product_id: p.product_id,
+        variant_id: item.variant_id,
         slug: p.slug,
         name: p.name,
         price: p.price,
@@ -416,21 +462,46 @@ export default function AdminCombosPage() {
       updated_at: new Date().toISOString(),
     };
 
-    updateStoredCombo(updated);
+    // Luồng sửa thành phần: gửi items (đã map variant_id tường minh).
+    const result = await updateStoredCombo(updated, { includeItems: true });
     setCombos(getStoredCombos());
+    if (!result.success) {
+      // Không đóng modal sửa — admin thấy lỗi và lưu lại được.
+      alert(
+        result.kind === "network"
+          ? `Không thể kết nối máy chủ — thay đổi chỉ được lưu cục bộ: ${result.error}. Vui lòng thử lại khi có kết nối.`
+          : `Máy chủ từ chối cập nhật Set Combo: ${result.error}. Vui lòng thử lại.`
+      );
+      return;
+    }
     setEditingCombo(null);
   };
 
   // Delete Combo
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingCombo) return;
-    deleteStoredCombo(deletingCombo.combo_id);
-    setCombos(getStoredCombos());
-    setDeletingCombo(null);
+    setIsDeleting(true);
+    try {
+      const result = await deleteStoredCombo(deletingCombo.combo_id);
+      if (!result.success) {
+        alert(
+          result.kind === "network"
+            ? `Không thể kết nối máy chủ để xóa combo: ${result.error}. Không xác định được server đã xóa hay chưa — vui lòng kiểm tra lại.`
+            : `Máy chủ từ chối xóa combo: ${result.error}. Combo chưa bị xóa.`
+        );
+        return;
+      }
+      setCombos(getStoredCombos());
+    } catch {
+      alert("Không thể xóa combo. Vui lòng thử lại.");
+    } finally {
+      setIsDeleting(false);
+      setDeletingCombo(null);
+    }
   };
 
   // Quick toggle between Active / Draft
-  const handleToggleComboStatus = (comboId: string, currentStatus?: string) => {
+  const handleToggleComboStatus = async (comboId: string, currentStatus?: string) => {
     const nextStatus = currentStatus === "draft" ? "active" : "draft";
     const found = combos.find((c) => c.combo_id === comboId);
     if (!found) return;
@@ -439,8 +510,15 @@ export default function AdminCombosPage() {
       status: nextStatus,
       updated_at: new Date().toISOString(),
     };
-    updateStoredCombo(updated);
+    const result = await updateStoredCombo(updated);
     setCombos(getStoredCombos());
+    if (!result.success) {
+      alert(
+        result.kind === "network"
+          ? `Không thể kết nối máy chủ — trạng thái chỉ được lưu cục bộ: ${result.error}`
+          : `Máy chủ từ chối cập nhật trạng thái: ${result.error}`
+      );
+    }
   };
 
   // Quick inline rename combo name
@@ -454,7 +532,7 @@ export default function AdminCombosPage() {
     setInlineComboName("");
   };
 
-  const handleSaveInlineRename = (comboId: string) => {
+  const handleSaveInlineRename = async (comboId: string) => {
     if (!inlineComboName.trim()) return;
     const target = combos.find((c) => c.combo_id === comboId);
     if (!target) return;
@@ -475,8 +553,17 @@ export default function AdminCombosPage() {
       updated_at: new Date().toISOString(),
     };
 
-    updateStoredCombo(updated);
+    const result = await updateStoredCombo(updated);
     setCombos(getStoredCombos());
+    if (!result.success) {
+      // Giữ ô đổi tên mở để admin sửa/lưu lại.
+      alert(
+        result.kind === "network"
+          ? `Không thể kết nối máy chủ — tên chỉ được lưu cục bộ: ${result.error}`
+          : `Máy chủ từ chối đổi tên combo: ${result.error}`
+      );
+      return;
+    }
     setRenamingComboId(null);
     setInlineComboName("");
   };
@@ -1015,21 +1102,53 @@ export default function AdminCombosPage() {
                             {index + 1}
                           </span>
 
-                        <select
-                          value={item.product_id}
-                          onChange={(e) => {
-                            const updated = [...comboItems];
-                            updated[index].product_id = e.target.value;
-                            setComboItems(updated);
-                          }}
-                          className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
-                        >
-                          {sortedProducts.map((p) => (
-                            <option key={p.product_id} value={p.product_id}>
-                              {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                          <select
+                            value={item.product_id}
+                            onChange={(e) => {
+                              const updated = [...comboItems];
+                              updated[index].product_id = e.target.value;
+                              const nextProduct = availableProducts.find((p) => p.product_id === e.target.value);
+                              updated[index].variant_id = getDefaultComboVariantId(nextProduct);
+                              setComboItems(updated);
+                            }}
+                            className="min-w-0 flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
+                          >
+                            {sortedProducts.map((p) => (
+                              <option key={p.product_id} value={p.product_id}>
+                                {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
+                              </option>
+                            ))}
+                          </select>
+
+                          {currentProd && currentProd.variants && currentProd.variants.length > 0 ? (
+                            <select
+                              value={item.variant_id || ""}
+                              onChange={(e) => {
+                                const updated = [...comboItems];
+                                updated[index].variant_id = e.target.value || null;
+                                setComboItems(updated);
+                              }}
+                              title="Chọn phân loại sản phẩm (bắt buộc)"
+                              className={`w-40 shrink-0 px-2.5 py-1.5 rounded-xl border text-xs outline-none bg-white font-semibold ${
+                                item.variant_id
+                                  ? "border-[#F0E5D8] text-[#342A24] focus:border-[#FFB98A]"
+                                  : "border-[#E8A0A0] text-[#9B2C2C]"
+                              }`}
+                            >
+                              <option value="">— Chọn phân loại —</option>
+                              {currentProd.variants.map((v) => (
+                                <option key={v.variant_id} value={v.variant_id}>
+                                  {variantLabel(v)}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="w-40 shrink-0 text-[10px] font-bold text-amber-700 leading-tight">
+                              Sản phẩm chưa có phân loại
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-[#7E7068] font-bold">SL:</span>
@@ -1040,7 +1159,7 @@ export default function AdminCombosPage() {
                             value={item.quantity}
                             onChange={(e) => {
                               const updated = [...comboItems];
-                              updated[index].quantity = Math.max(1, Number(e.target.value));
+                              updated[index].quantity = Math.max(1, Math.floor(Number(e.target.value) || 1));
                               setComboItems(updated);
                             }}
                             className="w-14 px-2 py-1.5 rounded-xl border border-[#F0E5D8] text-xs font-bold text-center bg-white"
@@ -1310,27 +1429,61 @@ export default function AdminCombosPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {editComboItems.map((item, index) => (
+                  {editComboItems.map((item, index) => {
+                    const currentProd = availableProducts.find((p) => p.product_id === item.product_id);
+                    return (
                     <div key={index} className="flex items-center gap-2 bg-[#FFF8EE] p-2.5 rounded-2xl border border-[#F0E5D8]">
                       <span className="w-5 h-5 rounded-full bg-[#BFE9C3] text-[#16381D] font-extrabold flex items-center justify-center text-[10px] shrink-0">
                         {index + 1}
                       </span>
 
-                      <select
-                        value={item.product_id}
-                        onChange={(e) => {
-                          const updated = [...editComboItems];
-                          updated[index].product_id = e.target.value;
-                          setEditComboItems(updated);
-                        }}
-                        className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
-                      >
-                        {sortedProducts.map((p) => (
-                          <option key={p.product_id} value={p.product_id}>
-                            {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                        <select
+                          value={item.product_id}
+                          onChange={(e) => {
+                            const updated = [...editComboItems];
+                            updated[index].product_id = e.target.value;
+                            const nextProduct = availableProducts.find((p) => p.product_id === e.target.value);
+                            updated[index].variant_id = getDefaultComboVariantId(nextProduct);
+                            setEditComboItems(updated);
+                          }}
+                          className="min-w-0 flex-1 px-2.5 py-1.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white text-[#342A24] font-semibold"
+                        >
+                          {sortedProducts.map((p) => (
+                            <option key={p.product_id} value={p.product_id}>
+                              {p.name} ({p.price.toLocaleString("vi-VN")}đ · Kho: {getProductTotalStock(p)})
+                            </option>
+                          ))}
+                        </select>
+
+                        {currentProd && currentProd.variants && currentProd.variants.length > 0 ? (
+                          <select
+                            value={item.variant_id || ""}
+                            onChange={(e) => {
+                              const updated = [...editComboItems];
+                              updated[index].variant_id = e.target.value || null;
+                              setEditComboItems(updated);
+                            }}
+                            title="Chọn phân loại sản phẩm (bắt buộc)"
+                            className={`w-40 shrink-0 px-2.5 py-1.5 rounded-xl border text-xs outline-none bg-white font-semibold ${
+                              item.variant_id
+                                ? "border-[#F0E5D8] text-[#342A24] focus:border-[#FFB98A]"
+                                : "border-[#E8A0A0] text-[#9B2C2C]"
+                            }`}
+                          >
+                            <option value="">— Chọn phân loại —</option>
+                            {currentProd.variants.map((v) => (
+                              <option key={v.variant_id} value={v.variant_id}>
+                                {variantLabel(v)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="w-40 shrink-0 text-[10px] font-bold text-amber-700 leading-tight">
+                            Sản phẩm chưa có phân loại
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex items-center gap-1">
                         <span className="text-[11px] text-[#7E7068] font-bold">SL:</span>
@@ -1341,7 +1494,7 @@ export default function AdminCombosPage() {
                           value={item.quantity}
                           onChange={(e) => {
                             const updated = [...editComboItems];
-                            updated[index].quantity = Math.max(1, Number(e.target.value));
+                            updated[index].quantity = Math.max(1, Math.floor(Number(e.target.value) || 1));
                             setEditComboItems(updated);
                           }}
                           className="w-14 px-2 py-1.5 rounded-xl border border-[#F0E5D8] text-xs font-bold text-center bg-white"
@@ -1359,7 +1512,8 @@ export default function AdminCombosPage() {
                         </button>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Real-time Value Calculation Card for Edit */}
@@ -1419,39 +1573,19 @@ export default function AdminCombosPage() {
 
       {/* MODAL: XÓA COMBO */}
       {deletingCombo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in" style={{ willChange: "opacity" }}>
-          <div
-            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95 duration-200"
-            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
-          >
-            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-extrabold text-lg text-[#231B16]">
-              Xóa Set Combo này?
-            </h3>
-            <p className="text-xs text-[#7E7068] leading-relaxed">
-              Bạn có chắc muốn xóa <strong>&quot;{deletingCombo.name}&quot;</strong>? Thao tác này sẽ gỡ Combo khỏi trang bán hàng.
-            </p>
-
-            <div className="flex items-center justify-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingCombo(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs cursor-pointer"
-              >
-                Đồng ý xóa ➔
-              </button>
-            </div>
-          </div>
-        </div>
+        <DoubleConfirmDialog
+          open={true}
+          onClose={() => setDeletingCombo(null)}
+          onConfirm={handleConfirmDelete}
+          title="Xóa Set Combo"
+          message="Bạn có chắc muốn xóa Set Combo này? Thao tác này sẽ gỡ bỏ Combo khỏi trang bán hàng."
+          confirmCode="XOA"
+          loading={isDeleting}
+          details={[
+            { label: "Tên Combo", value: deletingCombo.name },
+            { label: "Trạng thái", value: deletingCombo.status || "active" },
+          ]}
+        />
       )}
     </div>
   );

@@ -32,9 +32,12 @@ const expected = [
   "025_atomic_idempotent_order_creation.sql",
   "026_atomic_order_cancellation.sql",
   "027_close_runtime_read_and_rpc_bypasses.sql",
+  "028_orders_payments_least_privilege.sql",
+  "029_atomic_payment_rejection.sql",
+  "030_atomic_combo_persistence.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 027", () => {
+test("the migration chain has exactly one SQL file for 001 through 030", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();
