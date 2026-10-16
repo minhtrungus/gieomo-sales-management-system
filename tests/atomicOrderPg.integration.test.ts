@@ -221,6 +221,11 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
     );
     const customerId = custRes.rows[0].customer_id as string;
     const key = crypto.randomUUID();
+    const phoneSuffix = String(Number.parseInt(key.replaceAll("-", "").slice(0, 12), 16) % 10_000_000).padStart(
+      7,
+      "0"
+    );
+    const receiverPhone = `091${phoneSuffix}`;
 
     const mkPayload = (orderId: string, orderCode: string) => ({
       idempotency_key: key,
@@ -235,7 +240,7 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
       source_type: "landing_page",
       introducer_info: "Trực tiếp (Website)",
       receiver_name: "PG Conc",
-      receiver_phone: "0911000001",
+      receiver_phone: receiverPhone,
       delivery_type: "home_delivery",
       shipping_address_snapshot: null,
       customer_note: null,
@@ -245,18 +250,14 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
       items: [{ combo_id: null, variant_id: null, product_id: productId, quantity: 1 }],
     });
 
-    const run = async (client: any, orderId: string, orderCode: string, commit: boolean) => {
+    const run = async (client: any, orderId: string, orderCode: string) => {
       await client.query("BEGIN");
       try {
         const res = await client.query("SELECT public.create_order_atomic($1::jsonb) AS r", [
           JSON.stringify(canonicalPayload(mkPayload(orderId, orderCode))),
         ]);
         const out = res.rows[0].r as { outcome: string; replayed?: boolean; order_id: string };
-        if (commit) {
-          await client.query("COMMIT");
-        } else {
-          await client.query("ROLLBACK");
-        }
+        await client.query("COMMIT");
         return out;
       } catch (err) {
         await client.query("ROLLBACK");
@@ -264,11 +265,12 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
       }
     };
 
-    // ClientA COMMIT để claim visible cho clientB (test idempotency thật);
-    // clientB ROLLBACK để không để lại đơn thừa.
+    // CẢ HAI kết nối COMMIT — đúng như 2 request production thật cùng key.
+    // pg_advisory_xact_lock serialize 2 RPC: bên tới trước tạo đơn, bên sau
+    // replay đúng đơn đó — kết quả KHÔNG được phụ thuộc bên nào thắng lock.
     const [a, b] = await Promise.all([
-      run(clientA, "aaaaaaa1-4444-4444-8444-888888888888", `GM-C1${String(Date.now()).slice(-7)}`, true),
-      run(clientB, "bbbbbbb2-4444-4444-8444-888888888888", `GM-C2${String(Date.now()).slice(-7)}`, false),
+      run(clientA, "aaaaaaa1-4444-4444-8444-888888888888", `GM-C1${String(Date.now()).slice(-7)}`),
+      run(clientB, "bbbbbbb2-4444-4444-8444-888888888888", `GM-C2${String(Date.now()).slice(-7)}`),
     ]);
 
     assert.equal(a.outcome, "created");
@@ -276,13 +278,34 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
     assert.equal(a.order_id, b.order_id, "cùng key chỉ sinh đúng một order");
     assert.deepEqual([Boolean(a.replayed), Boolean(b.replayed)].sort(), [false, true]);
 
-    // Dọn seed (best effort) — clientA đã COMMIT → cần DELETE thủ công.
-    await clientA.query("DELETE FROM public.order_items WHERE order_id IN ('aaaaaaa1-4444-4444-8444-888888888888','bbbbbbb2-4444-4444-8444-888888888888')");
-    await clientA.query("DELETE FROM public.orders WHERE order_id IN ('aaaaaaa1-4444-4444-8444-888888888888','bbbbbbb2-4444-4444-8444-888888888888')");
-    await clientA.query("DELETE FROM public.order_status_history WHERE order_id IN ('aaaaaaa1-4444-4444-8444-888888888888','bbbbbbb2-4444-4444-8444-888888888888')");
+    const dbState = await clientA.query(
+      "SELECT (SELECT count(*)::int FROM public.orders WHERE idempotency_key = $1) AS orders_n, " +
+        "(SELECT count(*)::int FROM public.order_idempotency WHERE idempotency_key = $1) AS ledger_n",
+      [key]
+    );
+    assert.equal(
+      `${dbState.rows[0].orders_n}|${dbState.rows[0].ledger_n}`,
+      "1|1",
+      "DB phải giữ đúng 1 order + 1 ledger row cho key"
+    );
+
+    // Dọn theo dữ liệu THẬT (RPC tự sinh order_id; upsert customer theo phone
+    // receiver_phone), giới hạn bằng phone riêng của run. Thứ tự FK:
+    // ledger (RESTRICT→orders) → reservations/audit → orders (CASCADE
+    // items/history) → seed → customer.
     await clientA.query("DELETE FROM public.order_idempotency WHERE idempotency_key = $1", [key]);
+    await clientA.query(
+      "DELETE FROM public.order_inventory_reservations WHERE order_id IN (SELECT order_id FROM public.orders WHERE receiver_phone = $1)",
+      [receiverPhone]
+    );
+    await clientA.query(
+      "DELETE FROM public.audit_logs WHERE entity_id IN (SELECT order_id FROM public.orders WHERE receiver_phone = $1)",
+      [receiverPhone]
+    );
+    await clientA.query("DELETE FROM public.orders WHERE receiver_phone = $1", [receiverPhone]);
     await clientA.query("DELETE FROM public.products WHERE product_id = $1", [productId]);
     await clientA.query("DELETE FROM public.customers WHERE customer_id = $1", [customerId]);
+    await clientA.query("DELETE FROM public.customers WHERE phone = $1", [receiverPhone]);
   } finally {
     await clientA.end();
     await clientB.end();

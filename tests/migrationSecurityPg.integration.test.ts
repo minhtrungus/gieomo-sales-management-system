@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
+import { psqlBin as psql, psqlTimeoutMs } from "./helpers/psqlBin.ts";
 
 const databaseUrl = process.env.ATOMIC_PG_URL;
-const psql = process.env.PSQL_BIN || "psql.exe";
 
 function query(sql: string): string {
   if (!databaseUrl) throw new Error("ATOMIC_PG_URL is required");
   return execFileSync(psql, ["-X", "-v", "ON_ERROR_STOP=1", "-At", "-d", databaseUrl, "-c", sql], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: psqlTimeoutMs,
   }).trim();
 }
 
@@ -19,7 +20,8 @@ function queryFails(sql: string): string {
     query(sql);
   } catch (error) {
     const stderr = (error as { stderr?: string }).stderr || "";
-    return stderr;
+    if (stderr.trim()) return stderr;
+    throw error;
   }
   assert.fail("query unexpectedly succeeded");
 }

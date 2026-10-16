@@ -3,9 +3,9 @@ import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
+import { psqlBin as psql, psqlTimeoutMs } from "./helpers/psqlBin.ts";
 
 const databaseUrl = process.env.ATOMIC_PG_URL;
-const psql = process.env.PSQL_BIN || "psql.exe";
 const execFileAsync = promisify(execFile);
 const adminId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -18,6 +18,7 @@ function query(sql: string): string {
   return execFileSync(psql, ["-X", "-v", "ON_ERROR_STOP=1", "-At", "-d", databaseUrl, "-c", sql], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: psqlTimeoutMs,
   }).trim();
 }
 
@@ -26,7 +27,7 @@ async function queryAsync(sql: string): Promise<string> {
   const { stdout } = await execFileAsync(
     psql,
     ["-X", "-v", "ON_ERROR_STOP=1", "-At", "-d", databaseUrl, "-c", sql],
-    { encoding: "utf8" }
+    { encoding: "utf8", timeout: psqlTimeoutMs }
   );
   return stdout.trim();
 }
