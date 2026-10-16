@@ -1,5 +1,76 @@
 # Gieo Mơ Production Go-Live Status
 
+## Release update — 2026-10-17
+
+**Verdict: Preview unblocked; Production remains NO-GO.** This update supersedes the release-state claims below while retaining the earlier investigation as historical evidence.
+
+### Root cause and fix
+
+- Preview `/api/orders` failed with PostgREST `PGRST200`: the deployed database did not contain the `orders` → `order_inventory_reservations` relationship expected by the enriched order query.
+- `src/lib/services/orderService.ts` now retries the core order query only when the optional packing relation is specifically unavailable (`PGRST200`/`42P01` mentioning `order_inventory_reservations`). Other database failures still fail closed.
+- Regression coverage requires one fallback retry and verifies that orders/items remain visible with `packing_items: []`.
+- Fix commit: `47bee172299e0473837b5098eb35edce97c1cc5e`, pushed to `origin/preview/payment-replay-followup`.
+
+### Verification evidence
+
+| Gate | Result |
+|---|---|
+| Targeted order/P0 tests | PASS — 20/20 |
+| Type-check | PASS |
+| Touched-file lint | PASS |
+| Production build | PASS |
+| GitHub workflow on exact branch/SHA | PASS — run `38960242397`, including migration replay 001–030 and mandatory PostgreSQL tests with zero skip |
+| Preview deployment | READY — `dpl_Ek3LC1GoqKseyBgZfFZut6K7Jxyv` at SHA `47bee172299e0473837b5098eb35edce97c1cc5e` |
+| Preview `/api/orders?code=GM-NONEXISTENT-SMOKE` | PASS — HTTP success with `{"success":true,"orders":[]}`; runtime logs show the controlled optional-relation fallback and successful order requests |
+| Local full Node suite without `ATOMIC_PG_URL` | NOT A PASS — 253 pass, 5 fail, 51 skip; superseded for release evidence by the zero-skip GitHub PostgreSQL workflow above |
+
+### Read-only Production database state
+
+The linked Supabase project was positively identified before read-only catalog/count queries. No Production data or schema was changed.
+
+| Object | Count |
+|---|---:|
+| orders | 63 |
+| customers | 41 |
+| order_items | 130 |
+| products | 4 |
+| product_variants | 103 |
+| members | 5 |
+| payments | 0 |
+| order_status_history | 63 |
+| audit_logs | 0 |
+| order_idempotency | 0 |
+
+Integrity aggregates: 34 orders are marked paid and all 34 have no payment row; zero orders lack items; zero orders lack a customer; zero orphan order items; zero orphan status-history rows; zero duplicate order codes; zero duplicate non-null order idempotency keys. The 34 paid-without-payment cases require separate, provider-backed finance reconciliation; no synthetic payment rows were created.
+
+Production schema is incompatible with the current 001–030 candidate. The migration ledger is empty, so exact historical apply order is **UNKNOWN** and must not be inferred from repository files. Catalog inspection found:
+
+- missing `payment_events`, `order_inventory_reservations`, and `order_idempotency_v015_archive`;
+- legacy `create_order_atomic(jsonb)` and `cancel_order_atomic(uuid,text,text,uuid)` only;
+- missing JSONB cancellation, `apply_payment_event`, `reject_payment_atomic`, and `save_combo_atomic` RPCs;
+- older order idempotency columns/indexes rather than the 021+ scope/hash contract;
+- permissive public/authenticated order-domain policies and grants still present; `deduct_variant_stock_atomic` remains executable by `anon` and `authenticated`.
+
+### Migration, backup, and deployment decision
+
+- **Migrations applied in this execution: none.** No ledger repair or `supabase db push` was attempted.
+- Provider backup inventory returned no backups; PITR is disabled. This fails the required pre-migration rollback gate.
+- Migrations 021–030 are not a blind additive patch: they change idempotency structures, policies/grants, security-definer functions, RPC contracts, and supporting tables/indexes. Applying them without a verified baseline and recovery point is unsafe.
+- `https://gieomo.store` remains on Production deployment `dpl_2giS8As7bZciK3wdRoPRUSP56cMt`, source SHA `9fdfc7011ca100facb5203800c10247155c7ab05`. Baseline public homepage and nonexistent-code order lookup return HTTP success.
+- A newer READY Production-target deployment at SHA `0b7825ecc5c524f822d2ef5602b4fb7a48182f70` was **not** promoted because its database contract is not present in Production.
+- No Production deployment, alias promotion, database write, migration, historical repair, or order/payment mutation occurred.
+
+### Remaining release blockers
+
+1. Establish and verify a restorable Production backup or PITR recovery point.
+2. Reconcile the empty migration ledger against the actual catalog and approve an explicit upgrade plan; do not mark historical migrations applied as a discovery shortcut.
+3. Rehearse the approved upgrade against a Production-like restored database, then verify schema, RLS, grants, RPC signatures, and rollback.
+4. Reconcile the 34 paid orders with provider evidence under finance ownership, separately from the prevention release.
+5. Put the exact release branch through review. `main` has no branch protection/ruleset, PR #2 is stale with an older failing check, and no reviewed PR currently covers SHA `47bee172299e0473837b5098eb35edce97c1cc5e`.
+6. After database compatibility is proven, deploy one immutable reviewed SHA and run authenticated create/read/cancel/payment smoke tests plus rollback verification.
+
+Until all blockers pass, **do not promote the newer Production deployment or apply migrations 021–030 to Production.**
+
 ## Current reconciliation — 2026-10-16
 
 **Verdict remains NO-GO.** This section supersedes stale source-state claims below while retaining the earlier report as historical evidence.
