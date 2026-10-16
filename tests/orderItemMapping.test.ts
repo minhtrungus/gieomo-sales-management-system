@@ -215,6 +215,32 @@ test("F7-T5 — mapping trả danh sách đóng gói đúng variant/SKU từ res
   ]);
 });
 
+test("F7-T6 — missing optional packing relation still returns core orders", async () => {
+  const db = seedDb();
+  let orderQueryCount = 0;
+  db.hook = (ctx) => {
+    if (ctx.table !== "orders" || ctx.op !== "select") return;
+    orderQueryCount += 1;
+    if (ctx.cols?.includes("order_inventory_reservations")) {
+      return {
+        error: {
+          code: "PGRST200",
+          message:
+            "Could not find a relationship between 'orders' and 'order_inventory_reservations' in the schema cache",
+        },
+      };
+    }
+  };
+
+  const orders = await getOrdersServer({ isAdmin: true });
+
+  assert.equal(orderQueryCount, 2, "must retry once without the optional relation");
+  assert.equal(orders.length, 1);
+  assert.equal(orders[0].order_code, "GM000001");
+  assert.equal(orders[0].items.length, 3);
+  assert.deepEqual(orders[0].packing_items, []);
+});
+
 test("F7-T2 — mapping không làm mất legacy fields (product_name/variant_name/price/unit_price)", async () => {
   seedDb();
   const orders = await getOrdersServer({ isAdmin: true });

@@ -373,9 +373,7 @@ export async function getOrdersServer(options?: {
       }
     }
 
-    let query = supabase
-      .from("orders")
-      .select(`
+    const coreOrderSelect = `
         order_id,
         order_code,
         receiver_name,
@@ -414,7 +412,9 @@ export async function getOrdersServer(options?: {
           quantity,
           unit_price,
           subtotal
-        ),
+        )
+      `;
+    const packingReservationSelect = `
         order_inventory_reservations (
           variant_id,
           quantity,
@@ -427,23 +427,51 @@ export async function getOrdersServer(options?: {
             )
           )
         )
-      `)
-      .order("created_at", { ascending: false });
+      `;
 
-    if (options?.code) {
-      query = query.eq("order_code", options.code.trim().toUpperCase());
+    const runOrderQuery = async (includePackingReservations: boolean) => {
+      let query = supabase
+        .from("orders")
+        .select(
+          includePackingReservations
+            ? `${coreOrderSelect},${packingReservationSelect}`
+            : coreOrderSelect
+        )
+        .order("created_at", { ascending: false });
+
+      if (options?.code) {
+        query = query.eq("order_code", options.code.trim().toUpperCase());
+      }
+
+      if (options?.phone) {
+        const cleanPhone = options.phone.trim().replace(/\D/g, "");
+        query = query.eq("receiver_phone", cleanPhone);
+      }
+
+      if (options?.limit) {
+        query = query.limit(options.limit);
+      }
+
+      return await query;
+    };
+
+    let { data, error } = await runOrderQuery(true);
+    const packingRelationUnavailable = Boolean(
+      error &&
+      (error.code === "PGRST200" || error.code === "42P01") &&
+      `${error.message || ""} ${error.details || ""}`.includes("order_inventory_reservations")
+    );
+
+    if (packingRelationUnavailable) {
+      // Migration 026 adds packing reservations. Older live schemas must still
+      // list existing orders while that optional enrichment is unavailable;
+      // core order-query failures continue to fail closed below.
+      console.warn(
+        "[getOrdersServer] Optional packing reservation relation unavailable; retrying core order query"
+      );
+      ({ data, error } = await runOrderQuery(false));
     }
 
-    if (options?.phone) {
-      const cleanPhone = options.phone.trim().replace(/\D/g, "");
-      query = query.eq("receiver_phone", cleanPhone);
-    }
-
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-
-    const { data, error } = await query;
     if (error) {
       console.error("[getOrdersServer] DB Error:", error);
       // P0: throw instead of returning [] — an empty array is indistinguishable
