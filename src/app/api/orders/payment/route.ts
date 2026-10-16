@@ -96,6 +96,9 @@ export async function POST(request: Request) {
           paymentStatus: result.payment_status,
           orderStatus: result.order_status,
           replayed: result.replayed === true,
+          // Contract field: true khi RPC replay một event đã ghi trước đó
+          // (idempotent — không tạo record mới). Client dùng làm defense-in-depth.
+          isAlreadyPaid: result.replayed === true,
         });
       }
 

@@ -152,7 +152,8 @@ test("T4 — network rejection → network_error; retry sau đó in-flight sạc
   // in-flight đã được nhả → retry được phép.
   assert.equal(isPaymentConfirmInFlight(ORDER_CODE), false);
 
-  // Lần 2 (retry): server trả isAlreadyPaid (webhook đã ghi trước) → idempotent.
+  // Lần 2 (retry): webhook đã ghi trước → server replay (legacy shape trong test
+  // này; wire thật xem T8b) → idempotent.
   const retryFetch = makeFetch(calls, () =>
     okJson(200, { success: false, error: "Đơn hàng này đã được xác nhận thanh toán trước đó.", isAlreadyPaid: true })
   );
@@ -253,7 +254,7 @@ test("T7 — double-click/in-flight → in_flight, chỉ 1 request được gử
   assert.equal(calls.length, 1);
 });
 
-test("T8 — webhook/payment đã ghi nhận trước đó → already_paid, idempotent, không nhân đôi", async () => {
+test("T8 — legacy shape success=false + isAlreadyPaid → already_paid, idempotent, không nhân đôi", async () => {
   resetPaymentConfirmInFlight();
   const calls: any[] = [];
   const fetchImpl = makeFetch(calls, () =>
@@ -265,6 +266,31 @@ test("T8 — webhook/payment đã ghi nhận trước đó → already_paid, ide
   assert.equal((result as any).paymentStatusIsPaid, true);
   // Caller chỉ đồng bộ local paid (idempotent) — record dedup do
   // recordPaymentOnce (paymentRecordService tests P1-P8) + constraint 018.
+});
+
+test("T8b — REAL wire contract: RPC replay trả success=true + replayed=true + isAlreadyPaid=true → ok, không duplicate", async () => {
+  resetPaymentConfirmInFlight();
+  const calls: { url: string; body: unknown }[] = [];
+  // /api/orders/payment route map apply_payment_event outcome=applied/replayed
+  // thành HTTP 200 success=true paymentStatus=paid (isAlreadyPaid=true khi replay).
+  const fetchImpl = makeFetch(calls, () =>
+    okJson(200, {
+      success: true,
+      outcome: "applied",
+      orderId: "o1",
+      orderCode: ORDER_CODE,
+      paymentStatus: "paid",
+      orderStatus: "confirmed",
+      replayed: true,
+      isAlreadyPaid: true,
+    })
+  );
+  const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
+  // Nhánh 1 (success=true + paymentStatus=paid) bắt trước → ok:true, caller
+  // đồng bộ local paid. Server replay không tạo record mới (constraint 018).
+  assert.equal(result.ok, true);
+  assert.equal(result.paymentStatus, "paid");
+  assert.equal(calls.length, 1);
 });
 
 // ===========================================================================

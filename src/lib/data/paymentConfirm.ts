@@ -16,11 +16,13 @@
  * gọi đồng thời cho cùng đơn → lần thứ hai trả in_flight, KHÔNG gửi request
  * thứ hai. (Lớp guard thứ hai nằm ở UI qua isConfirmingPaid.)
  *
- * Idempotency: đã-thanh-toán server trả isAlreadyPaid (HTTP 200) → outcome
- * already_paid, caller đồng bộ local paid nhưng KHÔNG tạo record mới.
- * Đơn đã hủy server trả order_cancelled (HTTP 409) — server VẪN ghi payment
- * record làm dấu vết (trace) nhưng KHÔNG hồi sinh đơn; caller chỉ đồng bộ
- * payment_status=paid (trace), GIỮ nguyên order_status=cancelled.
+ * Idempotency: RPC replay (event đã ghi trước đó, ví dụ webhook chạy trước)
+ * trả HTTP 200 + success=true + paymentStatus="paid" + isAlreadyPaid=true →
+ * nhánh 1 xử lý thành công (đồng bộ local paid, không record mới). Server cũng
+ * có thể trả success=false + isAlreadyPaid=true (legacy shape) → nhánh 2
+ * already_paid. Đơn đã hủy server trả order_cancelled (HTTP 409) — server VẪN
+ * ghi payment record làm dấu vết (trace) nhưng KHÔNG hồi sinh đơn; caller chỉ
+ * đồng bộ payment_status=paid (trace), GIỮ nguyên order_status=cancelled.
  */
 
 export type PaymentConfirmOutcome =
