@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthenticatedUser } from "@/lib/auth/serverAuth";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +67,11 @@ function detectImageMimeType(buf: Buffer): string | null {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const formData = await request.formData();
     
     // Support both single "file" and multiple "files" in one request
@@ -89,17 +94,6 @@ export async function POST(request: Request) {
         { success: false, error: "Tên bucket lưu trữ không hợp lệ" },
         { status: 400 }
       );
-    }
-
-    // Require admin session for content-media bucket or multi-file batch uploads
-    if (bucket === "content-media" || allFilesToProcess.length > 2) {
-      const user = await getAuthenticatedUser(request);
-      if (!user) {
-        return NextResponse.json(
-          { success: false, error: "Yêu cầu quyền quản trị để tải tệp này" },
-          { status: 401 }
-        );
-      }
     }
 
     const supabase = createAdminClient();

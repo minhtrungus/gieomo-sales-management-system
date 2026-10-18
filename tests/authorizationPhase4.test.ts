@@ -43,3 +43,14 @@ test("P4-A5 clear-data endpoint is a non-mutating 403 stub", () => {
   assert.match(route, /status:\s*403/);
   assert.doesNotMatch(route, /\.delete\(|\.update\(|\.insert\(/);
 });
+
+test("P4-A6 generic media upload is admin-only before parsing files", () => {
+  const route = source("src/app/api/upload/route.ts");
+  const authorization = route.indexOf("await requireAdmin(request)");
+  const bodyParsing = route.indexOf("await request.formData()");
+
+  assert.ok(authorization >= 0, "upload route must require an admin session");
+  assert.ok(bodyParsing >= 0, "upload route must parse multipart form data");
+  assert.ok(authorization < bodyParsing, "authorization must happen before file parsing");
+  assert.doesNotMatch(route, /getAuthenticatedUser\(request\)/);
+});

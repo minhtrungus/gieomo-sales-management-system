@@ -270,46 +270,49 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
             />
           </div>
 
-          {/* Photo upload */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-gray-700 block flex items-center gap-1.5">
-              <Camera className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Thêm hình ảnh thực tế (Tối đa 3 ảnh):</span>
-            </label>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-emerald-500 flex flex-col items-center justify-center text-gray-400 hover:text-emerald-700 cursor-pointer transition-colors bg-white">
-                {isUploadingImages ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
-                ) : (
-                  <Camera className="w-5 h-5" />
-                )}
-                <span className="text-[9px] font-bold mt-0.5">
-                  {isUploadingImages ? "Đang tải" : "Thêm ảnh"}
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  disabled={isUploadingImages}
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
+          {/* Photo upload (admin-only) — anonymous reviewers submit text-only;
+              server route /api/upload is admin-only (tests/authorizationPhase4.test.ts P4-A6) */}
+          {isAdmin && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-700 block flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Thêm hình ảnh thực tế (Tối đa 3 ảnh):</span>
               </label>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-emerald-500 flex flex-col items-center justify-center text-gray-400 hover:text-emerald-700 cursor-pointer transition-colors bg-white">
+                  {isUploadingImages ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                  ) : (
+                    <Camera className="w-5 h-5" />
+                  )}
+                  <span className="text-[9px] font-bold mt-0.5">
+                    {isUploadingImages ? "Đang tải" : "Thêm ảnh"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={isUploadingImages}
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
 
-              {images.map((img, idx) => (
-                <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 group">
-                  <Image src={img} alt="Review attachment" fill className="object-cover" sizes="64px" />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                {images.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 group">
+                    <Image src={img} alt="Review attachment" fill className="object-cover" sizes="64px" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {formError && (
             <p className="text-xs text-red-600 font-medium">{formError}</p>
