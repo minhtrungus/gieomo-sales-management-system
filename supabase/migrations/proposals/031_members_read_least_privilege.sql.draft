@@ -1,0 +1,81 @@
+-- ============================================================================
+-- PROPOSAL 031 (DRAFT — NOT part of the canonical 001–030 chain)
+-- H29-P1 hotfix candidate: public.members SELECT least-privilege
+-- ============================================================================
+-- Status   : PATCH-READY (rehearsed locally on isolated synthetic fixture; NOT
+--            applied to prod mirror 55442; NOT applied to Production).
+-- Owner    : pending sign-off (H29-P1 approval form 0A).
+-- Relation to history:
+--   * Supersedes, for the pre-cutover horizon, the members section of
+--     migration 012 (lines 11–30), which is the known NOT-APPLIED drift zone
+--     on the Production mirror (H29_MIGRATION_LEDGER_FORENSICS).
+--   * Safe if it is later re-applied after a full 001–030 replay: operations
+--     are idempotent (REVOKE / column GRANT are set-replacements); the hotfix
+--     re-grants the public-safe trio that 011 documents, and does not widen
+--     anything 012 narrowed. Update (INSERT/UPDATE/DELETE) paths of this app
+--     all use the server-side service-role client (createAdminClient), which
+--     keeps table-level ALL via 002.11 + 006.65 + 011.109.
+--   * Scope discipline: P1 fixes SELECT exposure only. Table-level
+--     INSERT/TRUNCATE/REFERENCES/TRIGGER left for anon on mirror (found during
+--     forensics, inert through PostgREST but hygiene-relevant) is recorded as
+--     a separate finding; cutover migrations 027/028 already revoke those at
+--     schema level. It is intentionally NOT folded into this patch to keep the
+--     hotfix minimal and reversible.
+-- Evidence of need:
+--   * 002.12/.13 granted SELECT (and more) ON ALL TABLES to anon/authenticated.
+--   * 006.66 re-granted "GRANT SELECT ON TABLE public.members TO anon, authenticated".
+--   * 011 kept row-filter policy but never restricted columns.
+--   * verified on prod mirror (metadata only): has_column_privilege
+--     ('anon','members','password_hash','SELECT') = true AND
+--     has_column_privilege('authenticated','members','password_hash','SELECT') = true.
+-- Reversal (rollback) one-liner:
+--   REVOKE SELECT (member_id, full_name, referral_code) ON public.members
+--     FROM anon, authenticated;
+--   GRANT  SELECT ON TABLE public.members TO anon, authenticated;
+-- ============================================================================
+
+BEGIN;
+
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+
+-- 1. Remove table-level SELECT (this carries password_hash/email/phone/
+--    role/status and every other column) away from the two PostgREST roles.
+REVOKE SELECT ON TABLE public.members FROM anon, authenticated;
+
+-- 2. Re-grant the public-safe trio exactly as documented by migration 011
+--    ("member_id, full_name, referral_code") *as column-level* grants.
+--    RLS row-filter "Public read basic members" (status = 'active') continues
+--    to apply on top of these column grants (row filter x column filter).
+GRANT SELECT (member_id, full_name, referral_code)
+  ON public.members TO anon, authenticated;
+
+-- 3. service_role must remain fully operational (login, admin CRUD, presence
+--    map, member upsert/delete). Already granted ALL by 002.11, 006.65, and
+--    011.109; re-asserted below so the patch is self-sufficient when replayed
+--    after any of these.
+GRANT ALL ON TABLE public.members TO service_role;
+
+-- 4. Hard post-conditions (fail the transaction when violated).
+DO $$
+BEGIN
+  IF has_column_privilege('anon', 'members', 'password_hash', 'SELECT') THEN
+    RAISE EXCEPTION 'P1 post-condition failed: anon can still SELECT password_hash';
+  END IF;
+  IF has_column_privilege('authenticated', 'members', 'password_hash', 'SELECT') THEN
+    RAISE EXCEPTION 'P1 post-condition failed: authenticated can still SELECT password_hash';
+  END IF;
+  IF NOT has_column_privilege('anon', 'members', 'member_id', 'SELECT')
+     OR NOT has_column_privilege('anon', 'members', 'full_name', 'SELECT')
+     OR NOT has_column_privilege('anon', 'members', 'referral_code', 'SELECT') THEN
+    RAISE EXCEPTION 'P1 post-condition failed: public-safe trio no longer readable by anon';
+  END IF;
+  IF NOT has_column_privilege('service_role', 'members', 'password_hash', 'SELECT') THEN
+    RAISE EXCEPTION 'P1 post-condition failed: service_role lost password_hash SELECT (login would break)';
+  END IF;
+  IF has_column_privilege('anon', 'members', 'email', 'SELECT') THEN
+    RAISE EXCEPTION 'P1 post-condition failed: email must stay unreadable by anon (least-privilege breadth)';
+  END IF;
+END
+$$;
+
+COMMIT;

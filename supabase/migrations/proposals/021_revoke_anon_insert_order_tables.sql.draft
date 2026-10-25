@@ -1,0 +1,110 @@
+-- ========================================================
+-- GIEO MƠ — DATABASE MIGRATION 021 (DRAFT — CHƯA APPLY)
+-- Revoke runtime-role DML trên các bảng đơn hàng (customers, orders,
+-- order_items, payments, order_status_history)
+--
+-- TRẠNG THÁI: DRAFT. KHÔNG chạy trên Production/DB thường. Chỉ apply sau khi:
+--   [ ] Operator phê duyệt (business sign-off checkout flow).
+--   [ ] isolated PostgreSQL (ATOMIC_PG_URL) apply + smoke test trọn flow.
+--   [ ] Storefront checkout smoke: đặt đơn COD + banking qua UI thật,
+--       proof upload, admin confirm/reject — không lỗi.
+--   [ ] Backup/restore đã verify.
+-- File này đặt trong proposals/ + đuôi .sql.draft để mọi runner/migration
+-- tool (supabase db push, ...) KHÔNG vô tình áp dụng.
+--
+-- BẰNG CHỨNG (đã verify trong repo, ngày 2026-10-13):
+--   - 002:13 GRANT SELECT, INSERT ... TO anon + 002:69-92 policies
+--     "Public insert ..." WITH CHECK (true) cho 5 bảng trên.
+--   - 011:102-106 + 013: REVOKE SELECT (anon) đã chạy — nhưng INSERT
+--     policies + grant INSERT vẫn còn → anon PostgREST trực tiếp vẫn
+--     INSERT được rác (WITH CHECK true, không giới hạn).
+--   - Checkout KHÔNG dùng anon insert: orderService → rpc
+--     create_order_atomic (016:224 SECURITY DEFINER; 016:848 REVOKE FROM
+--     PUBLIC, anon, authenticated — chỉ service_role EXECUTE). API routes
+--     đều qua createAdminClient (service role).
+--   - Browser anon client (src/lib/supabase/client.ts) KHÔNG được import
+--     ở bất kỳ đâu trong src/ (dead code) → không có client-side insert.
+--   - product_reviews (008:46 FOR INSERT WITH CHECK true) là policy riêng,
+--     KHÔNG thuộc scope migration này (review flow public theo design).
+--
+-- ROLLBACK: xem cuối file.
+-- ========================================================
+
+-- 1. REVOKES — anon/authenticated không còn direct DML trên 5 bảng.
+--    Authenticated SELECT được giữ nguyên theo 013; anon SELECT đã bị
+--    011 revoke. Checkout/admin writers trong repo dùng service_role.
+REVOKE INSERT, UPDATE, DELETE ON public.customers FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.orders FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.order_items FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.payments FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.order_status_history FROM anon, authenticated;
+
+-- 2. DROP policies "Public insert ..." (mồ côi sau khi revoke —
+--    giữ lại để pg_policy không trỏ grant đã bị cắt).
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Public insert customers" ON public.customers;
+  DROP POLICY IF EXISTS "Public insert orders" ON public.orders;
+  DROP POLICY IF EXISTS "Public insert order_items" ON public.order_items;
+  DROP POLICY IF EXISTS "Public insert payments" ON public.payments;
+  DROP POLICY IF EXISTS "Public insert order_status_history" ON public.order_status_history;
+EXCEPTION
+  WHEN undefined_table THEN null;
+END $$;
+
+-- 3. GIỮ NGUYÊN (không đụng): authenticated SELECT + service_role ALL
+--    như 013 đã tạo — các policy này không bị ảnh hưởng bởi revoke ở trên.
+
+-- 4. VERIFY — fail-closed: anon không còn quyền nào; authenticated
+--    không còn DML, nhưng vẫn được SELECT theo policy 013.
+DO $$
+DECLARE
+  tbl TEXT;
+  bad TEXT := '';
+BEGIN
+  FOR tbl IN
+    SELECT unnest(ARRAY[
+      'customers', 'orders', 'order_items', 'payments', 'order_status_history'
+    ])
+  LOOP
+    IF has_table_privilege('anon', 'public.' || tbl, 'INSERT')
+       OR has_table_privilege('anon', 'public.' || tbl, 'UPDATE')
+       OR has_table_privilege('anon', 'public.' || tbl, 'DELETE')
+       OR has_table_privilege('anon', 'public.' || tbl, 'SELECT') THEN
+      bad := bad || tbl || ' ';
+    END IF;
+    IF has_table_privilege('authenticated', 'public.' || tbl, 'INSERT')
+       OR has_table_privilege('authenticated', 'public.' || tbl, 'UPDATE')
+       OR has_table_privilege('authenticated', 'public.' || tbl, 'DELETE') THEN
+      bad := bad || 'authenticated:' || tbl || ' ';
+    END IF;
+  END LOOP;
+  IF bad <> '' THEN
+    RAISE EXCEPTION 'anon VẪN còn privilege trên: % — migration 021 thất bại', bad;
+  END IF;
+END $$;
+
+-- 5. VERIFY — checkout RPC vẫn chỉ service_role (đảm bảo chưa ai cấp lại
+--    EXECUTE cho anon giữa chừng).
+DO $$
+BEGIN
+  IF has_function_privilege('anon', 'public.create_order_atomic(jsonb)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.create_order_atomic(jsonb)', 'EXECUTE')
+     -- PUBLIC is PostgreSQL's pseudo-role (ACL OID 0), not a row in pg_roles.
+     OR has_function_privilege(0::oid, 'public.create_order_atomic(jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'runtime role có EXECUTE create_order_atomic — không được apply 021 khi RPC public';
+  END IF;
+END $$;
+
+-- ========================================================
+-- ROLLBACK (chỉ nếu smoke test fail sau khi apply trên isolated PG):
+--   GRANT INSERT ON public.customers TO anon, authenticated;
+--   GRANT INSERT ON public.orders TO anon, authenticated;
+--   GRANT INSERT ON public.order_items TO anon, authenticated;
+--   GRANT INSERT ON public.payments TO anon, authenticated;
+--   GRANT INSERT ON public.order_status_history TO anon, authenticated;
+--   CREATE POLICY "Public insert customers" ON public.customers FOR INSERT WITH CHECK (true);
+--   CREATE POLICY "Public insert orders" ON public.orders FOR INSERT WITH CHECK (true);
+--   CREATE POLICY "Public insert order_items" ON public.order_items FOR INSERT WITH CHECK (true);
+--   CREATE POLICY "Public insert payments" ON public.payments FOR INSERT WITH CHECK (true);
+--   CREATE POLICY "Public insert order_status_history" ON public.order_status_history FOR INSERT WITH CHECK (true);
+-- ========================================================

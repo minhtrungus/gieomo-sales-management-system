@@ -14,39 +14,42 @@ interface NotificationState {
 }
 
 async function getNotificationState(supabase: any): Promise<NotificationState> {
-  try {
-    const { data } = await supabase
-      .from("system_configs")
-      .select("config_value")
-      .eq("config_key", STATE_CONFIG_KEY)
-      .maybeSingle();
+  // Batch 3E C6/C7 — fail-closed: đọc state lỗi phải Ném lỗi, không giả lập
+  // "trạng thái rỗng" (có thể resurrect notification đã delete khi lưu đè).
+  const { data, error } = await supabase
+    .from("system_configs")
+    .select("config_value")
+    .eq("config_key", STATE_CONFIG_KEY)
+    .maybeSingle();
 
-    if (data?.config_value) {
-      const parsed = JSON.parse(data.config_value);
-      return {
-        readIds: Array.isArray(parsed.readIds) ? parsed.readIds : [],
-        starredIds: Array.isArray(parsed.starredIds) ? parsed.starredIds : [],
-        deletedIds: Array.isArray(parsed.deletedIds) ? parsed.deletedIds : [],
-      };
-    }
-  } catch (err) {
-    console.warn("[getNotificationState] Error reading state:", err);
+  if (error) {
+    throw new Error(`Không thể đọc trạng thái thông báo: ${error.message}`);
+  }
+
+  if (data?.config_value) {
+    const parsed = JSON.parse(data.config_value);
+    return {
+      readIds: Array.isArray(parsed.readIds) ? parsed.readIds : [],
+      starredIds: Array.isArray(parsed.starredIds) ? parsed.starredIds : [],
+      deletedIds: Array.isArray(parsed.deletedIds) ? parsed.deletedIds : [],
+    };
   }
   return { readIds: [], starredIds: [], deletedIds: [] };
 }
 
 async function saveNotificationState(supabase: any, state: NotificationState): Promise<void> {
-  try {
-    await supabase.from("system_configs").upsert(
-      {
-        config_key: STATE_CONFIG_KEY,
-        config_value: JSON.stringify(state),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "config_key" }
-    );
-  } catch (err) {
-    console.warn("[saveNotificationState] Error saving state:", err);
+  // Batch 3E C7 — kiểm tra .error của upsert; trước đây nuốt im lặng →
+  // client tưởng đã lưu (read/star/delete mất hoặc resurrect).
+  const { error } = await supabase.from("system_configs").upsert(
+    {
+      config_key: STATE_CONFIG_KEY,
+      config_value: JSON.stringify(state),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "config_key" }
+  );
+  if (error) {
+    throw new Error(`Không thể lưu trạng thái thông báo: ${error.message}`);
   }
 }
 
@@ -191,11 +194,13 @@ export async function GET(request: Request) {
     });
   } catch (err: any) {
     console.error("[GET /api/admin/notifications] Error:", err);
-    return NextResponse.json({
-      success: true,
-      unreadCount: 0,
-      notifications: [],
-    });
+    // Batch 3E C6 — trước đây trả success:true + [] → client ghi đè state
+    // và localStorage bằng rỗng. Trả 500/success:false để client giữ trạng
+    // thái cũ (NotificationContext chỉ cập nhật khi res.ok && data.success).
+    return NextResponse.json(
+      { success: false, error: "Không thể tải thông báo", unreadCount: 0, notifications: [] },
+      { status: 500 }
+    );
   }
 }
 

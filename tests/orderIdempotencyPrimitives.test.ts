@@ -23,11 +23,11 @@ const { getOrCreateOrderAttemptKey, clearOrderAttemptKey } = await import(
   "../src/lib/orderIdempotency.ts"
 );
 const {
-  stableStringify,
-  buildCanonicalOrderPayload,
-  hashCanonicalOrderPayload,
-  buildOrderIdempotencyScope,
-} = await import("../src/lib/services/orderRequestHash.ts");
+  stableStringifyV2: stableStringify,
+  buildCanonicalOrderPayloadV2: buildCanonicalOrderPayload,
+  hashCanonicalOrderPayloadV2: hashCanonicalOrderPayload,
+  buildOrderIdempotencyScopeV2: buildOrderIdempotencyScope,
+} = await import("../src/lib/services/orderRequestHashV2.ts");
 
 const baseInput = {
   buyer_name: "  Nguyen Van A  ",

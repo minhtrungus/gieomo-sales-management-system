@@ -9,6 +9,7 @@ export interface SessionUser {
   role: "admin" | "btc_sale" | "delivery_staff";
   referralCode: string;
   phone?: string;
+  authVersion: string;
   exp: number;
   iat: number;
 }
@@ -144,8 +145,37 @@ export async function getAuthenticatedUser(request: Request): Promise<SessionUse
 
   const session = verifySessionToken(token);
   if (!session) return null;
+  if (!session.memberId || !session.authVersion) return null;
 
-  return session;
+  // A valid signature is not enough: roles/status can be revoked after login.
+  // `members.updated_at` is the per-account session version. Any member edit or
+  // explicit logout rotates it, invalidating every previously issued token.
+  const { data: member, error } = await createAdminClient()
+    .from("members")
+    .select("member_id, email, full_name, role, status, referral_code, phone, updated_at")
+    .eq("member_id", session.memberId)
+    .maybeSingle();
+
+  if (
+    error ||
+    !member ||
+    member.status !== "active" ||
+    !["admin", "btc_sale", "delivery_staff"].includes(member.role) ||
+    !member.updated_at ||
+    member.updated_at !== session.authVersion
+  ) {
+    return null;
+  }
+
+  return {
+    ...session,
+    email: member.email || session.email,
+    fullName: member.full_name || session.fullName,
+    role: member.role,
+    referralCode: member.referral_code || "",
+    phone: member.phone || undefined,
+    authVersion: member.updated_at,
+  };
 }
 
 /**
@@ -180,7 +210,12 @@ export async function requireAdmin(
 }
 
 /**
- * Enforce Auth (Admin or BTC Sale member) on API routes.
+ * Enforce "đã đăng nhập" (bất kỳ role hợp lệ nào trong session) trên API routes.
+ * HÀNH VI THỰC TẾ (pin bởi tests/authPrimitives.test.ts): mọi session ký hợp lệ
+ * đều pass — admin, btc_sale, delivery_staff.
+ * Lưu ý: comment cũ "Admin or BTC Sale" SAI lệch với code; thu hẹp theo role
+ * (vd. loại delivery_staff khỏi route staff) cần ma trận role-per-route do
+ * business phê duyệt — xem checkpoint OvernightExecution (Batch B).
  */
 export async function requireAuth(
   request: Request
@@ -202,11 +237,30 @@ export async function requireAuth(
 export { SESSION_COOKIE_NAME, SESSION_EXPIRATION_SECONDS };
 
 /**
+ * Order proof capability tokens carry an issued-at (iat) timestamp and expire.
+ * Default TTL = 7 days (aligned with session TTL). Operator override (giờ):
+ * PROOF_TOKEN_TTL_HOURS. Token format mới: `<b64(code:orderId:iat)>.<sig>` —
+ * token cũ (2 phần, không iat) bị TỪ CHỐI; khách dùng đường phone-match
+ * thay thế tại /api/orders/proof.
+ */
+const PROOF_TOKEN_DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
+const PROOF_TOKEN_MAX_FUTURE_SKEW_SECONDS = 5 * 60;
+
+function getProofTokenTtlSeconds(): number {
+  const hours = Number(process.env.PROOF_TOKEN_TTL_HOURS);
+  if (Number.isFinite(hours) && hours > 0) {
+    return Math.floor(hours * 3600);
+  }
+  return PROOF_TOKEN_DEFAULT_TTL_SECONDS;
+}
+
+/**
  * Create a cryptographically signed capability token for an order.
  * Allows the customer to submit payment proof without an admin session.
  */
 export function createOrderProofToken(orderCode: string, orderId: string): string {
-  const payload = `${orderCode.toUpperCase().trim()}:${orderId.trim()}`;
+  const iat = Math.floor(Date.now() / 1000);
+  const payload = `${orderCode.toUpperCase().trim()}:${orderId.trim()}:${iat}`;
   const payloadB64 = Buffer.from(payload).toString("base64url");
   const signature = createHmac("sha256", getSecretKey()).update(payloadB64).digest("base64url");
   return `${payloadB64}.${signature}`;
@@ -214,8 +268,14 @@ export function createOrderProofToken(orderCode: string, orderId: string): strin
 
 /**
  * Verify order proof capability token against expected order code.
+ * Bắt buộc: chữ ký hợp lệ + iat trong cửa sổ TTL (không quá cũ, không quá
+ * tương lai quá skew). Token legacy không có iat → false.
  */
-export function verifyOrderProofToken(token: string, expectedOrderCode: string): boolean {
+export function verifyOrderProofToken(
+  token: string,
+  expectedOrderCode: string,
+  expectedOrderId?: string
+): boolean {
   try {
     if (!token || !token.includes(".")) return false;
     const [payloadB64, signature] = token.split(".");
@@ -229,8 +289,20 @@ export function verifyOrderProofToken(token: string, expectedOrderCode: string):
     }
 
     const payload = Buffer.from(payloadB64, "base64url").toString("utf-8");
-    const [orderCode] = payload.split(":");
-    return Boolean(orderCode && orderCode.toUpperCase().trim() === expectedOrderCode.toUpperCase().trim());
+    const parts = payload.split(":");
+    if (parts.length !== 3) return false; // legacy token không iat → từ chối
+    const [orderCode, orderId, iatRaw] = parts;
+    if (!orderCode || orderCode.toUpperCase().trim() !== expectedOrderCode.toUpperCase().trim()) {
+      return false;
+    }
+    if (expectedOrderId && orderId !== expectedOrderId.trim()) return false;
+
+    const iat = Number(iatRaw);
+    if (!Number.isInteger(iat)) return false;
+    const now = Math.floor(Date.now() / 1000);
+    if (iat > now + PROOF_TOKEN_MAX_FUTURE_SKEW_SECONDS) return false;
+    if (now - iat > getProofTokenTtlSeconds()) return false;
+    return true;
   } catch {
     return false;
   }

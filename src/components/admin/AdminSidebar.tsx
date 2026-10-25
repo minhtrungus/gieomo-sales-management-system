@@ -47,6 +47,20 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
     return () => window.removeEventListener("gieomo_admin_auth_changed", updateSession);
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) {
+        throw new Error(`Logout request failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error("[AdminSidebar] Logout failed:", error);
+    } finally {
+      clearAdminSession();
+      window.location.replace("/admin/login");
+    }
+  };
+
   const currentTab = searchParams.get("tab");
 
   const menuItems = [
@@ -194,10 +208,7 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
 
           <button
             type="button"
-            onClick={() => {
-              clearAdminSession();
-              window.location.href = "/admin/login";
-            }}
+            onClick={handleLogout}
             className="p-2 text-[#A39688] hover:text-[#FFB98A] transition-colors cursor-pointer"
             title="Đăng xuất"
           >

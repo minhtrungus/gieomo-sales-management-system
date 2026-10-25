@@ -13,10 +13,11 @@ import {
   getActiveReferralMembers,
   getStoredPickupPoints,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
+  syncStoredOrderStatusLocal,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { Order, OrderItem, PickupPoint } from "@/types/database";
 import { ArrowLeft, Plus, Trash2, QrCode, Copy, Check, CheckCircle, ExternalLink } from "lucide-react";
 
@@ -54,8 +55,12 @@ export default function AdminCreateOrderPage() {
     qrUrl: string;
   } | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
+
+  // Batch 3A.2 — chặn double-submit + hiển thị lỗi server-first
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [paidConfirmError, setPaidConfirmError] = useState<string | null>(null);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
@@ -150,117 +155,152 @@ export default function AdminCreateOrderPage() {
     );
   };
 
+  // Batch 3A.2 — tạo đơn SERVER-FIRST: chờ POST /api/orders trả định danh
+  // canonical (serverOrderId/serverOrderCode). QR + xác nhận thanh toán chỉ
+  // dùng mã server — không còn mã client tự sinh (GM-<rand>) lệch với server.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
     setSubmitError(null);
-    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
-    const newOrderId = `ord-${Date.now()}`;
-
-    const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
-      const prod = availableProducts.find((p) => p.product_id === item.productId);
-      const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
-      return {
-        order_item_id: `item-${newOrderId}-${idx + 1}`,
-        order_id: newOrderId,
-        product_id: item.productId,
-        variant_id: item.variantId || variant?.variant_id || null,
-        combo_id: null,
-        product_name_snapshot: item.name,
-        item_name_snapshot: item.name,
-        variant_name_snapshot: item.variantName || variant?.name || null,
-        price_snapshot: item.price,
-        quantity: item.quantity,
-        subtotal: item.price * item.quantity,
-        created_at: new Date().toISOString(),
-      };
-    });
-
-    const matchedMember = members.find((m) => m.memberId === memberId);
-    const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
-
-    const newOrder: Order = {
-      order_id: newOrderId,
-      order_code: randomCode,
-      buyer_name: customerName || "Khách đặt hộ",
-      buyer_phone: customerPhone || "",
-      buyer_email: customerEmail || "",
-      recipient_name: customerName || "Khách đặt hộ",
-      recipient_phone: customerPhone || "",
-      delivery_type: deliveryType as any,
-      address_detail:
-        deliveryType === "home_delivery"
-          ? addressDetail || "Địa chỉ giao hàng"
-          : selectedPickup
-          ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}`
-          : "Điểm hẹn nhận hàng",
-      district: "",
-      province: province,
-      payment_method: paymentMethod as any,
-      payment_status: "pending",
-      order_status: "pending",
-      delivery_status: "not_ready",
-      subtotal,
-      discount_amount: 0,
-      shipping_fee: shippingFee,
-      final_amount: finalAmount,
-      total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
-      seller_id: matchedMember ? matchedMember.memberId : null,
-      introducer_info: matchedMember
-        ? `${matchedMember.fullName} (${matchedMember.referralCode})`
-        : sourceType === "admin_manual"
-        ? "Ban tổ chức nhập đơn"
-        : "Khách lẻ tự liên hệ",
-      referral_code: matchedMember?.referralCode || null,
-      created_by_member_id: matchedMember ? matchedMember.memberId : null,
-      customer_note: customerNote || "Ban tổ chức nhập đơn hộ",
-      items: orderItemsSnapshot,
-      created_at: new Date().toISOString(),
-      completed_at: null,
-      updated_at: new Date().toISOString(),
-    };
-
     try {
-      const result = await saveNewOrder(newOrder, { idempotencyFlow: "admin-create-order" });
+      const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+      const newOrderId = `ord-${Date.now()}`;
 
-      if (!result.ok) {
-        setSubmitError(result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại.");
+      const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
+        const prod = availableProducts.find((p) => p.product_id === item.productId);
+        const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
+        return {
+          order_item_id: `item-${newOrderId}-${idx + 1}`,
+          order_id: newOrderId,
+          product_id: item.productId,
+          variant_id: item.variantId || variant?.variant_id || null,
+          combo_id: null,
+          product_name_snapshot: item.name,
+          item_name_snapshot: item.name,
+          variant_name_snapshot: item.variantName || variant?.name || null,
+          price_snapshot: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+      const matchedMember = members.find((m) => m.memberId === memberId);
+      const selectedPickup = pickupPoints.find((p) => p.pickup_point_id === pickupPointId);
+
+      const newOrder: Order = {
+        order_id: newOrderId,
+        order_code: randomCode,
+        buyer_name: customerName || "Khách đặt hộ",
+        buyer_phone: customerPhone || "",
+        buyer_email: customerEmail || "",
+        recipient_name: customerName || "Khách đặt hộ",
+        recipient_phone: customerPhone || "",
+        delivery_type: deliveryType as any,
+        address_detail:
+          deliveryType === "home_delivery"
+            ? addressDetail || "Địa chỉ giao hàng"
+            : selectedPickup
+            ? `${selectedPickup.name} - ${selectedPickup.address || selectedPickup.address_detail || ""}`
+            : "Điểm hẹn nhận hàng",
+        district: "",
+        province: province,
+        payment_method: paymentMethod as any,
+        payment_status: "pending",
+        order_status: "pending",
+        delivery_status: "not_ready",
+        subtotal,
+        discount_amount: 0,
+        shipping_fee: shippingFee,
+        final_amount: finalAmount,
+        total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
+        seller_id: matchedMember ? matchedMember.memberId : null,
+        introducer_info: matchedMember
+          ? `${matchedMember.fullName} (${matchedMember.referralCode})`
+          : sourceType === "admin_manual"
+          ? "Ban tổ chức nhập đơn"
+          : "Khách lẻ tự liên hệ",
+        referral_code: matchedMember?.referralCode || null,
+        created_by_member_id: matchedMember ? matchedMember.memberId : null,
+        customer_note: customerNote || "Ban tổ chức nhập đơn hộ",
+        items: orderItemsSnapshot,
+        created_at: new Date().toISOString(),
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const result = await saveNewOrder(newOrder, { attemptScope: "admin-create" });
+
+      if (!result.success) {
+        // Chưa có xác nhận server → giữ attempt, không mở QR hoặc ghi local.
+        setSubmitError(result.error || "Không thể tạo đơn hàng. Vui lòng thử lại.");
         return;
       }
-      const createdOrderId = result.orderId || newOrder.order_id;
-      const createdOrderCode = result.orderCode || newOrder.order_code;
-      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
 
       if (paymentMethod === "banking") {
+        // Dùng server orderCode/orderId (canonical) cho QR + payment confirm.
+        const serverCode = result.serverOrderCode!;
+        const serverAmount = result.finalAmount ?? finalAmount;
         const qrUrl =
           settings.qrMode === "upload" && settings.qrImageUrl
             ? settings.qrImageUrl
-            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${createdFinalAmount}&addInfo=${createdOrderCode}&accountName=${encodeURIComponent(
+            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${serverAmount}&addInfo=${serverCode}&accountName=${encodeURIComponent(
                 settings.bankHolder || "CLB MAM MO GIEO MO"
               )}`;
 
         setActiveQrModal({
-          orderCode: createdOrderCode,
-          orderId: createdOrderId,
-          amount: createdFinalAmount,
+          orderCode: serverCode,
+          orderId: result.serverOrderId!,
+          amount: serverAmount,
           qrUrl,
         });
       } else {
         router.push("/admin/orders");
       }
-    } catch {
-      setSubmitError("Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "confirmed");
-    router.push("/admin/orders");
+  // Batch 3A.2 — xác nhận thanh toán SERVER-FIRST qua payment pipeline
+  // (/api/orders/payment action=confirm). Không còn updateStoredPaymentStatus
+  // + updateStoredOrderStatus (fire-and-forget PATCH bypass pipeline). Confirm
+  // endpoint set paid + confirmed; local chỉ sync SAU khi server xác nhận.
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const outcome = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+
+      if (outcome.ok) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+        syncStoredOrderStatusLocal(activeQrModal.orderCode, "confirmed");
+        router.push("/admin/orders");
+        return;
+      }
+
+      // Server ĐÃ set payment_status=paid (already_paid / cancelled-trace)
+      // → đồng bộ local paid; NHƯNG GIỮ nguyên order_status.
+      if (outcome.paymentStatusIsPaid) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      }
+      // Giữ modal mở, hiện lỗi, cho phép retry an toàn (in-flight guard).
+      setPaidConfirmError(outcome.message);
+    } catch {
+      setPaidConfirmError("Lỗi kết nối — vui lòng thử lại.");
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {
@@ -301,11 +341,6 @@ export default function AdminCreateOrderPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {submitError && (
-          <div className="lg:col-span-12 bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold">
-            {submitError}
-          </div>
-        )}
         {/* Left Form Column */}
         <div className="lg:col-span-8 space-y-6">
           {/* Customer & Source Info */}
@@ -580,9 +615,15 @@ export default function AdminCreateOrderPage() {
               </div>
             </div>
 
-            <Button type="submit" variant="primary" fullWidth size="lg" loading={isSubmitting}>
+            {submitError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                {submitError}
+              </div>
+            )}
+
+            <Button type="submit" variant="primary" fullWidth size="lg" disabled={isSubmitting}>
               {isSubmitting
-                ? "Đang tạo đơn..."
+                ? "Đang tạo đơn trên máy chủ..."
                 : paymentMethod === "banking"
                 ? "Tạo đơn & Xuất mã VietQR ➔"
                 : "Tạo đơn giao COD ➔"}
@@ -652,13 +693,23 @@ export default function AdminCreateOrderPage() {
 
             {/* Actions */}
             <div className="space-y-2 pt-2 border-t border-[#F0E5D8]">
+              {paidConfirmError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 text-left">
+                  {paidConfirmError}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleConfirmQrPaid}
-                className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3]"
+                disabled={isConfirmingPaid}
+                className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-800" />
-                <span>✓ Khách đã chuyển khoản xong — Xác nhận đã nhận tiền</span>
+                <span>
+                  {isConfirmingPaid
+                    ? "Đang xác nhận thanh toán..."
+                    : "✓ Khách đã chuyển khoản xong — Xác nhận đã nhận tiền"}
+                </span>
               </button>
 
               <button

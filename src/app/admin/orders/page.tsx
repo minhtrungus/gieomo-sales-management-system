@@ -10,12 +10,14 @@ import {
   getStoredOrders,
   syncOrdersFromServer,
   updateStoredOrderStatus,
+  cancelStoredOrder,
   getStoredMembers,
   syncMembersFromServer,
   getAdminSession,
   type StoredMember,
   type AdminSession,
 } from "@/lib/data/orderStore";
+import { isNoIntroducerValue } from "@/lib/checkout/introducer";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
@@ -132,29 +134,44 @@ function AdminOrdersContent() {
     newStatus: OrderStatus;
     buyerName: string;
   } | null>(null);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  const [isStatusChangeBusy, setIsStatusChangeBusy] = useState(false);
 
   const handleConfirmStatusChange = async () => {
-    if (!pendingStatusChange) return;
-    const result = await updateStoredOrderStatus(pendingStatusChange.orderId, pendingStatusChange.newStatus);
-    if (!result.ok) {
-      alert(result.error || "Không thể cập nhật trạng thái đơn hàng.");
-      return;
+    if (!pendingStatusChange || isStatusChangeBusy) return;
+    const change = pendingStatusChange;
+    // Batch 2D — hủy đơn phải server xác nhận trước (identity + outcome đọc
+    // từ response). Thất bại → giữ nguyên local, hiện lỗi trong modal.
+    // Batch 2D.1 — disable nút khi đang chạy để chặn gửi lặp (lớp bảo vệ
+    // bổ sung; idempotency thật nằm trong store).
+    setIsStatusChangeBusy(true);
+    try {
+      if (change.newStatus === "cancelled") {
+        const res = await cancelStoredOrder(change.orderId);
+        if (!res.success) {
+          setStatusChangeError(res.error);
+          return;
+        }
+      } else {
+        updateStoredOrderStatus(change.orderId, change.newStatus);
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.order_id === change.orderId
+            ? {
+                ...o,
+                order_status: change.newStatus,
+                completed_at:
+                  change.newStatus === "completed" ? new Date().toISOString() : o.completed_at,
+              }
+            : o
+        )
+      );
+      setStatusChangeError(null);
+      setPendingStatusChange(null);
+    } finally {
+      setIsStatusChangeBusy(false);
     }
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.order_id === pendingStatusChange.orderId
-          ? {
-              ...o,
-              order_status: pendingStatusChange.newStatus,
-              completed_at:
-                pendingStatusChange.newStatus === "completed"
-                  ? new Date().toISOString()
-                  : o.completed_at,
-            }
-          : o
-      )
-    );
-    setPendingStatusChange(null);
   };
 
   // Helper: Match an order with a member or current session
@@ -252,7 +269,7 @@ function AdminOrdersContent() {
         if (
           introducerFilter === "direct" &&
           ord.introducer_info &&
-          ord.introducer_info !== "Trực tiếp (Website)"
+          !isNoIntroducerValue(ord.introducer_info)
         ) {
           return false;
         }
@@ -495,14 +512,15 @@ function AdminOrdersContent() {
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F5EFE6]">
                 <select
                   value={ord.order_status}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setStatusChangeError(null);
                     setPendingStatusChange({
                       orderId: ord.order_id,
                       orderCode: ord.order_code,
                       newStatus: e.target.value as OrderStatus,
                       buyerName: ord.buyer_name || "Khách",
-                    })
-                  }
+                    });
+                  }}
                   className="flex-1 text-[10.5px] font-bold py-1.5 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none"
                 >
                   <option value="pending">Chờ xác nhận</option>
@@ -694,14 +712,15 @@ function AdminOrdersContent() {
                     <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                       <select
                         value={ord.order_status}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setStatusChangeError(null);
                           setPendingStatusChange({
                             orderId: ord.order_id,
                             orderCode: ord.order_code,
                             newStatus: e.target.value as OrderStatus,
                             buyerName: ord.buyer_name || "Khách",
-                          })
-                        }
+                          });
+                        }}
                         className="text-[10px] font-bold py-1 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none hover:border-[#16381D] cursor-pointer"
                       >
                         <option value="pending">Chờ xác nhận</option>
@@ -763,20 +782,31 @@ function AdminOrdersContent() {
                   {ORDER_STATUS_LABELS[pendingStatusChange.newStatus]}
                 </span>
               </div>
+              {statusChangeError ? (
+                <p className="pt-2 text-xs font-bold text-red-600 leading-relaxed" role="alert">
+                  {statusChangeError}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-center gap-2.5 pt-2">
               <button
-                onClick={() => setPendingStatusChange(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                onClick={() => {
+                  if (isStatusChangeBusy) return;
+                  setStatusChangeError(null);
+                  setPendingStatusChange(null);
+                }}
+                disabled={isStatusChangeBusy}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Hủy bỏ
               </button>
               <button
                 onClick={handleConfirmStatusChange}
-                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer"
+                disabled={isStatusChangeBusy}
+                className="px-5 py-2.5 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Xác nhận đổi ➔
+                {isStatusChangeBusy ? "Đang xử lý..." : "Xác nhận đổi ➔"}
               </button>
             </div>
           </div>

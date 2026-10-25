@@ -13,7 +13,6 @@ import {
   Shield,
   User,
   Trash2,
-  AlertTriangle,
   Calendar,
   Eye,
   ExternalLink,
@@ -34,6 +33,7 @@ import {
   syncOrdersFromServer,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import type { Order } from "@/types/database";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 
@@ -779,6 +779,7 @@ export default function AdminMembersPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [passwordMember, setPasswordMember] = useState<MemberItem | null>(null);
   const [editingMember, setEditingMember] = useState<MemberItem | null>(null);
 
@@ -853,16 +854,23 @@ export default function AdminMembersPage() {
     }
   };
 
-  const handleConfirmRevoke = () => {
+  const handleConfirmRevoke = async () => {
     if (!deletingMember) return;
     if (deletingMember.memberId === "baotri-system") {
       alert("Tài khoản bảo trì hệ thống gốc không thể thu hồi!");
       setDeletingMember(null);
       return;
     }
-    deleteStoredMember(deletingMember.memberId);
-    setMembers(getStoredMembers());
-    setDeletingMember(null);
+    setIsDeleting(true);
+    try {
+      deleteStoredMember(deletingMember.memberId);
+      setMembers(getStoredMembers());
+    } catch {
+      alert("Không thể thu hồi quyền thành viên. Vui lòng thử lại.");
+    } finally {
+      setIsDeleting(false);
+      setDeletingMember(null);
+    }
   };
 
   const handleSavePassword = (newPass: string) => {
@@ -1318,42 +1326,20 @@ export default function AdminMembersPage() {
       )}
 
       {/* MODAL: XÁC NHẬN THU HỒI TÀI KHOẢN */}
-      {deletingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in" style={{ willChange: "opacity" }}>
-          <div
-            className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#FED7D7] shadow-2xl space-y-4 animate-in zoom-in-95 text-center"
-            style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
-          >
-            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-                Xác nhận thu hồi quyền thành viên?
-              </h3>
-              <p className="text-xs text-[#7E7068] leading-relaxed">
-                Bạn có chắc chắn muốn hủy quyền của <strong>{deletingMember.fullName}</strong> ({deletingMember.email})? Mã giới thiệu <code>{deletingMember.referralCode}</code> sẽ không còn ghi nhận doanh số mới.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-center gap-2.5 pt-2">
-              <button
-                onClick={() => setDeletingMember(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                onClick={handleConfirmRevoke}
-                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
-              >
-                Xác nhận thu hồi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DoubleConfirmDialog
+        open={Boolean(deletingMember)}
+        onClose={() => setDeletingMember(null)}
+        onConfirm={handleConfirmRevoke}
+        title="Thu hồi quyền thành viên"
+        message="Bạn có chắc chắn muốn hủy quyền của thành viên này?"
+        confirmCode="XOA"
+        loading={isDeleting}
+        details={[
+          { label: "Họ và tên", value: deletingMember?.fullName ?? "" },
+          { label: "Email đăng nhập", value: deletingMember?.email ?? "" },
+          { label: "Mã giới thiệu", value: deletingMember?.referralCode ?? "" },
+        ]}
+      />
     </div>
   );
 }

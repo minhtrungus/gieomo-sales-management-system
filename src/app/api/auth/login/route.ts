@@ -7,8 +7,16 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_EXPIRATION_SECONDS,
 } from "@/lib/auth/serverAuth";
+import {
+  checkLoginRateLimit,
+  clearLoginFailures,
+  getLoginRateLimitKey,
+  recordLoginFailure,
+} from "@/lib/auth/loginRateLimit";
 
 export const dynamic = "force-dynamic";
+
+type AuthenticatedUser = Parameters<typeof createSessionToken>[0];
 
 export async function POST(request: Request) {
   try {
@@ -20,6 +28,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "Vui lòng nhập tài khoản và mật khẩu" },
         { status: 400 }
+      );
+    }
+
+    const rateLimitKey = getLoginRateLimitKey(request, account);
+    const rateLimit = checkLoginRateLimit(rateLimitKey);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
       );
     }
 
@@ -46,10 +66,11 @@ export async function POST(request: Request) {
     const matchedMember = (members || [])[0];
 
     // Check system maintenance account fallback if no member matched
-    let authenticatedUser: any = null;
+    let authenticatedUser: AuthenticatedUser | null = null;
 
     if (matchedMember) {
       if (matchedMember.status === "inactive") {
+        recordLoginFailure(rateLimitKey);
         return NextResponse.json(
           { success: false, error: "Tài khoản đã bị tạm khóa. Vui lòng liên hệ Ban Quản Trị!" },
           { status: 403 }
@@ -73,6 +94,7 @@ export async function POST(request: Request) {
           role: matchedMember.role || "btc_sale",
           referralCode: matchedMember.referral_code || "",
           phone: matchedMember.phone || undefined,
+          authVersion: matchedMember.updated_at,
         };
 
         // Upgrade legacy plaintext password to PBKDF2 hash on successful login if column exists
@@ -89,11 +111,14 @@ export async function POST(request: Request) {
     }
 
     if (!authenticatedUser) {
+      recordLoginFailure(rateLimitKey);
       return NextResponse.json(
         { success: false, error: "Tài khoản hoặc mật khẩu không chính xác!" },
         { status: 401 }
       );
     }
+
+    clearLoginFailures(rateLimitKey);
 
     // Create session token
     const token = createSessionToken(authenticatedUser);
@@ -101,7 +126,6 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       user: authenticatedUser,
-      token,
     });
 
     // Set secure HttpOnly cookie
@@ -116,7 +140,7 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[POST /api/auth/login] Exception:", error);
     return NextResponse.json(
       { success: false, error: "Lỗi máy chủ khi xác thực đăng nhập" },

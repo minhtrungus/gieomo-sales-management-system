@@ -8,14 +8,16 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProductReviews } from "@/components/products/ProductReviews";
+import { ProductLightbox } from "@/components/products/ProductLightbox";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, X, RotateCcw } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
 import { Toast } from "@/components/ui/Toast";
+import { LOCAL_ASSET_UNAVAILABLE } from "@/lib/runtimeAssetSafety";
 
 interface ProductDetailClientProps {
   slug: string;
@@ -36,26 +38,11 @@ export function ProductDetailClient({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [lightboxZoom, setLightboxZoom] = useState(1);
 
-  // Keyboard navigation for fullscreen Lightbox
-  useEffect(() => {
-    if (!isLightboxOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsLightboxOpen(false);
-        setLightboxZoom(1);
-      } else if (e.key === "ArrowLeft") {
-        setCustomActiveImage(null);
-        setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : (product?.images?.length || 1) - 1));
-      } else if (e.key === "ArrowRight") {
-        setCustomActiveImage(null);
-        setSelectedImageIndex((prev) => (prev < (product?.images?.length || 1) - 1 ? prev + 1 : 0));
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isLightboxOpen, product?.images?.length]);
+  // Prefetch large-variant của ảnh đang xem khi người dùng có intent (hover/touch)
+  // — click phóng to sau đó khớp cache, không còn fetch + decode mới trong lần
+  // tương tác (batch INP-LIGHTBOX).
+  const [isGalleryPrefetchArmed, setIsGalleryPrefetchArmed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -155,10 +142,10 @@ export function ProductDetailClient({
 
   // Gallery images combined
   const displayImages = useMemo(() => {
-    if (!product) return ["/images/products/pounch_1.png"];
+    if (!product) return [LOCAL_ASSET_UNAVAILABLE];
     const base = product.images && product.images.length > 0
       ? [...product.images]
-      : [product.thumbnail || "/images/products/pounch_1.png"];
+      : [product.thumbnail || LOCAL_ASSET_UNAVAILABLE];
     if (product.variants) {
       product.variants.forEach((v) => {
         if (v.image_url && !base.includes(v.image_url)) {
@@ -168,6 +155,9 @@ export function ProductDetailClient({
     }
     return base;
   }, [product]);
+
+  // Ảnh đang hiển thị trong gallery (dùng chung cho prefetch + lightbox)
+  const activeGalleryImage = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
 
   // When variant changes, auto-switch to its image if available
   const handleVariantSelect = (v: any) => {
@@ -343,11 +333,15 @@ export function ProductDetailClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft mb-12">
           {/* Gallery - Left 6 Cols */}
           <div className="lg:col-span-6 space-y-4">
+            {product.image_status !== "source" && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
+                Ảnh sản phẩm thật chưa có trong bản sao cục bộ; hình bên dưới là trạng thái thay thế, không phải ảnh đã xác minh.
+              </div>
+            )}
             <div 
-              onClick={() => {
-                setIsLightboxOpen(true);
-                setLightboxZoom(1);
-              }}
+              onClick={() => setIsLightboxOpen(true)}
+              onPointerEnter={() => setIsGalleryPrefetchArmed(true)}
+              onTouchStart={() => setIsGalleryPrefetchArmed(true)}
               className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none cursor-zoom-in"
               title="Nhấp để phóng to ảnh xem chi tiết các mẫu"
             >
@@ -358,7 +352,7 @@ export function ProductDetailClient({
 
               {/* Render optimized active product image */}
               {(() => {
-                const currentImg = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
+                const currentImg = activeGalleryImage;
                 if (!currentImg) return null;
                 return (
                   <div
@@ -376,6 +370,20 @@ export function ProductDetailClient({
                   </div>
                 );
               })()}
+
+              {/* Hidden prefetch của variant lớn dùng cho lightbox (armed khi hover/touch) */}
+              {isGalleryPrefetchArmed && activeGalleryImage && product && (
+                <div className="hidden relative" aria-hidden="true">
+                  <Image
+                    src={activeGalleryImage}
+                    alt=""
+                    fill
+                    sizes="min(100vw, 64rem)"
+                    loading="eager"
+                    priority
+                  />
+                </div>
+              )}
 
               {/* Hover Zoom Badge */}
               <div className="absolute top-3 right-3 z-30 px-2.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-xs flex items-center gap-1.5 transition-all shadow-md">
@@ -802,153 +810,20 @@ export function ProductDetailClient({
         </div>
       </aside>
 
-      {/* FULLSCREEN LIGHTBOX MODAL */}
-      {isLightboxOpen && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-fade-in select-none"
-          onClick={() => {
-            setIsLightboxOpen(false);
-            setLightboxZoom(1);
+      {/* FULLSCREEN LIGHTBOX MODAL (tách component — INP-LIGHTBOX) */}
+      {isLightboxOpen && product && (
+        <ProductLightbox
+          productName={product.name}
+          images={displayImages}
+          activeIndex={selectedImageIndex}
+          activeSrc={activeGalleryImage || displayImages[0]}
+          isVariantContext={Boolean(customActiveImage)}
+          onNavigate={(idx) => {
+            setSelectedImageIndex(idx);
+            setCustomActiveImage(null);
           }}
-        >
-          {/* Lightbox Top Header */}
-          <div 
-            className="flex items-center justify-between z-10 w-full max-w-5xl mx-auto text-white/90"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 sm:gap-3">
-              <span className="font-heading font-extrabold text-sm sm:text-base text-white">
-                {product.name}
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white font-mono text-xs font-bold">
-                {selectedImageIndex + 1} / {displayImages.length}
-              </span>
-            </div>
-
-            {/* Zoom & Close Controls */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <button
-                type="button"
-                onClick={() => setLightboxZoom((prev) => Math.max(1, prev - 0.5))}
-                disabled={lightboxZoom <= 1}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/25 text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                title="Thu nhỏ"
-                aria-label="Thu nhỏ ảnh"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLightboxZoom(1)}
-                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/25 text-white text-xs font-bold transition-all cursor-pointer"
-                title="Kích thước ban đầu"
-              >
-                {Math.round(lightboxZoom * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={() => setLightboxZoom((prev) => Math.min(3, prev + 0.5))}
-                disabled={lightboxZoom >= 3}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/25 text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                title="Phóng to"
-                aria-label="Phóng to ảnh"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLightboxOpen(false);
-                  setLightboxZoom(1);
-                }}
-                className="p-2 rounded-xl bg-white/20 hover:bg-red-500 text-white transition-all ml-2 cursor-pointer"
-                title="Đóng (ESC)"
-                aria-label="Đóng cửa sổ phóng to"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Lightbox Main Active Image */}
-          <div 
-            className="relative flex-1 w-full max-w-5xl mx-auto flex items-center justify-center overflow-hidden my-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div 
-              className="relative w-full h-full flex items-center justify-center transition-transform duration-200 ease-out"
-              style={{ transform: `scale(${lightboxZoom})` }}
-            >
-              <Image
-                src={customActiveImage || displayImages[selectedImageIndex]}
-                alt={`${product.name} - Phóng to`}
-                fill
-                sizes="100vw"
-                className="object-contain"
-                priority
-              />
-            </div>
-
-            {/* Prev / Next Arrows */}
-            {displayImages.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCustomActiveImage(null);
-                    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : displayImages.length - 1));
-                  }}
-                  className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-lg transition-all active:scale-90 cursor-pointer"
-                  aria-label="Ảnh trước"
-                >
-                  <ChevronLeft className="w-6 h-6" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCustomActiveImage(null);
-                    setSelectedImageIndex((prev) => (prev < displayImages.length - 1 ? prev + 1 : 0));
-                  }}
-                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-lg transition-all active:scale-90 cursor-pointer"
-                  aria-label="Ảnh tiếp theo"
-                >
-                  <ChevronRight className="w-6 h-6" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Lightbox Bottom Thumbnail Strip */}
-          {displayImages.length > 1 && (
-            <div 
-              className="z-10 w-full max-w-2xl mx-auto flex items-center justify-center gap-2 overflow-x-auto py-2 scrollbar-none"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {displayImages.map((img, idx) => {
-                const isActive = selectedImageIndex === idx && !customActiveImage;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setSelectedImageIndex(idx);
-                      setCustomActiveImage(null);
-                    }}
-                    className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer bg-white/5 ${
-                      isActive
-                        ? "border-emerald-400 ring-2 ring-emerald-400/50 scale-105"
-                        : "border-white/30 opacity-60 hover:opacity-100 hover:border-white"
-                    }`}
-                  >
-                    <Image src={img} alt="" fill sizes="64px" className="object-contain" />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+          onClose={() => setIsLightboxOpen(false)}
+        />
       )}
 
       <Footer />

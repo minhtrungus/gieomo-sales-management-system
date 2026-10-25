@@ -1,0 +1,62 @@
+-- ============================================================================
+-- PROPOSAL 032 (DRAFT — NOT part of the canonical 001–030 chain)
+-- H29-P1.2 hotfix candidate: public.members non-DML grant hygiene
+-- (TRUNCATE / REFERENCES / TRIGGER)
+-- ============================================================================
+-- Status   : REHEARSED-LOCAL on synthetic fixture (3rd scratch db); NOT
+--            applied to prod mirror 55442; NOT applied to Production.
+-- Owner    : pending sign-off (H29-P1.2 approval decision).
+-- Scope discipline:
+--   * only TWO statements affecting TWO roles on ONE table (public.members);
+--     no other table, no schema-wide inventory/change (that would exceed the
+--     verified scope per H29 approval constraints).
+--   * verbs revoked are exactly the verbs observed in EXCESS on the prod
+--     mirror (55442 role_table_grants listing on 2026-10-22):
+--       anon:           TRUNCATE, REFERENCES, TRIGGER
+--       authenticated:  TRUNCATE, REFERENCES, TRIGGER
+--     and which are ABSENT from the canonical migration chain (fixture replay
+--     of 001–011 does not produce them) => they are non-repo artifacts of the
+--     hosted-project lineage.
+--   * canonical grants preserved:
+--       anon:          SELECT/INSERT (002.13 — INSERT untouched here)
+--       authenticated: SELECT/INSERT/UPDATE/DELETE (002.12 — untouched here)
+--       service_role:  ALL incl. TRUNCATE (002.11 — untouched here)
+--   * RLS relation: TRUNCATE is NOT subject to RLS; REFERENCES/TRIGGER are
+--     schema-object management privileges. These verbs are not reachable
+--     through PostgREST (the only client-facing path) — but that must NOT be
+--     read as "harmless in SQL terms" (H29-P1 constraint).
+-- Rollback (1 transaction, restores the mirror-artifact state exactly):
+--   BEGIN;
+--   GRANT TRUNCATE, REFERENCES, TRIGGER ON public.members TO anon, authenticated;
+--   COMMIT;
+-- ============================================================================
+
+BEGIN;
+
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.members FROM anon;
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.members FROM authenticated;
+
+DO $$
+BEGIN
+  IF has_table_privilege('anon', 'members', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'P1.2 post-condition failed: anon still holds TRUNCATE on members';
+  END IF;
+  IF has_table_privilege('authenticated', 'members', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'P1.2 post-condition failed: authenticated still holds TRUNCATE on members';
+  END IF;
+  -- canonical privileges must remain intact
+  IF NOT has_table_privilege('anon', 'members', 'INSERT') THEN
+    RAISE EXCEPTION 'P1.2 post-condition failed: anon INSERT (canonical 002.13) was removed';
+  END IF;
+  IF NOT has_table_privilege('authenticated', 'members', 'INSERT')
+     OR NOT has_table_privilege('authenticated', 'members', 'UPDATE')
+     OR NOT has_table_privilege('authenticated', 'members', 'DELETE') THEN
+    RAISE EXCEPTION 'P1.2 post-condition failed: authenticated DML (canonical 002.12) was removed';
+  END IF;
+  IF NOT has_table_privilege('service_role', 'members', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'P1.2 post-condition failed: service_role TRUNCATE (canonical 002.11) was removed';
+  END IF;
+END
+$$;
+
+COMMIT;

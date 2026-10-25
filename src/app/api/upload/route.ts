@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthenticatedUser } from "@/lib/auth/serverAuth";
+import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,10 @@ const ALLOWED_MIME_TYPES = [
   "image/webp",
   "image/gif",
 ];
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 function detectImageMimeType(buf: Buffer): string | null {
   if (buf.length < 12) return null;
@@ -67,6 +71,11 @@ function detectImageMimeType(buf: Buffer): string | null {
 
 export async function POST(request: Request) {
   try {
+    const authCheck = await requireAdmin(request);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+
     const formData = await request.formData();
     
     // Support both single "file" and multiple "files" in one request
@@ -75,7 +84,6 @@ export async function POST(request: Request) {
     const allFilesToProcess = files.length > 0 ? files : singleFile ? [singleFile] : [];
     
     const bucket = (formData.get("bucket") as string) || "product-media";
-    const customName = formData.get("customName") as string | null;
 
     if (allFilesToProcess.length === 0) {
       return NextResponse.json(
@@ -89,17 +97,6 @@ export async function POST(request: Request) {
         { success: false, error: "Tên bucket lưu trữ không hợp lệ" },
         { status: 400 }
       );
-    }
-
-    // Require admin session for content-media bucket or multi-file batch uploads
-    if (bucket === "content-media" || allFilesToProcess.length > 2) {
-      const user = await getAuthenticatedUser(request);
-      if (!user) {
-        return NextResponse.json(
-          { success: false, error: "Yêu cầu quyền quản trị để tải tệp này" },
-          { status: 401 }
-        );
-      }
     }
 
     const supabase = createAdminClient();
@@ -136,7 +133,6 @@ export async function POST(request: Request) {
             return;
           }
 
-          const rawExt = file.name.split(".").pop()?.toLowerCase() || "webp";
           const mimeExtMap: Record<string, string> = {
             "image/jpeg": "jpg",
             "image/png": "png",
@@ -165,8 +161,8 @@ export async function POST(request: Request) {
           if (data?.publicUrl) {
             successfulUrls.push(data.publicUrl);
           }
-        } catch (err: any) {
-          errors.push(`"${file.name}": ${err?.message || "Lỗi xử lý"}`);
+        } catch (err: unknown) {
+          errors.push(`"${file.name}": ${errorMessage(err, "Lỗi xử lý")}`);
         }
       })
     );
@@ -184,10 +180,10 @@ export async function POST(request: Request) {
       urls: successfulUrls,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/upload] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi máy chủ khi tải ảnh" },
+      { success: false, error: errorMessage(err, "Lỗi máy chủ khi tải ảnh") },
       { status: 500 }
     );
   }

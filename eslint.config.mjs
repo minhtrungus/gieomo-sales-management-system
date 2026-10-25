@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local audit/runtime artifacts and preserved historical snapshots are not
+    // application source. Some contain full worktree copies and PostgreSQL data.
+    ".tmp/**",
+    "backups/**",
+    "scratch/**",
   ]),
 ]);
 

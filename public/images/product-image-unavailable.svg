@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Ảnh sản phẩm chưa có trong bản sao cục bộ</title>
+  <desc id="description">Đây là bảng trạng thái, không phải ảnh sản phẩm.</desc>
+  <rect width="800" height="600" rx="32" fill="#FFF8EE"/>
+  <rect x="36" y="36" width="728" height="528" rx="28" fill="#FFFFFF" stroke="#D8CBBE" stroke-width="4" stroke-dasharray="12 12"/>
+  <circle cx="400" cy="230" r="92" fill="#D4F0D7"/>
+  <path d="M330 266c30-58 70-85 128-82-4 58-33 99-88 119-10-13-24-26-40-37Z" fill="#5E9F68"/>
+  <path d="M394 303c-2-50 13-88 48-117" fill="none" stroke="#2D6338" stroke-width="14" stroke-linecap="round"/>
+  <text x="400" y="390" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="30" font-weight="700" fill="#342A24">Ảnh thật chưa có cục bộ</text>
+  <text x="400" y="438" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="21" fill="#6B625C">Không phải ảnh sản phẩm đã xác minh</text>
+</svg>

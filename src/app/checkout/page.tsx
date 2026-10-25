@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
 import {
-  saveNewOrder,
+  cacheServerCreatedOrder,
   getStoredPickupPoints,
   getStoredVouchers,
   getStoredSettings,
@@ -26,7 +26,14 @@ import {
 } from "@/lib/data/orderStore";
 import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
 import { computePricing, isVoucherApplicable } from "@/lib/pricing";
-import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
+import { decideCheckoutSubmitAction } from "@/lib/checkout/checkoutSubmitAction";
+import { beginCreateOrderAttempt } from "@/lib/checkout/createOrderAttempt";
+import { resolveCheckoutVoucherState } from "@/lib/checkout/voucherState";
+import {
+  NO_INTRODUCER_VALUE,
+  normalizeIntroducerValue,
+  validateIntroducerInfo,
+} from "@/lib/checkout/introducer";
 
 function getCookieRef(): string | null {
   if (typeof document === "undefined") return null;
@@ -174,15 +181,13 @@ function CheckoutContent() {
     return () => window.removeEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
   }, []);
 
-  const activeVoucher = useMemo(() => {
-    const code = (voucherApplied || formData.voucher_code).trim().toUpperCase();
-    if (!code || vouchers.length === 0) return null;
-    const found = vouchers.find((v) => v.code === code && v.status === "active");
-    if (!found) return null;
-    if (found.min_items_count && totalItemCount < found.min_items_count) return null;
-    if (!isVoucherApplicable(found, subtotal)) return null;
-    return found;
-  }, [voucherApplied, formData.voucher_code, vouchers, subtotal, totalItemCount]);
+  const { activeVoucher } = useMemo(() => resolveCheckoutVoucherState({
+    voucherApplied,
+    formDataVoucherCode: formData.voucher_code,
+    vouchers,
+    subtotal,
+    totalItemCount,
+  }), [voucherApplied, formData.voucher_code, vouchers, subtotal, totalItemCount]);
 
   const isFreeshipVoucher = activeVoucher?.discount_type === "freeship";
 
@@ -251,9 +256,9 @@ function CheckoutContent() {
 
   const handleClearMember = useCallback(() => {
     setSelectedMember(null);
-    setMemberSearchQuery("");
     setNoIntroducer(true);
-    setFormData((prev) => ({ ...prev, introducer_info: "Trực tiếp (Website)" }));
+    setMemberSearchQuery("");
+    setFormData((prev) => ({ ...prev, introducer_info: NO_INTRODUCER_VALUE }));
     if (typeof window !== "undefined") {
       localStorage.removeItem("gieomo_referral_code");
       document.cookie = "gieomo_referral_code=; path=/; max-age=0; SameSite=Lax";
@@ -281,7 +286,7 @@ function CheckoutContent() {
       .slice(0, 10);
   }, [normalizedMembersIndex, deferredMemberSearchQuery, activeMembers]);
 
-  const handleValidateForm = (e: React.FormEvent) => {
+  const handleValidateForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0 || isSubmitting) return;
 
@@ -331,8 +336,14 @@ function CheckoutContent() {
       }
     }
 
-    if (deliveryType === "member_delivery" && !selectedMember && !formData.introducer_info.trim()) {
-      setErrors({ introducer_info: "Vui lòng chọn hoặc nhập tên thành viên Mầm Mơ giao hàng cho bạn" });
+    const introducerText = selectedMember
+      ? `${selectedMember.fullName} (${selectedMember.referralCode})`
+      : noIntroducer
+      ? NO_INTRODUCER_VALUE
+      : formData.introducer_info;
+    const introducerError = validateIntroducerInfo(introducerText);
+    if (introducerError) {
+      setErrors({ introducer_info: introducerError });
       return;
     }
 
@@ -346,8 +357,9 @@ function CheckoutContent() {
     let finalSellerId = selectedMember ? selectedMember.memberId : null;
     let finalReferralCode = selectedMember ? selectedMember.referralCode : null;
 
+    let unmatchedIntroducer = formData.introducer_info.trim();
     if (!selectedMember && !noIntroducer) {
-      const candidate = storedRef || (formData.introducer_info !== "Trực tiếp (Website)" ? formData.introducer_info : null);
+      const candidate = storedRef || unmatchedIntroducer;
       if (candidate) {
         const cleanCandidate = candidate.trim().toUpperCase();
         const matched = activeMembers.find(
@@ -358,19 +370,18 @@ function CheckoutContent() {
         if (matched) {
           finalSellerId = matched.memberId;
           finalReferralCode = matched.referralCode;
-        } else {
-          finalReferralCode = cleanCandidate;
+          unmatchedIntroducer = "";
         }
       }
     }
 
     const finalIntroducerText = selectedMember
       ? `${selectedMember.fullName} (${selectedMember.referralCode})`
+      : noIntroducer
+      ? NO_INTRODUCER_VALUE
       : finalReferralCode
       ? `Mã giới thiệu: ${finalReferralCode}`
-      : noIntroducer
-      ? "Trực tiếp (Website)"
-      : formData.introducer_info || "Trực tiếp (Website)";
+      : normalizeIntroducerValue(unmatchedIntroducer);
 
     const orderPayload = {
       buyer_name: formData.buyer_name.trim(),
@@ -384,37 +395,77 @@ function CheckoutContent() {
           ? formData.address_detail.trim()
           : `Giao qua tay thành viên: ${finalIntroducerText}`,
       province: formData.province || "TP. Hồ Chí Minh",
-      voucher_code: voucherApplied || formData.voucher_code || null,
+      voucher_code: activeVoucher?.code || null,
       referral_code: finalReferralCode,
       seller_id: finalSellerId,
       introducer_info: finalIntroducerText,
       customer_note: formData.note || "",
       items: items.map((it) => ({
-        product_id: it.combo_id ? undefined : it.product_id,
+        product_id: it.product_id,
         variant_id: it.variant_id || null,
         combo_id: it.combo_id || null,
         quantity: it.quantity,
       })),
     };
 
+    let createAttempt: Awaited<ReturnType<typeof beginCreateOrderAttempt>>;
+    try {
+      createAttempt = await beginCreateOrderAttempt("checkout", orderPayload);
+    } catch (error) {
+      setErrors({ submit: error instanceof Error ? error.message : "Không giữ được attempt tạo đơn." });
+      setIsSubmitting(false);
+      return;
+    }
+    const idemKey = createAttempt.key;
+    const clearStoredKey = () => createAttempt.resolve();
+
+    const MAX_IDEM_RETRIES = 3;
+    const delayMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     (async () => {
-      try {
-        const idempotencyKey = await getOrCreateOrderAttemptKey("checkout", orderPayload);
-        const response = await fetch("/api/orders", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...orderPayload, idempotency_key: idempotencyKey }),
-        });
+      let attempt = 0;
+      let lastError: Error | null = null;
 
-        const result = await response.json();
+      while (attempt < MAX_IDEM_RETRIES) {
+        attempt += 1;
+        try {
+          const response = await fetch("/api/orders", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Idempotency-Key": idemKey!,
+            },
+            body: JSON.stringify({ ...orderPayload, idempotency_key: idemKey }),
+          });
 
-        if (!response.ok || !result.success || !result.orderCode) {
-          throw new Error(result.error || "Không thể tạo đơn hàng. Vui lòng kiểm tra lại giỏ hàng!");
-        }
+          const result = await response.json();
 
-        const serverOrderCode = result.orderCode;
-        const serverFinalAmount = result.finalAmount ?? finalAmount;
-        clearOrderAttemptKey("checkout");
+          const action = decideCheckoutSubmitAction(
+            response.status,
+            result,
+            attempt,
+            MAX_IDEM_RETRIES
+          );
+
+          if (action.kind === "retry") {
+            lastError = new Error(action.errorMessage);
+            if (action.delayMs > 0) {
+              await delayMs(action.delayMs);
+            }
+            continue;
+          }
+
+          if (action.kind === "stop") {
+            if (action.clearKey) clearStoredKey();
+            setErrors({ submit: action.message });
+            setIsSubmitting(false);
+            return;
+          }
+
+          clearStoredKey();
+
+          const serverOrderCode = result.orderCode;
+          const serverFinalAmount = result.finalAmount ?? finalAmount;
 
         // Build local order snapshot for client cache
         const newOrderRecord: Order = {
@@ -464,8 +515,8 @@ function CheckoutContent() {
           updated_at: new Date().toISOString(),
         };
 
-        // Cache order in local device storage
-        saveNewOrder(newOrderRecord, { syncToServer: false });
+        // Cache order in local device storage (no second POST, no local stock deduct)
+        cacheServerCreatedOrder(newOrderRecord);
 
         // Update local customer profile and store proof token
         try {
@@ -492,12 +543,26 @@ function CheckoutContent() {
         router.push(
           `/order/success?code=${serverOrderCode}&payment=${paymentMethod}&amount=${serverFinalAmount}${tokenQuery}`
         );
+        return;
       } catch (err: any) {
-        console.error("[Checkout] Order creation failed:", err);
-        setErrors({ submit: err.message || "Lỗi kết nối máy chủ. Vui lòng thử lại!" });
+        lastError = err;
+        if (attempt < MAX_IDEM_RETRIES) {
+          await delayMs(400 * attempt);
+          continue;
+        }
+      }
+    }
+
+      if (lastError) {
+        console.error("[Checkout] Order creation failed:", lastError);
+        setErrors({
+          submit:
+            lastError.message ||
+            "Lỗi kết nối máy chủ. Giỏ hàng được giữ nguyên — vui lòng thử lại.",
+        });
         setIsSubmitting(false);
       }
-    })();
+    })().finally(() => createAttempt.release());
   };
 
   if (items.length === 0) {
@@ -678,11 +743,11 @@ function CheckoutContent() {
                 <div>
                   <h2 className="font-heading font-bold text-sm text-emerald-950 flex items-center gap-2">
                     <span>🌱</span>
-                    <span>{deliveryType === "member_delivery" ? "Thành viên giao hàng cho bạn *" : "Người quen trong Mầm Mơ (nếu có)"}</span>
+                    <span>{deliveryType === "member_delivery" ? "Thành viên giao hàng cho bạn *" : "Người liên hệ / quen biết qua ai *"}</span>
                   </h2>
                 </div>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-cream text-emerald-800">
-                  {deliveryType === "member_delivery" ? "Bắt buộc chọn" : "Tùy chọn"}
+                  Bắt buộc
                 </span>
               </div>
 
@@ -736,6 +801,7 @@ function CheckoutContent() {
                         setShowMemberSuggestions(true);
                         setNoIntroducer(false);
                         setFormData((prev) => ({ ...prev, introducer_info: e.target.value }));
+                        setErrors((prev) => (prev.introducer_info ? { ...prev, introducer_info: "" } : prev));
                       }}
                       onFocus={() => setShowMemberSuggestions(true)}
                       placeholder="Gõ tên hoặc mã thành viên (VD: Lan, Quang, Trúc Hân...)"
@@ -795,6 +861,10 @@ function CheckoutContent() {
                       {noIntroducer ? "✓ Tôi không quen ai trong BTC" : "Tôi không quen ai trong BTC"}
                     </button>
                   </div>
+
+                  <p className="text-[11px] text-gray-500 pt-0.5">
+                    Không nhớ mã? Hãy nhập tên người liên hệ để BTC đối soát.
+                  </p>
                 </div>
               )}
 

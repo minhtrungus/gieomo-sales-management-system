@@ -48,7 +48,7 @@ export async function load(url, context, nextLoad) {
     return { format: "module", shortCircuit: true, source: 'export async function getSystemSettingsServer() { throw new Error("not expected"); }' };
   }
   if (url === "mock:server-auth") {
-    return { format: "module", shortCircuit: true, source: 'export function createOrderProofToken() { return "unused"; } export async function getAuthenticatedUser() { return null; } export async function requireAdmin() { throw new Error("not expected"); } export async function requireAuth() { throw new Error("not expected"); }' };
+    return { format: "module", shortCircuit: true, source: 'export function createOrderProofToken() { return "unused"; } export function verifyOrderProofToken() { return false; } export async function getAuthenticatedUser() { return null; } export async function requireAdmin() { throw new Error("not expected"); } export async function requireAuth() { throw new Error("not expected"); }' };
   }
   return nextLoad(url, context);
 }
@@ -63,12 +63,13 @@ const runtime = globalThis as typeof globalThis & {
 runtime.__p0a3AdminClientCalls = 0;
 
 const { validateOrderCreateLines } = await import("../src/lib/orderCreateInput.ts");
-const { canExposeOrderPaymentProof, createOrderServer } = await import("../src/lib/services/orderService.ts");
+const { canExposeOrderPaymentProof } = await import("../src/lib/services/orderService.ts");
+const { createOrderServerAtomicV2 } = await import("../src/lib/services/orderCreateAtomicV2.ts");
 const { POST } = await import("../src/app/api/orders/route.ts");
 
 const validProductLine = { product_id: "product-slug", quantity: 1 };
 
-test("payment proof content requires admin access or verified phone ownership", () => {
+test("payment proof content requires admin access or an order-bound proof", () => {
   assert.equal(canExposeOrderPaymentProof(false, false), false);
   assert.equal(canExposeOrderPaymentProof(false, true), true);
   assert.equal(canExposeOrderPaymentProof(true, false), true);
@@ -127,9 +128,9 @@ test("preserves duplicate lines instead of merging their quantities", () => {
   if (result.ok) assert.equal(result.items.length, 2);
 });
 
-test("createOrderServer rejects invalid lines before constructing a database client", async () => {
+test("createOrderServerAtomicV2 rejects invalid lines before constructing a database client", async () => {
   runtime.__p0a3AdminClientCalls = 0;
-  const result = await createOrderServer({
+  const result = await createOrderServerAtomicV2({
     buyer_phone: "0900000000",
     items: [{ product_id: "product-1", quantity: "2" }],
   } as never);
@@ -139,9 +140,9 @@ test("createOrderServer rejects invalid lines before constructing a database cli
   assert.equal(runtime.__p0a3AdminClientCalls, 0);
 });
 
-test("createOrderServer requires a UUID attempt key before database access", async () => {
+test("createOrderServerAtomicV2 requires a UUID attempt key before database access", async () => {
   runtime.__p0a3AdminClientCalls = 0;
-  const result = await createOrderServer({ buyer_phone: "0900000000", items: [validProductLine] });
+  const result = await createOrderServerAtomicV2({ buyer_phone: "0900000000", items: [validProductLine] });
   assert.equal(result.success, false);
   assert.match(result.error || "", /Khóa gửi đơn/);
   assert.equal(runtime.__p0a3AdminClientCalls, 0);
@@ -163,7 +164,7 @@ test("server derives scope and hash and returns the committed RPC identity", asy
       error: null,
     };
   };
-  const result = await createOrderServer({
+  const result = await createOrderServerAtomicV2({
     buyer_name: "Guest",
     buyer_phone: "0900 000 000",
     idempotency_key: "11111111-1111-4111-8111-111111111111",

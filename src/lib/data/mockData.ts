@@ -16,6 +16,8 @@ export interface ExtendedProduct extends Product {
 export interface ExtendedCombo extends Omit<Combo, "items"> {
   items?: Array<{
     product: ExtendedProduct;
+    product_id?: string;
+    variant_id?: string | null;
     quantity: number;
   }>;
   images?: string[];

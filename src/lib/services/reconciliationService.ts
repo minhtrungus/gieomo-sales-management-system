@@ -8,6 +8,91 @@ let catalogMemoryCache: {
 } | null = null;
 const CATALOG_CACHE_TTL_MS = 30_000;
 
+/**
+ * Batch 3B — reset catalog cache (tests / force refresh).
+ * Mirror pattern resetPaymentConfirmInFlight: module-level cache cần
+ * reset giữa các test để mỗi test kiểm thử được query thật, không
+ * vô tình đọc cache 30s của test trước.
+ */
+export function resetReconciliationCatalogCache(): void {
+  catalogMemoryCache = null;
+}
+
+// Batch 3C — pagination bounds + payments chunking.
+// limit được clamp server-side: hợp lệ trong [1, MAX_PAGE_SIZE], sai/không
+// có → DEFAULT_PAGE_SIZE. offset âm/không số → 0.
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 200;
+// Chunk `.in("order_id", ids)` để tránh URL overflow (PostgREST query string)
+// khi số orders lớn — mỗi chunk tối đa PAYMENTS_CHUNK_SIZE IDs.
+const PAYMENTS_CHUNK_SIZE = 500;
+// Batch C — số samples orphan payment trả về trong summary (payload ổn định).
+const ORPHAN_PAYMENT_SAMPLE_LIMIT = 20;
+
+function clampPagination(limit?: number, offset?: number): { limit: number; offset: number } {
+  const parsedLimit = Number(limit);
+  const limitOut =
+    Number.isFinite(parsedLimit) && parsedLimit >= 1
+      ? Math.min(Math.floor(parsedLimit), MAX_PAGE_SIZE)
+      : DEFAULT_PAGE_SIZE;
+  const parsedOffset = Number(offset);
+  const offsetOut =
+    Number.isFinite(parsedOffset) && parsedOffset >= 0 ? Math.floor(parsedOffset) : 0;
+  return { limit: limitOut, offset: offsetOut };
+}
+
+/**
+ * Batch 3C — Phase B enrich: merge chi tiết hiển thị (customer email,
+ * shipping address, item snapshots đầy đủ) vào record đã classify ở Phase A.
+ *
+ * Inventory state/note/stock GIỮ NGUYÊN từ Phase A — KHÔNG classify lại
+ * trong Phase B (tránh drift nếu catalog cache 30s refresh giữa hai query
+ * của cùng một request; classification chỉ chạy một lần trên dữ liệu
+ * lightweight nhưng đủ cột để verdict).
+ */
+function enrichRecordWithDetails(
+  rec: ReconciliationRecord,
+  detail: any | undefined
+): ReconciliationRecord {
+  if (!detail) {
+    // Race hiếm: order bị xóa giữa Phase A và Phase B — giữ record
+    // lightweight (đã classify đủ) thay vì drop khỏi trang.
+    return rec;
+  }
+  const invByItemId = new Map(rec.items.map((i) => [i.order_item_id, i]));
+  const fullItems: ReconciliationItemBreakdown[] = (detail.order_items || []).map((it: any) => {
+    const inv = invByItemId.get(it.order_item_id);
+    return {
+      order_item_id: it.order_item_id,
+      product_id: it.product_id,
+      variant_id: it.variant_id,
+      combo_id: it.combo_id,
+      item_name: it.item_name_snapshot || "Sản phẩm",
+      variant_name: it.variant_name_snapshot || null,
+      sku: it.sku_snapshot || null,
+      quantity_ordered: Number(it.quantity) || 0,
+      unit_price: Number(it.unit_price) || 0,
+      subtotal: Number(it.subtotal) || 0,
+      current_catalog_stock: inv?.current_catalog_stock ?? null,
+      inventory_state: inv?.inventory_state ?? "UNVERIFIED",
+      inventory_note:
+        inv?.inventory_note ?? "Không tìm thấy dòng phân loại khi tải trang chi tiết",
+    };
+  });
+  // Item có ở Phase A nhưng thiếu trong detail (race giữa hai query)
+  // → giữ entry lightweight, không mất dữ liệu classify.
+  for (const [id, inv] of invByItemId) {
+    if (!fullItems.some((i) => i.order_item_id === id)) fullItems.push(inv);
+  }
+  return {
+    ...rec,
+    shipping_address: detail.shipping_address_snapshot ?? rec.shipping_address ?? null,
+    customer_email: (detail.customers as any)?.email || null,
+    items: fullItems,
+    items_count: fullItems.length,
+  };
+}
+
 export type ReconciliationStatus =
   | "OK"
   | "UNPAID"
@@ -41,7 +126,6 @@ export interface ReconciliationPaymentBreakdown {
   status: string;
   transaction_code?: string | null;
   created_at: string;
-  confirmed_at?: string | null;
 }
 
 export interface ReconciliationRecord {
@@ -81,12 +165,24 @@ export interface ReconciliationRecord {
   action_recommended?: string;
 }
 
+export interface ReconciliationOrphanPayments {
+  count: number;
+  null_order_id_count: number;
+  missing_order_count: number;
+  samples: Array<{
+    payment_id: string;
+    order_id: string | null;
+    amount: number;
+    created_at: string;
+  }>;
+}
+
 export interface ReconciliationSummary {
   total_orders: number;
   total_expected_revenue: number;
   total_paid_revenue: number;
   total_net_difference: number;
-  
+
   status_counts: {
     ok: number;
     unpaid: number;
@@ -97,6 +193,10 @@ export interface ReconciliationSummary {
     needs_review: number;
     action_required_total: number;
   };
+
+  // Batch C — orphan payment detector (READ-ONLY): payment không gắn order
+  // hợp lệ (order_id null hoặc trỏ tới order không tồn tại trong DB).
+  orphan_payments: ReconciliationOrphanPayments;
 }
 
 export interface ReconciliationFilterOptions {
@@ -111,8 +211,24 @@ export interface ReconciliationFilterOptions {
   offset?: number;
 }
 
+/** C10 — date-only (YYYY-MM-DD) end_date → bao trọn cả ngày (T23:59:59.999Z). */
+function normalizeReconciliationEndDate(endDate: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(endDate)
+    ? `${endDate}T23:59:59.999Z`
+    : endDate;
+}
+
 /**
  * Server-side 3-Way Reconciliation Engine: Orders ↔ Payments ↔ Inventory
+ *
+ * Batch 3C — hai phase:
+ *   Phase A — lightweight full scan: select cột cần cho classification
+ *     (KHÔNG customers, KHÔNG item snapshots hiển thị), sort
+ *     created_at DESC + order_id DESC (tie-break chống skip/dup giữa trang),
+ *     payments theo chunks (chống URL overflow). Classify + summary +
+ *     in-memory filters trên TOÀN BỘ rows khớp DB filters.
+ *   Phase B — detailed fetch: chỉ tải chi tiết (customers + item snapshots)
+ *     cho đúng page IDs (≤ limit IDs) rồi enrich — không classify lại.
  */
 export async function getReconciliationDataServer(options?: ReconciliationFilterOptions): Promise<{
   summary: ReconciliationSummary;
@@ -120,8 +236,9 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   total_count: number;
 }> {
   const supabase = createAdminClient();
+  const { limit, offset } = clampPagination(options?.limit, options?.offset);
 
-  // 1. Fetch orders with customer info & order_items
+  // 1. Phase A — fetch lightweight orders (đủ cột classify, thiếu cột hiển thị)
   let ordersQuery = supabase
     .from("orders")
     .select(`
@@ -133,40 +250,31 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
       delivery_status,
       receiver_name,
       receiver_phone,
-      shipping_address_snapshot,
       subtotal,
       shipping_fee,
       voucher_discount,
       final_amount,
       customer_note,
       internal_note,
-      payment_method,
-      customers (
-        customer_id,
-        full_name,
-        phone,
-        email
-      ),
       order_items (
         order_item_id,
         product_id,
         variant_id,
         combo_id,
-        item_name_snapshot,
-        variant_name_snapshot,
-        sku_snapshot,
         quantity,
-        unit_price,
-        subtotal
+        variant_name_snapshot
       )
     `)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("order_id", { ascending: false });
 
   if (options?.start_date) {
     ordersQuery = ordersQuery.gte("created_at", options.start_date);
   }
   if (options?.end_date) {
-    ordersQuery = ordersQuery.lte("created_at", options.end_date);
+    // C10 — date-only (YYYY-MM-DD) phải bao trọn cả ngày end: append
+    // T23:59:59.999Z. Trước đây so với midnight UTC → loại trừ trọn ngày cuối.
+    ordersQuery = ordersQuery.lte("created_at", normalizeReconciliationEndDate(options.end_date));
   }
   if (options?.order_status && options.order_status !== "all") {
     ordersQuery = ordersQuery.eq("order_status", options.order_status);
@@ -181,19 +289,30 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     throw new Error("Không thể tải dữ liệu đối soát đơn hàng");
   }
 
-  // 2. Fetch all payments linked to these orders in a single batch
+  // 2. Phase A — fetch payments theo CHUNKS (Batch 3C): mỗi lần tối đa
+  //    PAYMENTS_CHUNK_SIZE IDs — tránh URL overflow của `.in()` PostgREST
+  //    khi số orders lớn. Chunk đầu lỗi → throw ngay (không nuốt).
   const orderIds = rawOrders.map((o) => o.order_id);
-  let rawPayments: any[] = [];
-  if (orderIds.length > 0) {
+  const rawPayments: any[] = [];
+  for (let i = 0; i < orderIds.length; i += PAYMENTS_CHUNK_SIZE) {
+    const batchIds = orderIds.slice(i, i + PAYMENTS_CHUNK_SIZE);
+    // Hotfix P1-F6: CHỈ select cột có căn cứ trong schema 001
+    // (payments không có confirmed_at — select cột không tồn tại khiến
+    // PostgREST trả lỗi PGRST204 cho TOÀN bộ truy vấn).
     const { data: paymentsData, error: paymentsError } = await supabase
       .from("payments")
-      .select("payment_id, order_id, amount, payment_method, payment_status, transaction_code, created_at, confirmed_at")
-      .in("order_id", orderIds)
+      .select("payment_id, order_id, amount, payment_method, payment_status, transaction_code, created_at")
+      .in("order_id", batchIds)
       .order("created_at", { ascending: true });
 
-    if (!paymentsError && paymentsData) {
-      rawPayments = paymentsData;
+    // Lỗi đọc payments KHÔNG được nuốt thành "không có giao dịch":
+    // ném lỗi (mirror nhánh orders ở trên) → route trả 500 → UI báo lỗi,
+    // phân biệt rõ "query thất bại" với "orders không có payment record".
+    if (paymentsError || !paymentsData) {
+      console.error("[reconciliationService] Error querying payments:", paymentsError);
+      throw new Error("Không thể tải dữ liệu thanh toán đối soát");
     }
+    rawPayments.push(...paymentsData);
   }
 
   // Map payments by order_id
@@ -204,6 +323,79 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     paymentsByOrderId.set(pay.order_id, existing);
   }
 
+  // 2b. Batch C — ORPHAN PAYMENT DETECTOR (read-only): payment không gắn
+  //     order hợp lệ. Hai loại:
+  //       (a) order_id IS NULL — không có đơn để gắn.
+  //       (b) order_id trỏ tới order KHÔNG tồn tại trong DB (FK chết / đơn
+  //           bị xóa). Chống false-positive: payment gắn đơn ngoài cửa sổ
+  //           thời gian (đơn tạo trước start_date) được xác minh bằng query
+  //           orders .in() riêng → KHÔNG đếm là orphan.
+  //     Giới hạn có chủ đích (chống unbound scan — mirror C4): quét payments
+  //     theo created_at trong CÙNG cửa sổ thời gian với orders; payment tạo
+  //     ngoài cửa sổ không được đếm (kể cả khi order_id chết).
+  //     Lỗi query → THROW (không nuốt thành count=0 — mirror Phase A).
+  interface OrphanPaymentWindowRow {
+    payment_id: string;
+    order_id: string | null;
+    amount: number;
+    created_at: string;
+  }
+  let orphanNullPayments: OrphanPaymentWindowRow[] = [];
+  let orphanMissingPayments: OrphanPaymentWindowRow[] = [];
+  {
+    let windowQuery = supabase
+      .from("payments")
+      .select("payment_id, order_id, amount, created_at")
+      .order("created_at", { ascending: true });
+    if (options?.start_date) {
+      windowQuery = windowQuery.gte("created_at", options.start_date);
+    }
+    if (options?.end_date) {
+      windowQuery = windowQuery.lte(
+        "created_at",
+        normalizeReconciliationEndDate(options.end_date)
+      );
+    }
+    const { data: windowPayments, error: windowPaymentsError } = await windowQuery;
+    if (windowPaymentsError || !windowPayments) {
+      console.error(
+        "[reconciliationService] Error scanning payments for orphans:",
+        windowPaymentsError
+      );
+      throw new Error("Không thể quét thanh toán mồ côi");
+    }
+
+    const orderIdSet = new Set(orderIds);
+    const nullOrphans = windowPayments.filter((p) => p.order_id == null);
+    const missingCandidates = windowPayments.filter(
+      (p) => p.order_id != null && !orderIdSet.has(p.order_id)
+    );
+
+    const candidateIds = [...new Set(missingCandidates.map((p) => p.order_id as string))];
+    const existingOutsideWindowIds = new Set<string>();
+    if (candidateIds.length > 0) {
+      const { data: existRows, error: existError } = await supabase
+        .from("orders")
+        .select("order_id")
+        .in("order_id", candidateIds);
+      if (existError || !existRows) {
+        console.error(
+          "[reconciliationService] Error verifying orphan candidate orders:",
+          existError
+        );
+        throw new Error("Không thể xác minh thanh toán mồ côi");
+      }
+      for (const row of existRows as Array<{ order_id: string }>) {
+        existingOutsideWindowIds.add(row.order_id);
+      }
+    }
+
+    orphanNullPayments = nullOrphans;
+    orphanMissingPayments = missingCandidates.filter(
+      (p) => !existingOutsideWindowIds.has(p.order_id as string)
+    );
+  }
+
   // 3. Fetch catalog variants and products with in-memory caching (TTL 30s) and parallel fetching
   let catalogVariants: any[] = [];
   let catalogProducts: any[] = [];
@@ -212,13 +404,33 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     catalogVariants = catalogMemoryCache.variants;
     catalogProducts = catalogMemoryCache.products;
   } else {
+    // Batch 3B — catalog query chỉ select cột có căn cứ schema đã xác minh:
+    //   product_variants (001:112-126): variant_id, product_id, name, sku,
+    //     price, stock — stock là NGUỒN TỒN KHO DUY NHẤT (001:120).
+    //   products (001:88-105): KHÔNG có cột stock, KHÔNG có cột sku.
+    //     Trước 3B query chọn "sku, price, stock" → PostgREST PGRST204 →
+    //     data=null → nuốt thành catalog rỗng (productsRes.data || []) →
+    //     MỌI dòng product không biến thể bị gắn nhãn "không còn trong
+    //     catalog" (finding sai). Giờ chỉ select product_id, name, status.
+    // Lỗi catalog KHÔNG được nuốt thành danh sách rỗng: ném lỗi (mirror
+    // nhánh orders/payments) → route 500 → UI báo reconciliation không
+    // hoàn chỉnh, phân biệt rõ "query thất bại" với "catalog trống thật".
     const [variantsRes, productsRes] = await Promise.all([
       supabase.from("product_variants").select("variant_id, product_id, name, sku, price, stock"),
-      supabase.from("products").select("product_id, name, sku, price, stock, status"),
+      supabase.from("products").select("product_id, name, status"),
     ]);
 
-    catalogVariants = variantsRes.data || [];
-    catalogProducts = productsRes.data || [];
+    if (variantsRes.error || !variantsRes.data) {
+      console.error("[reconciliationService] Error querying product_variants:", variantsRes.error);
+      throw new Error("Không thể tải dữ liệu phân loại sản phẩm đối soát");
+    }
+    if (productsRes.error || !productsRes.data) {
+      console.error("[reconciliationService] Error querying products:", productsRes.error);
+      throw new Error("Không thể tải dữ liệu sản phẩm đối soát");
+    }
+
+    catalogVariants = variantsRes.data;
+    catalogProducts = productsRes.data;
 
     catalogMemoryCache = {
       variants: catalogVariants,
@@ -242,9 +454,10 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     const relatedPayments = paymentsByOrderId.get(o.order_id) || [];
 
     // Calculate paid amount
-    // Consider payments with status = 'paid' or payments recorded with positive amount
+    // Consider payments with status = 'paid' hoặc legacy rows thiếu status.
+    // (Batch 3E dọn dead code p.status — cột status không tồn tại/không select.)
     const paidRecords = relatedPayments.filter(
-      (p) => p.payment_status === "paid" || p.status === "paid" || !p.payment_status
+      (p) => p.payment_status === "paid" || !p.payment_status
     );
     const totalPaidAmount = paidRecords.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const difference = totalPaidAmount - orderFinalAmount;
@@ -279,25 +492,37 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
             inventoryNote = `Còn ${currentStock} sp trong kho`;
           }
         }
-      } else if (it.product_id && !it.combo_id) {
+      } else if (it.combo_id) {
+        inventoryState = "CONSISTENT";
+        inventoryNote = "Set Combo quà tặng";
+      } else if (it.variant_name_snapshot) {
+        // Batch 3B — variant_id NULL nhưng snapshot variant còn giá trị:
+        // FK order_items.variant_id → product_variants ON DELETE SET NULL
+        // (001:254) — biến thể đã bị xóa, snapshot giữ lịch sử. KHÔNG
+        // ghép snapshot theo tên/SKU với variant hiện tại (không có contract
+        // duy nhất). KHÔNG đọc product.stock — không có cột đó (001:88-105).
+        inventoryState = "UNVERIFIED";
+        inventoryNote =
+          "Phân loại sản phẩm đã bị xóa khỏi catalog — không thể đối chiếu tồn kho theo snapshot";
+      } else if (it.product_id) {
         const product = productMap.get(it.product_id);
         if (!product) {
           inventoryState = "UNVERIFIED";
           inventoryNote = "Sản phẩm không còn trong catalog hiện tại";
         } else {
-          currentStock = Number(product.stock);
-          if (currentStock < 0) {
-            inventoryState = "MISMATCH";
-            inventoryNote = `Tồn kho sản phẩm bị âm (${currentStock})`;
-            hasInventoryMismatch = true;
-          } else {
-            inventoryState = "CONSISTENT";
-            inventoryNote = `Còn ${currentStock} sp trong kho`;
-          }
+          // Batch 3B — products KHÔNG có cột stock (001:88-105): dòng
+          // không biến thể không kiểm tồn kho theo schema (parity với
+          // writer 016/orderService Batch 2C). currentStock giữ null —
+          // không suy diễn số lượng từ nguồn không có căn cứ.
+          currentStock = null;
+          inventoryState = "CONSISTENT";
+          inventoryNote = "Sản phẩm không biến thể — không kiểm tồn kho theo schema";
         }
-      } else if (it.combo_id) {
-        inventoryState = "CONSISTENT";
-        inventoryNote = "Set Combo quà tặng";
+      } else {
+        // Không có variant_id, combo_id, product_id → không xác định
+        // được định danh nào để đối chiếu. Không kết luận giả "hợp lệ".
+        inventoryState = "UNVERIFIED";
+        inventoryNote = "Không xác định được định danh sản phẩm/phân loại để đối chiếu";
       }
 
       itemBreakdowns.push({
@@ -384,8 +609,10 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
       delivery_status: o.delivery_status,
       receiver_name: o.receiver_name,
       receiver_phone: o.receiver_phone,
-      shipping_address: o.shipping_address_snapshot,
-      customer_email: (o.customers as any)?.email || null,
+      // Batch 3C — Phase A lightweight KHÔNG select các cột hiển thị này;
+      // enrich trong Phase B (enrichRecordWithDetails) cho đúng page rows.
+      shipping_address: null,
+      customer_email: null,
       customer_note: o.customer_note,
       internal_note: o.internal_note,
       subtotal: Number(o.subtotal) || 0,
@@ -402,7 +629,6 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
         status: p.payment_status || p.status || "pending",
         transaction_code: p.transaction_code,
         created_at: p.created_at,
-        confirmed_at: p.confirmed_at,
       })),
       items_count: itemBreakdowns.length,
       items: itemBreakdowns,
@@ -462,6 +688,23 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     inventoryMismatchCount +
     needsReviewCount;
 
+  // Batch C — tổng hợp orphan payments. Samples sort created_at DESC,
+  // giới hạn ORPHAN_PAYMENT_SAMPLE_LIMIT để payload ổn định với dữ liệu lớn.
+  const orphanAll = [...orphanNullPayments, ...orphanMissingPayments].sort((a, b) =>
+    (a.created_at ?? "") < (b.created_at ?? "") ? 1 : -1
+  );
+  const orphanPayments: ReconciliationOrphanPayments = {
+    count: orphanAll.length,
+    null_order_id_count: orphanNullPayments.length,
+    missing_order_count: orphanMissingPayments.length,
+    samples: orphanAll.slice(0, ORPHAN_PAYMENT_SAMPLE_LIMIT).map((p) => ({
+      payment_id: p.payment_id,
+      order_id: p.order_id ?? null,
+      amount: p.amount,
+      created_at: p.created_at,
+    })),
+  };
+
   const summary: ReconciliationSummary = {
     total_orders: totalOrders,
     total_expected_revenue: totalExpectedRevenue,
@@ -477,6 +720,7 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
       needs_review: needsReviewCount,
       action_required_total: actionRequiredTotal,
     },
+    orphan_payments: orphanPayments,
   };
 
   // 7. In-memory Filter Application for Query Results
@@ -500,13 +744,58 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   }
 
   const totalCount = filtered.length;
-  const offset = options?.offset || 0;
-  const limit = options?.limit || 100;
-  const paginated = filtered.slice(offset, offset + limit);
+  const pageSlice = filtered.slice(offset, offset + limit);
+
+  // 8. Phase B — detailed fetch CHỈ cho page IDs (≤ limit IDs):
+  //    customers + item snapshots hiển thị đầy đủ. KHÔNG classify lại —
+  //    enrich merge inventory state từ Phase A (xem enrichRecordWithDetails).
+  //    Thứ tự records theo pageSlice (đã sort Phase A), KHÔNG phụ thuộc
+  //    thứ tự DB trả về.
+  let records: ReconciliationRecord[] = [];
+  if (pageSlice.length > 0) {
+    const pageIds = pageSlice.map((r) => r.order_id);
+    const { data: detailedOrders, error: detailError } = await supabase
+      .from("orders")
+      .select(`
+        order_id,
+        shipping_address_snapshot,
+        customers (
+          customer_id,
+          full_name,
+          phone,
+          email
+        ),
+        order_items (
+          order_item_id,
+          product_id,
+          variant_id,
+          combo_id,
+          item_name_snapshot,
+          variant_name_snapshot,
+          sku_snapshot,
+          quantity,
+          unit_price,
+          subtotal
+        )
+      `)
+      .in("order_id", pageIds);
+
+    if (detailError || !detailedOrders) {
+      console.error("[reconciliationService] Error querying order details:", detailError);
+      throw new Error("Không thể tải dữ liệu chi tiết đối soát");
+    }
+
+    const detailById = new Map<string, any>(
+      (detailedOrders as any[]).map((d) => [d.order_id, d])
+    );
+    records = pageSlice.map((rec) =>
+      enrichRecordWithDetails(rec, detailById.get(rec.order_id))
+    );
+  }
 
   return {
     summary,
-    records: paginated,
+    records,
     total_count: totalCount,
   };
 }

@@ -22,7 +22,6 @@ import {
   getAdminSession,
   getStoredOrders,
   updateStoredDeliveryStatus,
-  updateStoredPaymentStatus,
   updateStoredOrderStatus,
   type AdminSession,
 } from "@/lib/data/orderStore";
@@ -377,10 +376,17 @@ export default function SaleOrdersPage() {
                 {selectedOrder.items?.map((it, idx) => (
                   <div key={idx} className="p-3 text-xs flex justify-between items-center bg-white">
                     <div>
-                      <span className="font-bold text-gray-900 block">{it.product_name_snapshot}</span>
+                      <span className="font-bold text-gray-900 block">
+                        {it.product_name_snapshot || it.item_name_snapshot}
+                      </span>
                       {it.variant_name_snapshot && (
-                        <span className="text-[11px] text-gray-500">
-                          Phân loại: {it.variant_name_snapshot}
+                        <span className="text-[11px] text-gray-500 block">
+                          Mẫu / màu sắc / phân loại: {it.variant_name_snapshot}
+                        </span>
+                      )}
+                      {(it.sku_snapshot || it.sku) && (
+                        <span className="text-[11px] text-gray-400 font-mono block">
+                          SKU: {it.sku_snapshot || it.sku}
                         </span>
                       )}
                       <span className="text-[11px] text-gray-400 block">
@@ -391,6 +397,21 @@ export default function SaleOrdersPage() {
                   </div>
                 ))}
               </div>
+              {selectedOrder.packing_items && selectedOrder.packing_items.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wide text-emerald-900 block">
+                    Danh sách đóng gói theo tồn kho đã giữ
+                  </span>
+                  {selectedOrder.packing_items.map((packingItem) => (
+                    <div key={packingItem.variant_id} className="text-xs text-gray-700">
+                      <span className="font-bold text-gray-900">{packingItem.product_name}</span>
+                      <span> — Mẫu / màu sắc / phân loại: {packingItem.variant_name}</span>
+                      {packingItem.sku && <span className="font-mono text-gray-500"> · SKU {packingItem.sku}</span>}
+                      <span className="font-bold text-emerald-900"> · x{packingItem.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Total Pricing */}

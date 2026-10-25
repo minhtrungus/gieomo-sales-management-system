@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
@@ -21,6 +21,7 @@ import {
   type TransferLog,
 } from "@/lib/data/orderStore";
 import type { Warehouse } from "@/types/database";
+import { postAdjustStock } from "@/lib/services/inventoryAdjustService";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
   AlertTriangle,
@@ -88,10 +89,12 @@ export default function AdminInventoryPage() {
       setTransferLogs(getStoredTransferLogs());
 
       const storedProds = getStoredProducts();
-      let prodsNeedUpdate = false;
 
+      // Batch 2F — healing chỉ phục vụ HIỂN THỊ cục bộ của trang này.
+      // KHÔNG push bản dựng lại từ localStorage lên server khi tải trang:
+      // stock server chỉ được thay đổi qua đường ghi có chủ đích (RPC/CAS);
+      // push absolute-stock từng làm clobber stock vừa bị order RPC trừ.
       const mapped: ExtendedProduct[] = storedProds.map((p) => {
-        let pChanged = false;
         const variants = p.variants?.map((v) => {
           const stocks = { ...(v.warehouse_stocks || {}) };
 
@@ -100,7 +103,6 @@ export default function AdminInventoryPage() {
             const addVal = Number(stocks[""]);
             stocks[defWh.warehouse_id] = (Number(stocks[defWh.warehouse_id]) || 0) + addVal;
             delete stocks[""];
-            pChanged = true;
           }
 
           let totalStock = 0;
@@ -116,7 +118,6 @@ export default function AdminInventoryPage() {
               if (whs[0]) stocks[whs[0].warehouse_id] = wh1;
               if (whs[1]) stocks[whs[1].warehouse_id] = wh2;
               totalStock = wh1 + wh2;
-              pChanged = true;
             }
           }
 
@@ -124,7 +125,6 @@ export default function AdminInventoryPage() {
           if (totalStock === 0 && Number(v.stock) > 0 && defWh) {
             stocks[defWh.warehouse_id] = Number(v.stock);
             totalStock = Number(v.stock);
-            pChanged = true;
           }
 
           // If variant stock is 0 and totalStock is 0, but healedInflowLogs has quantity for this variant!
@@ -136,7 +136,6 @@ export default function AdminInventoryPage() {
             if (sumInflow > 0) {
               stocks[defWh.warehouse_id] = sumInflow;
               totalStock = sumInflow;
-              pChanged = true;
             }
           }
 
@@ -152,10 +151,6 @@ export default function AdminInventoryPage() {
           };
         });
 
-        if (pChanged) {
-          prodsNeedUpdate = true;
-        }
-
         const totalPStock = (variants || []).reduce((s, vr) => s + (Number(vr.stock) || 0), 0);
 
         return {
@@ -164,10 +159,6 @@ export default function AdminInventoryPage() {
           stock: totalPStock,
         };
       });
-
-      if (prodsNeedUpdate) {
-        mapped.forEach((mp) => updateStoredProduct(mp));
-      }
 
       setProducts(mapped);
 
@@ -316,6 +307,13 @@ export default function AdminInventoryPage() {
   const [unitCost, setUnitCost] = useState<number>(35000);
   const [approvedBy, setApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
   const [sourceNote, setSourceNote] = useState("Xưởng may tình nguyện viên Mầm Mơ đợt 2");
+  // Batch 2G — idempotency key cho nhập lẻ 1 mẫu (server-authoritative)
+  const bulkSingleIdemKeyRef = useRef<string | null>(null);
+  const [bulkSingleError, setBulkSingleError] = useState<string | null>(null);
+  const [bulkSingleSubmitting, setBulkSingleSubmitting] = useState(false);
+  // Batch 2G.2 — guard ĐỒNG BỘ cho nhập lẻ (cùng race với +/- đơn lẻ:
+  // state async → 2 submit cùng tick đều vượt guard → local apply 2 lần)
+  const bulkSingleInFlightRef = useRef(false);
 
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferProductId, setTransferProductId] = useState(products[0]?.product_id || "");
@@ -340,6 +338,17 @@ export default function AdminInventoryPage() {
   const [adjustDelta, setAdjustDelta] = useState<number>(0);
   const [adjustReason, setAdjustReason] = useState("Kiểm kê định kỳ");
   const [adjustApprovedBy, setAdjustApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
+  // Batch 2G — idempotency key + trạng thái gửi server cho +/- đơn lẻ.
+  // Key sinh 1 lần cho 1 thao tác người dùng; retry (sau timeout/lỗi
+  // network) DÙNG LẠI key đó → server chỉ áp dụng tối đa 1 lần.
+  const adjustIdemKeyRef = useRef<string | null>(null);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [adjustSubmitting, setAdjustSubmitting] = useState(false);
+  // Batch 2G.2 — guard ĐỒNG BỘ (ref, không phải state): state React cập
+  // nhật async → 2 click cùng tick vẫn thấy adjustSubmitting=false và
+  // cùng chạy continuation → local stock += delta hai lần. Ref ghi ngay
+  // lập tức trước mọi await → continuation thứ hai không bao giờ chạy.
+  const adjustInFlightRef = useRef(false);
 
   // Inflow Logs State - persistent and clean
   const [inflowLogs, setInflowLogs] = useState<InflowLog[]>(() => (typeof window !== "undefined" ? getStoredInflowLogs() : []));
@@ -442,14 +451,51 @@ export default function AdminInventoryPage() {
     });
   };
 
-  // Submit Stock Adjustment with mandatory confirmation and reason
-  const handleAdjustStockSubmit = (e: React.FormEvent) => {
+  // Submit Stock Adjustment — Batch 2G: server-authoritative trước, local sau
+  const handleAdjustStockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adjustingItem || adjustDelta === 0) {
-      setAdjustingItem(null);
+    if (!adjustingItem || adjustDelta === 0 || adjustSubmitting || adjustInFlightRef.current) {
       return;
     }
 
+    setAdjustError(null);
+    // Guard đồng bộ TRƯỚC mọi await — chặn double-submit cùng tick
+    adjustInFlightRef.current = true;
+    setAdjustSubmitting(true);
+    // Key cho thao tác này — giữ nguyên qua mọi retry tới khi server xác nhận
+    if (!adjustIdemKeyRef.current) {
+      adjustIdemKeyRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `adj-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    }
+    const idempotencyKey = adjustIdemKeyRef.current;
+
+    try {
+      const res = await postAdjustStock({
+        variantId: adjustingItem.variantId,
+        delta: adjustDelta,
+        reason: adjustReason === "Khác" ? `Điều chỉnh khác: ${adjustApprovedBy}` : adjustReason,
+        idempotencyKey,
+      });
+
+      if (!res.ok) {
+        // Server xác nhận THẤT BẠI — KHÔNG hiển thị thành công,
+        // KHÔNG đụng local stock. Key giữ nguyên → retry dùng lại key.
+        setAdjustError(res.message);
+        return;
+      }
+    } catch (err: any) {
+      // Timeout/network — kết quả KHÔNG xác định: KHÔNG mutate local.
+      // Key giữ nguyên → retry sẽ reuse (server dedup nếu đã áp dụng).
+      setAdjustError(err?.message || "Không kết nối được máy chủ. Thử lại — sẽ dùng cùng mã thao tác.");
+      return;
+    } finally {
+      adjustInFlightRef.current = false;
+      setAdjustSubmitting(false);
+    }
+
+    // Server đã áp dụng (applied hoặc duplicate) — giờ mới cập nhật local
     handleStockUpdate(
       adjustingItem.productId,
       adjustingItem.variantId,
@@ -479,12 +525,19 @@ export default function AdminInventoryPage() {
     const updatedLogs = [newLog, ...inflowLogs];
     setInflowLogs(updatedLogs);
     saveStoredInflowLogs(updatedLogs);
+    // Thành công — giải phóng key cho thao tác tiếp theo
+    adjustIdemKeyRef.current = null;
+    setAdjustError(null);
     setAdjustingItem(null);
     setAdjustDelta(0);
   };
 
   // Submit Bulk / Batch Inflow
-  const handleBulkImportSubmit = (e: React.FormEvent) => {
+  // Batch 2G: chế độ "single" (nhập lẻ 1 mẫu) chạy server-authoritative
+  // qua RPC adjust_variant_stock trước, local sau. Chế độ "batch_all"
+  // (nhiều mẫu) GIỮ NGUYÊN local-only — ngoài scope 2G (chưa đồng bộ
+  // server). KHÔNG tạo absolute-stock write path.
+  const handleBulkImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (importQty <= 0) return;
 
@@ -509,9 +562,9 @@ export default function AdminInventoryPage() {
     const timeStr = `${hours}:${minutes} ${day}/${month}/${year}`;
 
     if (bulkImportMode === "batch_all" && prod.variants && prod.variants.length > 0) {
-      // BATCH ALL VARIANTS MODE (e.g. 30 Pouch variants)
+      // BATCH ALL VARIANTS MODE (e.g. 30 Pouch variants) — local-only (2G out of scope)
       let totalRestockedCount = 0;
-      let restockedVariantNames: string[] = [];
+      const restockedVariantNames: string[] = [];
 
       const updatedVariants = prod.variants.map((v) => {
         const curStock = Number(v.stock ?? 0);
@@ -589,9 +642,45 @@ export default function AdminInventoryPage() {
       return;
     }
 
-    // SINGLE VARIANT MODE
+    // SINGLE VARIANT MODE — Batch 2G: server-authoritative trước, local sau
     const variant = prod.variants?.find((v) => v.variant_id === selectedVariantId);
     if (!variant) return;
+
+    if (bulkSingleSubmitting || bulkSingleInFlightRef.current) return;
+    setBulkSingleError(null);
+    // Guard đồng bộ TRƯỚC mọi await — chặn double-submit cùng tick
+    bulkSingleInFlightRef.current = true;
+    setBulkSingleSubmitting(true);
+    // Key cho thao tác nhập lẻ này — giữ nguyên qua mọi retry
+    if (!bulkSingleIdemKeyRef.current) {
+      bulkSingleIdemKeyRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `bulk-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    }
+
+    try {
+      const res = await postAdjustStock({
+        variantId: selectedVariantId,
+        delta: importQty,
+        reason: sourceNote ? `Nhập kho: ${sourceNote}` : "Nhập kho đơn lẻ",
+        idempotencyKey: bulkSingleIdemKeyRef.current,
+      });
+      if (!res.ok) {
+        // Server xác nhận THẤT BẠI — không mutate local, không lưu log
+        setBulkSingleError(res.message);
+        return;
+      }
+    } catch (err: any) {
+      // Timeout/network — kết quả không xác định: không mutate local
+      setBulkSingleError(
+        err?.message || "Không kết nối được máy chủ. Thử lại — sẽ dùng cùng mã thao tác."
+      );
+      return;
+    } finally {
+      bulkSingleInFlightRef.current = false;
+      setBulkSingleSubmitting(false);
+    }
 
     const currentWhStock = Number(
       variant.warehouse_stocks?.[targetWhId] ??
@@ -605,7 +694,7 @@ export default function AdminInventoryPage() {
     const stockBefore = currentWhStock;
     const stockAfter = stockBefore + importQty;
 
-    // Update specific warehouse stock
+    // Server đã áp dụng — giờ mới cập nhật local warehouse + lưu log
     handleStockUpdate(selectedProductId, selectedVariantId, targetWhId, importQty);
 
     const newLog: InflowLog = {
@@ -627,6 +716,9 @@ export default function AdminInventoryPage() {
     const updatedInflows = [newLog, ...inflowLogs];
     setInflowLogs(updatedInflows);
     saveStoredInflowLogs(updatedInflows);
+    // Thành công — giải phóng key cho thao tác tiếp theo
+    bulkSingleIdemKeyRef.current = null;
+    setBulkSingleError(null);
     setIsBulkImportOpen(false);
     setMainTab("logs");
     setActiveLogTab("inflow");
@@ -2302,6 +2394,11 @@ export default function AdminInventoryPage() {
               </div>
             )}
 
+            {/* Batch 2G — điều chuyển kho CHƯA đồng bộ server (out of scope) */}
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-bold">
+              ℹ️ Điều chuyển kho chưa đồng bộ lên máy chủ (out of scope Batch 2G) — chỉ ghi nhận cục bộ.
+            </div>
+
             <form onSubmit={handleTransferSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -2463,7 +2560,11 @@ export default function AdminInventoryPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsBulkImportOpen(false)}
+                onClick={() => {
+                  bulkSingleIdemKeyRef.current = null;
+                  setBulkSingleError(null);
+                  setIsBulkImportOpen(false);
+                }}
                 className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -2702,19 +2803,37 @@ export default function AdminInventoryPage() {
                 />
               </div>
 
+              {bulkImportMode === "single" && bulkSingleError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700 font-bold">
+                  ⚠️ {bulkSingleError}
+                </div>
+              )}
+              {bulkImportMode === "batch_all" && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-bold">
+                  ℹ️ Nhập hàng loạt nhiều mẫu chưa đồng bộ lên máy chủ (out of scope Batch 2G) — chỉ ghi nhận cục bộ.
+                </div>
+              )}
+
               <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsBulkImportOpen(false)}
+                  onClick={() => {
+                    bulkSingleIdemKeyRef.current = null;
+                    setBulkSingleError(null);
+                    setIsBulkImportOpen(false);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
+                  disabled={bulkImportMode === "single" && bulkSingleSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] disabled:opacity-50 text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
                 >
-                  Nhập kho &amp; Lưu nhật ký ➔
+                  {bulkImportMode === "single" && bulkSingleSubmitting
+                    ? "Đang lưu lên máy chủ..."
+                    : "Nhập kho & Lưu nhật ký ➔"}
                 </button>
               </div>
             </form>
@@ -2749,6 +2868,11 @@ export default function AdminInventoryPage() {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Batch 2G — batch restock nhiều mẫu CHƯA đồng bộ server (out of scope) */}
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-bold">
+              ℹ️ Nạp kho hàng loạt nhiều mẫu chưa đồng bộ lên máy chủ (out of scope Batch 2G) — chỉ ghi nhận cục bộ.
             </div>
 
             <form onSubmit={handleBatchRestockSubmit} className="space-y-4 text-xs">
@@ -3057,7 +3181,12 @@ export default function AdminInventoryPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setAdjustingItem(null)}
+                onClick={() => {
+                  // Đóng modal — hủy thao tác, giải phóng key + xóa lỗi
+                  adjustIdemKeyRef.current = null;
+                  setAdjustError(null);
+                  setAdjustingItem(null);
+                }}
                 className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -3177,20 +3306,34 @@ export default function AdminInventoryPage() {
                 />
               </div>
 
+              {adjustError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700 font-bold">
+                  ⚠️ {adjustError}
+                </div>
+              )}
+
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#F0E5D8]">
                 <button
                   type="button"
-                  onClick={() => setAdjustingItem(null)}
+                  onClick={() => {
+                    adjustIdemKeyRef.current = null;
+                    setAdjustError(null);
+                    setAdjustingItem(null);
+                  }}
                   className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-100 font-bold text-xs cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  disabled={adjustDelta === 0 || adjustingItem.currentStock + adjustDelta < 0}
+                  disabled={
+                    adjustDelta === 0 ||
+                    adjustingItem.currentStock + adjustDelta < 0 ||
+                    adjustSubmitting
+                  }
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-xs cursor-pointer transition-colors"
                 >
-                  Xác nhận lưu
+                  {adjustSubmitting ? "Đang lưu lên máy chủ..." : "Xác nhận lưu"}
                 </button>
               </div>
             </form>

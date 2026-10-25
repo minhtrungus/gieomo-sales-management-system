@@ -123,7 +123,9 @@ export async function DELETE(request: Request) {
     }
 
     const res = await deleteProductServer(id || slug!, slug);
-    return NextResponse.json(res);
+    // Batch 2G.2: thất bại phải là HTTP non-200 (trước đây luôn 200 dù
+    // success:false — caller hiện tại không đọc body nên an toàn).
+    return NextResponse.json(res, { status: res.success ? 200 : 500 });
   } catch (err: any) {
     console.error("[DELETE /api/products] Error:", err);
     return NextResponse.json(

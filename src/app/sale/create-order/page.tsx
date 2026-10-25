@@ -96,6 +96,8 @@ function SaleCreateOrderForm() {
   } | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [orderCreatedSuccess, setOrderCreatedSuccess] = useState<Order | null>(null);
+
+  // Batch 3A.2 — server-first: chặn double-submit + hiển thị lỗi
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -195,6 +197,9 @@ function SaleCreateOrderForm() {
   const shippingFee = deliveryType === "home_delivery" ? (isFreeship ? 0 : baseShippingFee) : 0;
   const finalAmount = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
+  // Batch 3A.2 — tạo đơn SERVER-FIRST: chờ POST /api/orders trả định danh
+  // canonical. QR + thông báo dùng server orderCode/orderId — không còn mã
+  // client tự sinh (GM-<rand>) lệch với server.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -214,108 +219,108 @@ function SaleCreateOrderForm() {
     }
 
     setIsSubmitting(true);
-    const finalRecipientName = isOrderingForOther && recipientName.trim() ? recipientName.trim() : buyerName.trim();
-    const finalRecipientPhone = isOrderingForOther && recipientPhone.trim() ? recipientPhone.trim() : buyerPhone.trim();
-
-    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
-    const newOrderId = `ord-${Date.now()}`;
-
-    const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
-      const prod = availableProducts.find((p) => p.product_id === item.productId);
-      const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
-      return {
-        order_item_id: `item-${newOrderId}-${idx + 1}`,
-        order_id: newOrderId,
-        product_id: item.productId,
-        variant_id: item.variantId || variant?.variant_id || null,
-        combo_id: null,
-        product_name_snapshot: item.name,
-        item_name_snapshot: item.name,
-        variant_name_snapshot: item.variantName || variant?.name || null,
-        price_snapshot: item.price,
-        quantity: item.quantity,
-        subtotal: item.price * item.quantity,
-        created_at: new Date().toISOString(),
-      };
-    });
-
-    const memberName = session?.name || "Thành viên";
-    const refCode = session?.referralCode || "";
-
-    const calculatedAddress =
-      deliveryType === "home_delivery"
-        ? addressDetail || "Địa chỉ giao hàng"
-        : `Bạn tự giao hàng cho người nhận (${memberName})`;
-
-    let combinedNote = customerNote.trim();
-    if (isOrderingForOther) {
-      combinedNote = `[Đặt giùm cho: ${finalRecipientName} - SĐT: ${finalRecipientPhone}] ${combinedNote}`.trim();
-    }
-    if (!combinedNote) {
-      combinedNote = `Thành viên ${memberName} chốt đơn hộ`;
-    }
-
-    const newOrder: Order = {
-      order_id: newOrderId,
-      order_code: randomCode,
-      buyer_name: buyerName.trim(),
-      buyer_phone: buyerPhone.trim(),
-      buyer_email: buyerEmail.trim() || "",
-      recipient_name: finalRecipientName,
-      recipient_phone: finalRecipientPhone,
-      delivery_type: deliveryType,
-      pickup_point_id: null,
-      address_detail: calculatedAddress,
-      district: "",
-      province: deliveryType === "home_delivery" ? province : "TP. Hồ Chí Minh",
-      payment_method: "banking",
-      payment_status: "pending",
-      order_status: "pending",
-      delivery_status: "not_ready",
-      subtotal,
-      discount_amount: 0,
-      shipping_fee: shippingFee,
-      final_amount: finalAmount,
-      total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
-      seller_id: session?.memberId || null,
-      introducer_info: refCode ? `${memberName} (${refCode})` : memberName,
-      referral_code: refCode || null,
-      created_by_member_id: session?.memberId || null,
-      customer_note: combinedNote,
-      items: orderItemsSnapshot,
-      created_at: new Date().toISOString(),
-      completed_at: null,
-      updated_at: new Date().toISOString(),
-    };
-
+    setSubmitError(null);
     try {
-      const result = await saveNewOrder(newOrder, { idempotencyFlow: "sale-create-order" });
+      const finalRecipientName = isOrderingForOther && recipientName.trim() ? recipientName.trim() : buyerName.trim();
+      const finalRecipientPhone = isOrderingForOther && recipientPhone.trim() ? recipientPhone.trim() : buyerPhone.trim();
 
-      if (!result.ok) {
-        setSubmitError(result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại.");
+      const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+      const newOrderId = `ord-${Date.now()}`;
+
+      const orderItemsSnapshot: OrderItem[] = orderItems.map((item, idx) => {
+        const prod = availableProducts.find((p) => p.product_id === item.productId);
+        const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
+        return {
+          order_item_id: `item-${newOrderId}-${idx + 1}`,
+          order_id: newOrderId,
+          product_id: item.productId,
+          variant_id: item.variantId || variant?.variant_id || null,
+          combo_id: null,
+          product_name_snapshot: item.name,
+          item_name_snapshot: item.name,
+          variant_name_snapshot: item.variantName || variant?.name || null,
+          price_snapshot: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+      const memberName = session?.name || "Thành viên";
+      const refCode = session?.referralCode || "";
+
+      const calculatedAddress =
+        deliveryType === "home_delivery"
+          ? addressDetail || "Địa chỉ giao hàng"
+          : `Bạn tự giao hàng cho người nhận (${memberName})`;
+
+      let combinedNote = customerNote.trim();
+      if (isOrderingForOther) {
+        combinedNote = `[Đặt giùm cho: ${finalRecipientName} - SĐT: ${finalRecipientPhone}] ${combinedNote}`.trim();
+      }
+      if (!combinedNote) {
+        combinedNote = `Thành viên ${memberName} chốt đơn hộ`;
+      }
+
+      const newOrder: Order = {
+        order_id: newOrderId,
+        order_code: randomCode,
+        buyer_name: buyerName.trim(),
+        buyer_phone: buyerPhone.trim(),
+        buyer_email: buyerEmail.trim() || "",
+        recipient_name: finalRecipientName,
+        recipient_phone: finalRecipientPhone,
+        delivery_type: deliveryType,
+        pickup_point_id: null,
+        address_detail: calculatedAddress,
+        district: "",
+        province: deliveryType === "home_delivery" ? province : "TP. Hồ Chí Minh",
+        payment_method: "banking",
+        payment_status: "pending",
+        order_status: "pending",
+        delivery_status: "not_ready",
+        subtotal,
+        discount_amount: 0,
+        shipping_fee: shippingFee,
+        final_amount: finalAmount,
+        total_cost: Math.round(Math.max(0, finalAmount - shippingFee) * 0.4),
+        seller_id: session?.memberId || null,
+        introducer_info: refCode ? `${memberName} (${refCode})` : memberName,
+        referral_code: refCode || null,
+        created_by_member_id: session?.memberId || null,
+        customer_note: combinedNote,
+        items: orderItemsSnapshot,
+        created_at: new Date().toISOString(),
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const result = await saveNewOrder(newOrder, { attemptScope: "sale-create" });
+
+      if (!result.success) {
+        // Chưa có xác nhận server → giữ attempt, không hiện QR hoặc báo success.
+        setSubmitError(result.error || "Không thể tạo đơn hàng. Vui lòng thử lại.");
         return;
       }
-      const createdOrderId = result.orderId || newOrder.order_id;
-      const createdOrderCode = result.orderCode || newOrder.order_code;
-      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
 
-      setOrderCreatedSuccess(newOrder);
+      // Dùng server orderCode/orderId (canonical) + server finalAmount.
+      const serverCode = result.serverOrderCode!;
+      const serverAmount = result.finalAmount ?? finalAmount;
+      setOrderCreatedSuccess({ ...newOrder, order_id: result.serverOrderId!, order_code: serverCode });
 
       const qrUrl =
         settings.qrMode === "upload" && settings.qrImageUrl
           ? settings.qrImageUrl
-          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${createdFinalAmount}&addInfo=${encodeURIComponent(
-              `${createdOrderCode} ${buyerPhone}`
+          : `https://img.vietqr.io/image/MB-${settings.bankNumber || "0888670637"}-compact2.png?amount=${serverAmount}&addInfo=${encodeURIComponent(
+              `${serverCode} ${buyerPhone}`
             )}&accountName=${encodeURIComponent(settings.bankHolder || "NGUYEN THI TRUC HAN")}`;
 
       setActiveQrModal({
-        orderCode: createdOrderCode,
-        orderId: createdOrderId,
-        amount: createdFinalAmount,
+        orderCode: serverCode,
+        orderId: result.serverOrderId!,
+        amount: serverAmount,
         qrUrl,
       });
-    } catch {
-      setSubmitError("Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
@@ -393,11 +398,6 @@ function SaleCreateOrderForm() {
 
       {/* Main Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {submitError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold">
-            {submitError}
-          </div>
-        )}
         {/* Attribution Card */}
         <div className="bg-white rounded-3xl p-5 border border-emerald-100/90 shadow-xs flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -786,13 +786,19 @@ function SaleCreateOrderForm() {
             <span>{finalAmount.toLocaleString("vi-VN")}đ</span>
           </div>
 
+          {submitError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+              {submitError}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-12 bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] rounded-2xl font-bold text-sm transition-all duration-200 shadow-md active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <CheckCircle className="w-5 h-5" />
-            <span>{isSubmitting ? "Đang xử lý..." : "Xác nhận & Xuất mã VietQR ➔"}</span>
+            <span>{isSubmitting ? "Đang tạo đơn trên máy chủ..." : "Xác nhận & Xuất mã VietQR ➔"}</span>
           </button>
         </div>
       </form>

@@ -12,8 +12,7 @@ import {
   getStoredOrders,
   getStoredSettings,
   getStoredVouchers,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   updateStoredPaymentProof,
   DEFAULT_SETTINGS,
   type SiteSettings,
@@ -21,12 +20,13 @@ import {
 import type { Order, Voucher } from "@/types/database";
 import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift, Maximize2, X, ZoomIn } from "lucide-react";
 import { ThankYouStoryCard } from "@/components/order/ThankYouStoryCard";
+import { resolvePaymentFlowState } from "@/lib/payment/paymentFlowState";
+import { resolveCanonicalSuccessOrder } from "@/lib/payment/orderSuccessContract";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
-  const orderCode = searchParams.get("code") || "GM-369817";
+  const orderCode = searchParams.get("code")?.trim() || "";
   const paymentMethod = searchParams.get("payment") || "banking";
-  const urlAmount = Number(searchParams.get("amount") || "110000");
   const urlToken = searchParams.get("token") || "";
 
   const [proofToken] = useState<string>(() => {
@@ -41,15 +41,11 @@ function OrderSuccessContent() {
     return typeof window !== "undefined" ? getStoredSettings() : DEFAULT_SETTINGS;
   });
 
-  const [order, setOrder] = useState<Order | null>(() => {
-    if (typeof window === "undefined" || !orderCode) return null;
-    try {
-      const orders = getStoredOrders();
-      return orders.find((o) => o.order_code === orderCode || o.order_id === orderCode) || null;
-    } catch {
-      return null;
-    }
-  });
+  const [order, setOrder] = useState<Order | null>(null);
+  const [verificationState, setVerificationState] = useState<
+    "loading" | "verified" | "invalid_reference" | "not_found" | "mismatch" | "unknown"
+  >(orderCode ? "loading" : "invalid_reference");
+  const [pollingUnavailable, setPollingUnavailable] = useState(false);
 
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   
@@ -106,26 +102,38 @@ function OrderSuccessContent() {
   const shareQuote = "Tôi vừa cùng Mầm Mơ gieo một giấc mơ cho trẻ em khó khăn 🌱";
 
   useEffect(() => {
-    setSettings(getStoredSettings());
     const handleUpdate = () => setSettings(getStoredSettings());
     window.addEventListener("gieomo_settings_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_settings_updated", handleUpdate);
   }, []);
 
-  // Fetch order from DB and local cache on mount
+  // Fetch canonical order from server. Local cache/query params never establish
+  // identity, amount, method, or paid state.
   useEffect(() => {
     if (!orderCode) return;
 
-    // Fetch directly from server API (ensures cross-device sync on mobile/PC)
-    fetch(`/api/orders?code=${encodeURIComponent(orderCode)}`)
-      .then((r) => r.json())
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    let disposed = false;
+
+    fetch(
+      `/api/orders?code=${encodeURIComponent(orderCode)}&token=${encodeURIComponent(proofToken)}`,
+      { signal: controller.signal }
+    )
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`order lookup failed: ${r.status}`);
+        return r.json();
+      })
       .then((data) => {
-        if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
-          const dbOrder = data.orders[0];
-          setOrder((prev) => ({ ...(prev || {}), ...dbOrder }));
+        if (disposed) return;
+        const resolved = resolveCanonicalSuccessOrder(orderCode, data?.success ? data.orders : []);
+        if (resolved.kind === "verified") {
+          const dbOrder = resolved.order;
+          setOrder(dbOrder);
+          setVerificationState("verified");
           if (
             dbOrder.payment_proof ||
-            dbOrder.has_payment_proof ||
+            ("has_payment_proof" in dbOrder && Boolean(dbOrder.has_payment_proof)) ||
             dbOrder.payment_status === "paid" ||
             dbOrder.internal_note?.includes("[Khách đã nộp ảnh biên lai CK") ||
             dbOrder.internal_note?.includes("[Khách đính kèm ảnh biên lai CK]")
@@ -133,47 +141,58 @@ function OrderSuccessContent() {
             setHasSubmittedProof(true);
             if (dbOrder.payment_proof) setProofImage(dbOrder.payment_proof);
           }
+        } else {
+          setOrder(null);
+          setVerificationState(resolved.kind === "not_found" ? "not_found" : "mismatch");
         }
       })
-      .catch((err) => console.warn("[OrderSuccess] Error fetching order from API:", err));
-  }, [orderCode]);
+      .catch((err) => {
+        if (disposed) return;
+        console.warn("[OrderSuccess] Error fetching canonical order from API:", err);
+        setOrder(null);
+        setVerificationState("unknown");
+      })
+      .finally(() => window.clearTimeout(timeout));
 
-  // isPaid is ONLY true if backend genuinely marked payment_status as "paid" or if COD
-  const isPaid = (order?.payment_status === "paid") || paymentMethod === "cod";
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [orderCode, proofToken]);
+
+  // Batch A — isPaid CHỈ từ server payment_status="paid" (resolvePaymentFlowState).
+  // Query string KHÔNG tự xác nhận thanh toán; COD "đã đặt" phân biệt riêng.
+  const { isPaid, isCodOrderPlaced, flowMethod, showBankingInstructions } =
+    resolvePaymentFlowState(order, paymentMethod);
 
   // Polling for VietQR payment confirmation (every 2.5s)
   useEffect(() => {
-    if (isPaid || !orderCode || paymentMethod !== "banking") return;
+    if (verificationState !== "verified" || isPaid || !orderCode || flowMethod !== "banking") return;
     const interval = setInterval(() => {
-      fetch(`/api/orders?code=${encodeURIComponent(orderCode)}`)
+      fetch(`/api/orders?code=${encodeURIComponent(orderCode)}&token=${encodeURIComponent(proofToken)}`)
         .then((r) => r.json())
         .then((data) => {
-          if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
-            const latest = data.orders[0];
+          const resolved = resolveCanonicalSuccessOrder(orderCode, data?.success ? data.orders : []);
+          if (resolved.kind === "verified") {
+            const latest = resolved.order;
+            setPollingUnavailable(false);
             if (latest.payment_status === "paid") {
-              updateStoredPaymentStatus(orderCode, "paid");
+              // Batch 3A-followup — polling đã ĐỌC paid từ server (nguồn truth:
+              // sepay webhook / admin confirm). Chỉ đồng bộ cache local, KHÔNG
+              // gửi PATCH thanh toán thừa (server đã paid rồi).
+              syncStoredPaymentStatusLocal(orderCode, "paid");
               setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
-
-              // Send order confirmation email upon successful payment detection
-              fetch("/api/notify/email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  type: "payment_received",
-                  order: latest,
-                  toEmail: latest.buyer_email || undefined,
-                }),
-              }).catch(() => {});
             }
           }
         })
-        .catch(() => {});
+        .catch(() => setPollingUnavailable(true));
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [isPaid, orderCode, paymentMethod]);
+  }, [verificationState, isPaid, orderCode, flowMethod, proofToken]);
 
-  const finalAmount = order ? order.final_amount : urlAmount;
+  const finalAmount = order ? Number(order.final_amount) : 0;
 
   const bankAccount = {
     bankName: settings.bankName || "Ngân hàng MB Bank (Quân Đội)",
@@ -311,9 +330,11 @@ function OrderSuccessContent() {
             : prev
         );
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("Error updating payment confirmation:", err);
-      setProofError(err?.message || "Lỗi kết nối khi gửi biên lai. Vui lòng thử lại!");
+      setProofError(
+        err instanceof Error ? err.message : "Lỗi kết nối khi gửi biên lai. Vui lòng thử lại!"
+      );
     } finally {
       setIsUploadingProof(false);
     }
@@ -325,13 +346,37 @@ function OrderSuccessContent() {
     return vouchers.find((v) => finalAmount >= (v.gift_min_order_value || 0)) || null;
   }, [finalAmount]);
 
+  if (verificationState !== "verified" || !order) {
+    const message =
+      verificationState === "loading"
+        ? "Đang xác minh đơn hàng từ máy chủ…"
+        : verificationState === "invalid_reference"
+          ? "Liên kết thiếu mã đơn hàng hợp lệ."
+          : verificationState === "not_found"
+            ? "Không tìm thấy đơn hàng tương ứng."
+            : verificationState === "mismatch"
+              ? "Dữ liệu đơn hàng không khớp mã tham chiếu hoặc trạng thái máy chủ không hợp lệ."
+              : "Chưa thể xác minh đơn hàng do hết thời gian chờ hoặc mất kết nối. Vui lòng thử lại.";
+    return (
+      <div className="max-w-2xl mx-auto rounded-3xl border border-amber-200 bg-white p-8 text-center">
+        <h1 className="font-heading text-2xl font-extrabold text-emerald-950">Chưa xác minh đơn hàng</h1>
+        <p className="mt-3 text-gray-600">{message}</p>
+      </div>
+    );
+  }
+
 
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-center">
+      {pollingUnavailable && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Tạm thời mất kết nối cập nhật thanh toán. Trạng thái đang hiển thị là lần xác minh gần nhất; hệ thống chưa tự coi đơn là đã thanh toán.
+        </div>
+      )}
       {/* Status Header with stable min-height to prevent CLS */}
       <div className="min-h-[220px] flex flex-col items-center justify-center space-y-2">
-      {paymentMethod === "banking" && !isPaid ? (
+      {showBankingInstructions ? (
         hasSubmittedProof ? (
           <>
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-amber-100 text-amber-900 font-extrabold text-4xl shadow-md animate-pulse">
@@ -370,17 +415,25 @@ function OrderSuccessContent() {
       ) : (
         <>
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-soft-green text-emerald-950 font-extrabold text-4xl shadow-md animate-bounce">
-            🎉
+            {isPaid ? "🎉" : isCodOrderPlaced ? "🌱" : "⏳"}
           </div>
           <div className="space-y-2 text-center">
             <div className="inline-block px-3 py-1 rounded-full bg-[#E6F7EC] text-[#1B5E20] text-xs font-extrabold mb-1 whitespace-nowrap border border-[#A5D6A7]">
-              ✓ ĐÃ XÁC NHẬN THANH TOÁN
+              {isPaid
+                ? "✓ ĐÃ XÁC NHẬN THANH TOÁN"
+                : isCodOrderPlaced
+                  ? "✓ ĐÃ GHI NHẬN ĐƠN COD"
+                  : "⏳ ĐƠN HÀNG ĐANG XỬ LÝ"}
             </div>
             <h1 className="font-heading font-extrabold text-3xl sm:text-4xl text-emerald-950">
-              Đặt hàng thành công!
+              {isPaid ? "Thanh toán thành công!" : "Đặt hàng thành công!"}
             </h1>
             <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
-              Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!
+              {isPaid
+                ? <>Cảm ơn bạn đã đồng hành cùng <strong>Gieo Mơ</strong>. Mối nhân duyên này mang lại thật nhiều giá trị tốt đẹp!</>
+                : isCodOrderPlaced
+                  ? "Đơn COD đã được ghi nhận; bạn sẽ thanh toán khi nhận hàng."
+                  : "Phương thức thanh toán này chưa được xác nhận là đã thanh toán."}
             </p>
           </div>
         </>
@@ -471,7 +524,7 @@ function OrderSuccessContent() {
         </div>
 
         {/* Payment Instructions if Banking and Not Paid Yet */}
-        {paymentMethod === "banking" && !isPaid ? (
+        {showBankingInstructions ? (
           hasSubmittedProof ? (
             /* State 2 & 4: Submission Processing / Waiting for Bank Reconciliation */
             <div className="space-y-4 pt-2 animate-in fade-in">
@@ -751,7 +804,7 @@ function OrderSuccessContent() {
       )}
 
       {/* AWAITING PAYMENT NOTICE */}
-      {!isPaid && paymentMethod === "banking" && (
+      {showBankingInstructions && (
         <div className="p-4.5 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-1.5 animate-in fade-in">
           <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-900">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
@@ -767,18 +820,22 @@ function OrderSuccessContent() {
         </div>
       )}
 
-      {/* SOCIAL SHARE CARD & STORY SECTION — ONLY SHOWN ONCE PAID */}
-      {isPaid && (
+      {/* SOCIAL SHARE CARD & STORY SECTION — SERVER-PAID HOẶC COD ĐÃ ĐẶT (server xác nhận) */}
+      {(isPaid || isCodOrderPlaced) && (
         <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-emerald-200 shadow-md text-left space-y-5 animate-in zoom-in-95">
           {/* Success Banner */}
           <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
-            <span className="text-2xl">🎉</span>
+            <span className="text-2xl">{isPaid ? "🎉" : "🌱"}</span>
             <div>
               <span className="text-xs font-extrabold text-emerald-950 block">
-                Thanh toán thành công! Gieo Mơ chân thành cảm ơn tấm lòng của bạn!
+                {isPaid
+                  ? "Thanh toán thành công! Gieo Mơ chân thành cảm ơn tấm lòng của bạn!"
+                  : "Đơn hàng COD đã được ghi nhận thành công!"}
               </span>
               <span className="text-[11px] text-emerald-700">
-                Dưới đây là Thẻ cảm ơn &amp; chứng nhận mua hàng gây quỹ dành riêng cho bạn:
+                {isPaid
+                  ? "Dưới đây là Thẻ cảm ơn & chứng nhận mua hàng gây quỹ dành riêng cho bạn:"
+                  : `Vui lòng thanh toán ${finalAmount.toLocaleString("vi-VN")}đ khi nhận hàng. Dưới đây là Thẻ cảm ơn dành cho bạn:`}
               </span>
             </div>
           </div>

@@ -24,7 +24,10 @@ export default function AdminReportsPage() {
   const totalShipping = activeOrders.reduce((sum, o) => sum + (o.shipping_fee || 0), 0);
   
   // Total discounts applied via vouchers
-  const totalDiscounts = activeOrders.reduce((sum, o) => sum + (o.discount_amount || 0), 0);
+  const totalDiscounts = activeOrders.reduce(
+    (sum, o) => sum + ((o.voucher_discount ?? o.discount_amount) || 0),
+    0
+  );
   
   // Net merchandise revenue (Doanh thu thuần từ hàng hóa sau voucher, không gồm phí ship)
   const netMerchandiseRevenue = Math.max(0, totalGrossRevenue - totalShipping);

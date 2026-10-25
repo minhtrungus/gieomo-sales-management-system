@@ -71,7 +71,7 @@ runtime.fetch = (async (input) => {
   });
 }) as typeof fetch;
 
-const { saveNewOrder } = await import("../src/lib/data/orderStore.ts");
+const { cacheServerCreatedOrder, saveNewOrder } = await import("../src/lib/data/orderStore.ts");
 
 function order(code: string): Order {
   return {
@@ -90,9 +90,9 @@ function order(code: string): Order {
   };
 }
 
-test("checkout cache mode does not POST an already-created order again", async () => {
+test("checkout cache helper does not POST an already-created order again", () => {
   orderPostCount = 0;
-  await saveNewOrder(order("GM-CHECKOUT"), { syncToServer: false });
+  cacheServerCreatedOrder(order("GM-CHECKOUT"));
   assert.equal(orderPostCount, 0);
   assert.match(storage.get("gieomo_orders") || "", /GM-CHECKOUT/);
 });
@@ -101,9 +101,9 @@ test("admin/sale mode persists only after server creation and adopts server iden
   orderPostCount = 0;
   const result = await saveNewOrder(order("GM-LOCAL"));
   assert.equal(orderPostCount, 1);
-  assert.equal(result.ok, true);
-  assert.equal(result.orderId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
-  assert.equal(result.orderCode, "GM-SERVER-000001");
+  assert.equal(result.success, true);
+  assert.equal(result.serverOrderId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.equal(result.serverOrderCode, "GM-SERVER-000001");
   assert.match(storage.get("gieomo_orders") || "", /GM-SERVER-000001/);
 });
 
@@ -113,8 +113,7 @@ test("ambiguous network retry reuses the same idempotency key", async () => {
   let attempt = 0;
   runtime.fetch = (async (_input, init) => {
     attempt += 1;
-    const body = JSON.parse(String(init?.body || "{}"));
-    keys.push(body.idempotency_key);
+    keys.push(new Headers(init?.headers).get("Idempotency-Key") || "");
     if (attempt === 1) throw new Error("connection reset after commit");
     return new Response(JSON.stringify({
       success: true,
@@ -126,14 +125,14 @@ test("ambiguous network retry reuses the same idempotency key", async () => {
   }) as typeof fetch;
 
   const pending = order("GM-CLIENT-TEMP");
-  const first = await saveNewOrder(pending, { idempotencyFlow: "retry-test" });
-  const second = await saveNewOrder(pending, { idempotencyFlow: "retry-test" });
-  assert.equal(first.ok, false);
-  assert.equal(second.ok, true);
+  const first = await saveNewOrder(pending, { attemptScope: "retry-test" });
+  const second = await saveNewOrder(pending, { attemptScope: "retry-test" });
+  assert.equal(first.success, false);
+  assert.equal(second.success, true);
   assert.equal(second.replayed, true);
   assert.equal(keys.length, 2);
   assert.equal(keys[0], keys[1]);
-  assert.equal(storage.has("gieomo_order_attempt_retry-test"), false);
+  assert.equal(storage.has("gieomo_create_attempt_retry-test"), false);
 });
 
 test("rejected or failed server response never creates a local order and never swaps the key", async () => {
@@ -142,8 +141,7 @@ test("rejected or failed server response never creates a local order and never s
   let attempt = 0;
   runtime.fetch = (async (_input, init) => {
     attempt += 1;
-    const body = JSON.parse(String(init?.body || "{}"));
-    keys.push(body.idempotency_key);
+    keys.push(new Headers(init?.headers).get("Idempotency-Key") || "");
     const status = attempt === 1 ? 409 : 500;
     return new Response(JSON.stringify({
       success: false,
@@ -154,17 +152,17 @@ test("rejected or failed server response never creates a local order and never s
   }) as typeof fetch;
 
   const pending = order("GM-MUST-NOT-PERSIST");
-  const conflict = await saveNewOrder(pending, { idempotencyFlow: "rejected-test" });
-  assert.equal(conflict.ok, false);
+  const conflict = await saveNewOrder(pending, { attemptScope: "rejected-test" });
+  assert.equal(conflict.success, false);
   assert.match(conflict.error || "", /Khóa gửi đơn này đã được dùng với nội dung khác/);
   assert.equal(storage.get("gieomo_orders"), undefined, "không được ghi đơn vào local cache khi server từ chối");
-  assert.equal(storage.has("gieomo_order_attempt_rejected-test"), true, "giữ khoá để retry/reconcile");
+  assert.equal(storage.has("gieomo_create_attempt_rejected-test"), true, "giữ khoá để retry/reconcile");
 
-  const failed = await saveNewOrder(pending, { idempotencyFlow: "rejected-test" });
-  assert.equal(failed.ok, false);
+  const failed = await saveNewOrder(pending, { attemptScope: "rejected-test" });
+  assert.equal(failed.success, false);
   assert.match(failed.error || "", /machine exploded/);
   assert.equal(storage.get("gieomo_orders"), undefined, "server lỗi không được coi là đơn đã tồn tại");
   assert.equal(keys.length, 2);
   assert.equal(keys[0], keys[1], "không tự sinh khoá mới để lách conflict");
-  assert.equal(storage.has("gieomo_order_attempt_rejected-test"), true);
+  assert.equal(storage.has("gieomo_create_attempt_rejected-test"), true);
 });

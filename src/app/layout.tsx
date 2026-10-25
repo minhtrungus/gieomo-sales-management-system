@@ -8,24 +8,27 @@ import { ReferralTracker } from "@/components/common/ReferralTracker";
 import { SEO_KEYWORD_LIST } from "@/lib/seo/keywords";
 import "./globals.css";
 
-const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "G-P3MJB88K1K";
+// Local/dev acceptance must not emit analytics traffic. Production analytics
+// is opt-in through an explicit public measurement ID.
+const GA_MEASUREMENT_ID =
+  process.env.NODE_ENV === "production" ? process.env.NEXT_PUBLIC_GA_ID : undefined;
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin", "vietnamese"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 const caveat = Caveat({
-  variable: "--font-handwriting",
+  variable: "--font-caveat",
   subsets: ["latin", "latin-ext"],
   display: "swap",
   weight: ["700"],
 });
 
 const playfair = Playfair_Display({
-  variable: "--font-serif",
+  variable: "--font-playfair",
   subsets: ["latin", "vietnamese"],
   display: "swap",
   weight: ["400"],

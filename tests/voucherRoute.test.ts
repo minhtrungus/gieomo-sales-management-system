@@ -141,15 +141,10 @@ test("PR5 — Payload không chứa updated_at, max_discount_amount, max_discoun
     max_discount_amount: 99999,
     max_discount: 88888,
   });
-  assert.equal(res.status, 200);
-  const payload = capture.payload;
-  assert.ok(payload);
-  assert.equal("updated_at" in payload, false);
-  assert.equal("max_discount_amount" in payload, false);
-  assert.equal("max_discount" in payload, false);
-  assert.equal(payload.discount_value, 20000);
-  assert.equal(payload.usage_limit, 50);
-  assert.equal(payload.min_order_value, 150000);
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { unsupportedFields: string[] };
+  assert.deepEqual(body.unsupportedFields, ["max_discount_amount"]);
+  assert.equal(capture.payload, null);
 });
 
 test("PR6 — Chỉ gửi id, không có trường nào để cập nhật → 400, không gọi DB", async () => {
@@ -158,4 +153,45 @@ test("PR6 — Chỉ gửi id, không có trường nào để cập nhật → 4
   const body = (await res.json()) as { success: boolean; error: string };
   assert.equal(body.success, false);
   assert.equal(capture.payload, null);
+});
+
+test("PR7 - discount_type is persisted by PATCH", async () => {
+  const res = await patchRequest({ id: "FREESHIP1", discount_type: "percentage" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(capture.payload, { discount_type: "percentage" });
+});
+
+test("PR8 - invalid discount_type is rejected before the database", async () => {
+  const res = await patchRequest({ id: "FREESHIP1", discount_type: "mystery" });
+  assert.equal(res.status, 400);
+  assert.equal(capture.payload, null);
+});
+
+test("PR9 - meaningful admin fields missing from schema are never silently dropped", async () => {
+  for (const [field, value] of [
+    ["min_items_count", 2],
+    ["is_gift_voucher", true],
+    ["gift_min_order_value", 150000],
+    ["visibility", "private"],
+  ] as const) {
+    const res = await patchRequest({ id: "FREESHIP1", [field]: value });
+    assert.equal(res.status, 409, field);
+    const body = (await res.json()) as { unsupportedFields: string[] };
+    assert.deepEqual(body.unsupportedFields, [field]);
+    assert.equal(capture.payload, null);
+  }
+});
+
+test("PR10 - no-op defaults preserve the canonical schema behaviour", async () => {
+  const res = await patchRequest({
+    id: "FREESHIP1",
+    status: "active",
+    min_items_count: 0,
+    is_gift_voucher: false,
+    gift_min_order_value: 0,
+    visibility: "public",
+    max_discount_amount: 0,
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(capture.payload, { status: "active" });
 });

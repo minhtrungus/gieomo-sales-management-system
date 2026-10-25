@@ -55,21 +55,16 @@ describe("saveNewOrder async contract", () => {
     const result = await mod.saveNewOrder({ order_id: "test", order_code: "GM-TEST" } as SaveNewOrderInput);
     // In SSR/Node, window is undefined → should resolve with ok:false
     assert.equal(typeof result, "object");
-    assert.equal(result.ok, false);
+    assert.equal(result.success, false);
     assert.ok("error" in result);
   });
 
-  test("saveNewOrder with syncToServer:false resolves ok immediately", async () => {
+  test("cacheServerCreatedOrder is a safe no-op outside the browser", async () => {
     const mod = await import("../src/lib/data/orderStore.ts");
-    type SaveNewOrderInput = Parameters<typeof mod.saveNewOrder>[0];
-    const result = await mod.saveNewOrder(
-      { order_id: "test2", order_code: "GM-TEST2" } as SaveNewOrderInput,
-      { syncToServer: false }
+    type CacheInput = Parameters<typeof mod.cacheServerCreatedOrder>[0];
+    assert.doesNotThrow(() =>
+      mod.cacheServerCreatedOrder({ order_id: "test2", order_code: "GM-TEST2" } as CacheInput)
     );
-    // window is undefined in Node → early return with ok:false (SSR guard)
-    // In a browser this would return { ok: true, orderCode: "GM-TEST2" }
-    assert.equal(typeof result, "object");
-    assert.ok("ok" in result);
   });
 });
 
@@ -87,7 +82,7 @@ describe("form source uses async/finally guard pattern", () => {
     assert.match(page, /finally \{/);
     assert.match(page, /setIsSubmitting\(false\);/);
     // Must handle failure — no success UI on !result.ok
-    assert.match(page, /if \(!result\.ok\)/);
+    assert.match(page, /if \(!result\.success\)/);
     // Error display state exists
     assert.match(page, /const \[submitError, setSubmitError\]/);
   });
@@ -95,12 +90,12 @@ describe("form source uses async/finally guard pattern", () => {
   test("POS checkout: handleCheckoutSubmit is async and uses try/finally", () => {
     const page = read("src/app/admin/orders/pos/page.tsx");
     assert.match(page, /const handleCheckoutSubmit = async \(e: React\.FormEvent\)/);
-    assert.match(page, /if \(isSubmitting\) return;/);
+    assert.match(page, /if \(isSubmitting \|\| pendingCashConfirm\) return;/);
     assert.match(page, /setIsSubmitting\(true\)/);
     assert.match(page, /await saveNewOrder\(/);
     assert.match(page, /finally \{/);
     assert.match(page, /setIsSubmitting\(false\);/);
-    assert.match(page, /if \(!result\.ok\)/);
+    assert.match(page, /if \(!result\.success\)/);
     assert.match(page, /const \[submitError, setSubmitError\]/);
     assert.match(
       page,
@@ -115,26 +110,25 @@ describe("form source uses async/finally guard pattern", () => {
     // A stable, POS-specific attempt key so timeout retries reuse the same key.
     assert.match(
       page,
-      /await saveNewOrder\(newOrder, \{ idempotencyFlow: "admin-pos-order" \}\)/
+      /await saveNewOrder\(newOrder, \{ attemptScope: "pos-create" \}\)/
     );
 
     // Identity and amount always come from the server response, never from the
     // client-side placeholder (`randomCode` / `ord-<timestamp>`).
-    assert.match(page, /const createdOrderId = result\.orderId \|\| newOrder\.order_id;/);
-    assert.match(page, /const createdOrderCode = result\.orderCode \|\| newOrder\.order_code;/);
-    assert.match(page, /const createdFinalAmount = result\.finalAmount \?\? newOrder\.final_amount;/);
+    assert.match(page, /const serverCode = result\.serverOrderCode!/);
+    assert.match(page, /const serverAmount = result\.finalAmount \?\? subtotal;/);
     assert.match(
       page,
-      /setActiveQrModal\(\{\s*orderCode: createdOrderCode,\s*orderId: createdOrderId,\s*amount: createdFinalAmount,/,
+      /setActiveQrModal\(\{\s*orderCode: serverCode,\s*orderId: result\.serverOrderId!,\s*amount: serverAmount,/,
       "QR modal must show the committed server identity and amount"
     );
-    assert.match(page, /setLastCompletedOrder\(createdOrderCode\)/);
+    assert.match(page, /setPendingCashConfirm\(\{ serverOrderCode: serverCode, amount: serverAmount \}\)/);
     assert.doesNotMatch(page, /setLastCompletedOrder\(randomCode\)/);
     assert.doesNotMatch(page, /orderId: newOrderId,\s*\n\s*amount: subtotal,/);
 
     // No success UI may run before the explicit failure branch.
-    const failureBranch = page.indexOf("if (!result.ok)");
-    const successUi = page.indexOf("setLastCompletedOrder(createdOrderCode)");
+    const failureBranch = page.indexOf("if (!result.success)");
+    const successUi = page.indexOf("setPendingCashConfirm({ serverOrderCode: serverCode");
     assert.ok(failureBranch >= 0, "POS must branch on a failed server response");
     assert.ok(
       successUi > failureBranch,
@@ -150,7 +144,7 @@ describe("form source uses async/finally guard pattern", () => {
     assert.match(page, /await saveNewOrder\(/);
     assert.match(page, /finally \{/);
     assert.match(page, /setIsSubmitting\(false\);/);
-    assert.match(page, /if \(!result\.ok\)/);
+    assert.match(page, /if \(!result\.success\)/);
     assert.match(page, /const \[submitError, setSubmitError\]/);
   });
 
@@ -180,9 +174,9 @@ describe("form source uses async/finally guard pattern", () => {
   test("saveNewOrder checks response.ok before declaring success", () => {
     const store = read("src/lib/data/orderStore.ts");
     // Must check HTTP status
-    assert.match(store, /if \(!response\.ok\)/);
-    // Must return ok:false on HTTP error
-    assert.match(store, /return \{ ok: false,/);
+    assert.match(store, /if \(!res\.ok \|\| !data \|\| data\.success !== true\)/);
+    // Must return success:false on HTTP error
+    assert.match(store, /return \{ success: false,/);
     // Must not treat a resolving fetch as success without status check
     assert.doesNotMatch(store, /fetch\("\/api\/orders"[\s\S]{0,200}\.catch\(\(err\) => \{[\s\S]{0,100}console\.warn\(\[saveNewOrder\] Failed to sync[\s\S]{0,50}\}\);?\s*\}\);/);
   });

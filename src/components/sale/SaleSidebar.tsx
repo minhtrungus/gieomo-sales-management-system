@@ -205,9 +205,13 @@ export function SaleSidebar({ isOpen, onClose }: SaleSidebarProps) {
 
           <button
             type="button"
-            onClick={() => {
-              clearAdminSession();
-              window.location.href = "/admin/login";
+            onClick={async () => {
+              try {
+                await fetch("/api/auth/logout", { method: "POST" });
+              } finally {
+                clearAdminSession();
+                window.location.replace("/admin/login");
+              }
             }}
             className="p-2 text-[#A39688] hover:text-[#FFB98A] transition-colors cursor-pointer"
             title="Đăng xuất"

@@ -55,9 +55,9 @@ export default function AdminLoginPage() {
           loginAt: new Date().toISOString(),
         };
         localStorage.setItem("gieomo_admin_session", JSON.stringify(sessionPayload));
-        if (data.token) {
-          localStorage.setItem("gieomo_session_token", data.token);
-        }
+        // Authentication stays in the Secure/HttpOnly cookie set by the server.
+        // Remove legacy script-readable bearer material from older builds.
+        localStorage.removeItem("gieomo_session_token");
         window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
       }
 

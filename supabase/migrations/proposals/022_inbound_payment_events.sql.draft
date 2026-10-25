@@ -1,0 +1,93 @@
+-- GIEO MƠ — R1 PROPOSAL 022 (DRAFT — KHÔNG APPLY)
+-- Durable, provider-level ledger for every inbound transfer/callback.
+-- This proposal deliberately DOES NOT decide split-payment, overpayment,
+-- refund, or additional-transfer policy and DOES NOT update orders/payments.
+
+CREATE TABLE IF NOT EXISTS public.inbound_payment_events (
+  event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider TEXT NOT NULL,
+  provider_transaction_id TEXT NOT NULL,
+  matched_order_id UUID REFERENCES public.orders(order_id) ON DELETE SET NULL,
+  matched_order_code TEXT,
+  received_amount DECIMAL(12,0) NOT NULL CHECK (received_amount > 0),
+  expected_amount_snapshot DECIMAL(12,0),
+  currency TEXT NOT NULL DEFAULT 'VND',
+  classification TEXT NOT NULL CHECK (classification IN (
+    'unmatched_reference',
+    'unmatched_order',
+    'underpaid',
+    'matched',
+    'overpaid',
+    'paid_order_additional_transfer',
+    'duplicate_delivery'
+  )),
+  processing_status TEXT NOT NULL DEFAULT 'received' CHECK (processing_status IN (
+    'received', 'review_required', 'eligible_for_apply', 'applied', 'ignored'
+  )),
+  payload_fingerprint TEXT NOT NULL,
+  sanitized_payload JSONB,
+  first_received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  delivery_count INT NOT NULL DEFAULT 1 CHECK (delivery_count > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_inbound_payment_provider_transaction
+    UNIQUE (provider, provider_transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inbound_payment_events_order
+  ON public.inbound_payment_events(matched_order_id, first_received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inbound_payment_events_review
+  ON public.inbound_payment_events(processing_status, first_received_at DESC)
+  WHERE processing_status = 'review_required';
+
+ALTER TABLE public.inbound_payment_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role all inbound payment events"
+  ON public.inbound_payment_events FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+REVOKE ALL ON public.inbound_payment_events FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.inbound_payment_events TO service_role;
+
+-- Atomic delivery recording. A repeated provider event increments delivery_count
+-- and never creates a second provider identity. Classification changes are not
+-- performed here: a later, separately approved policy/RPC must decide whether
+-- and when an event may create a paid payment and update the order atomically.
+CREATE OR REPLACE FUNCTION public.record_inbound_payment_event(p JSONB)
+RETURNS public.inbound_payment_events
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  result public.inbound_payment_events;
+BEGIN
+  INSERT INTO public.inbound_payment_events (
+    provider, provider_transaction_id, matched_order_id, matched_order_code,
+    received_amount, expected_amount_snapshot, currency, classification,
+    processing_status, payload_fingerprint, sanitized_payload
+  ) VALUES (
+    p->>'provider', p->>'provider_transaction_id',
+    NULLIF(p->>'matched_order_id', '')::UUID, NULLIF(p->>'matched_order_code', ''),
+    (p->>'received_amount')::DECIMAL, NULLIF(p->>'expected_amount_snapshot', '')::DECIMAL,
+    COALESCE(NULLIF(p->>'currency', ''), 'VND'), p->>'classification',
+    COALESCE(NULLIF(p->>'processing_status', ''), 'received'),
+    p->>'payload_fingerprint', p->'sanitized_payload'
+  )
+  ON CONFLICT (provider, provider_transaction_id) DO UPDATE SET
+    delivery_count = inbound_payment_events.delivery_count + 1,
+    last_received_at = now(),
+    updated_at = now()
+  RETURNING * INTO result;
+  RETURN result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.record_inbound_payment_event(JSONB)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.record_inbound_payment_event(JSONB) TO service_role;
+
+-- REQUIRED BEFORE ACTIVATION:
+-- 1. Business decisions in docs/engineering/R1_PAYMENT_INTEGRITY_REMEDIATION.md.
+-- 2. Separate atomic apply RPC covering event + payments + orders + history.
+-- 3. Isolated PostgreSQL duplicate/concurrency/ACL tests.
+-- 4. Backfill/reconciliation plan and operator approval.

@@ -181,6 +181,7 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       return {
         ...v,
         sku: ensuredSku,
+        sort_order: i + 1,
       };
     });
 

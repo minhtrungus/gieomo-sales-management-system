@@ -8,14 +8,17 @@ import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, DELIVERY_STATUS_LABELS } fr
 import {
   getStoredOrders,
   updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  cancelStoredOrder,
+  syncStoredPaymentStatusLocal,
   updateStoredDeliveryStatus,
-  updateStoredOrderNotes,
-  updateStoredOrderWarehouse,
+  updateStoredOrderDetails,
   getStoredMembers,
-  updateOrderShipper,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
+import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDeletePanel";
+import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
+import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
 
@@ -30,13 +33,16 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(order ? order.payment_status : "pending");
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>(order?.delivery_status || "not_ready");
   const [internalNote, setInternalNote] = useState(order?.internal_note || "");
-  const [warehouseId, setWarehouseId] = useState<string>(
-    order?.warehouse_id || (order?.delivery_type === "pickup_point" && order.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
-  );
+  const warehouseId = order?.warehouse_id || "";
   const [members, setMembers] = useState<StoredMember[]>([]);
   const [assignedShipperId, setAssignedShipperId] = useState<string>(order?.assigned_shipper_id || "");
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  // Batch 3A — in-flight guard + lỗi khi xác nhận thanh toán server-first.
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [paidConfirmError, setPaidConfirmError] = useState<string | null>(null);
 
   // Lightbox modal state for receipt proof
   const [zoomedProof, setZoomedProof] = useState<string | null>(null);
@@ -56,10 +62,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       setDeliveryStatus(found.delivery_status || "not_ready");
       setInternalNote(found.internal_note || "");
       setAssignedShipperId(found.assigned_shipper_id || "");
-      setWarehouseId(
-        found.warehouse_id ||
-          (found.delivery_type === "pickup_point" && found.pickup_point_id === "pp-3" ? "wh-2" : "wh-1")
-      );
     }
   }, [resolvedParams.id]);
 
@@ -73,47 +75,108 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  const handleConfirmPaid = () => {
-    setPaymentStatus("paid");
-    setShowPaymentConfirmModal(false);
-    setPendingPaymentStatus(null);
-    if (order) {
-      updateStoredPaymentStatus(order.order_id, "paid");
-      setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
-      setIsSavedNotice(true);
-      setTimeout(() => setIsSavedNotice(false), 2500);
+  // Batch 3A — xác nhận thanh toán SERVER-FIRST: gọi /api/orders/payment
+  // (action=confirm) TRƯỚC, chỉ cập nhật local SAU khi server xác nhận.
+  // Lỗi (mạng, 401/403, 4xx/5xx, body sai) → giữ nguyên trạng thái, hiện
+  // lỗi trong modal, cho retry an toàn. In-flight guard chống double-click.
+  const handleConfirmPaid = async () => {
+    if (!order || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const result = await confirmPaymentServerFirst(order.order_code, {
+        amount: Number(order.final_amount),
+        referenceNumber,
+      });
+
+      if (result.ok) {
+        // Server đã ghi xong → mới cập nhật local.
+        const confirmedStatus = (result.orderStatus as OrderStatus) || "confirmed";
+        setPaymentStatus("paid");
+        setOrderStatus(confirmedStatus);
+        setOrder((prev) =>
+          prev ? { ...prev, payment_status: "paid", order_status: confirmedStatus } : prev
+        );
+        syncStoredPaymentStatusLocal(order.order_code, "paid");
+        setShowPaymentConfirmModal(false);
+        setPendingPaymentStatus(null);
+        setIsSavedNotice(true);
+        setTimeout(() => setIsSavedNotice(false), 2500);
+        return;
+      }
+
+      // Server ĐÃ set payment_status=paid (already_paid / order_cancelled trace)
+      // → đồng bộ local paid; NHƯNG GIỮ nguyên order_status (cancelled không hồi sinh).
+      if (result.paymentStatusIsPaid) {
+        setPaymentStatus("paid");
+        setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+        syncStoredPaymentStatusLocal(order.order_code, "paid");
+      }
+      // Giữ modal mở, hiện lỗi/cảnh báo, cho phép retry an toàn.
+      setPaidConfirmError(result.message);
+    } catch {
+      // Defensive — helper đã bắt network error, không nên tới đây.
+      setPaidConfirmError("Lỗi kết nối — vui lòng thử lại.");
+    } finally {
+      setIsConfirmingPaid(false);
     }
   };
 
   const handleSaveChanges = async () => {
-    if (!order) return;
-    const statusResult = await updateStoredOrderStatus(order.order_id, orderStatus);
-    if (!statusResult.ok) {
-      alert(statusResult.error || "Không thể cập nhật trạng thái đơn hàng.");
-      return;
-    }
+    if (!order || isSaving) return;
+    setIsSaving(true);
+    setIsSavedNotice(false);
+    setSaveError(null);
+    try {
+      const statusChanged = orderStatus !== order.order_status;
+      // Batch 2D — chuyển sang cancelled phải server xác nhận trước; thất bại
+      // → hiện lỗi, KHÔNG áp dụng cập nhật nào (local giữ nguyên).
+      if (statusChanged && orderStatus === "cancelled") {
+        const res = await cancelStoredOrder(order.order_id);
+        if (!res.success) {
+          setSaveError(res.error);
+          return;
+        }
+        setOrder((prev) => (prev ? { ...prev, order_status: "cancelled" } : prev));
+      }
+      const changes = {
+        ...(internalNote !== (order.internal_note || "") ? { internalNote } : {}),
+        ...(assignedShipperId !== (order.assigned_shipper_id || "") ? { assignedShipperId: assignedShipperId || null } : {}),
+      };
+      if (Object.keys(changes).length) {
+        const result = await updateStoredOrderDetails(order.order_id, changes);
+        if (!result.success) {
+          setSaveError(result.error);
+          return;
+        }
+        setOrder((prev) => prev ? { ...prev, ...result.order } : prev);
+        setInternalNote(result.order.internal_note || "");
+        setAssignedShipperId(result.order.assigned_shipper_id || "");
+      }
+      if (statusChanged && orderStatus !== "cancelled") {
+        updateStoredOrderStatus(order.order_id, orderStatus);
+      }
+      // Batch 1 — KHÔNG sync paymentStatus (kể cả non-paid) qua PATCH tổng
+      // quát: server reject own-property paymentStatus bằng 400 (đóng bypass).
+      // paid đã đi server-first ở handleConfirmPaid; pending/failed/refunded
+      // chưa có endpoint riêng (follow-up) — KHÔNG giả lập server-confirmed.
+      if (deliveryStatus !== order.delivery_status) {
+        updateStoredDeliveryStatus(order.order_id, deliveryStatus);
+      }
 
-    if (orderStatus === "cancelled") {
-      setOrder((current) => current ? { ...current, order_status: "cancelled" } : current);
+      setSaveError(null);
       setIsSavedNotice(true);
       setTimeout(() => setIsSavedNotice(false), 2500);
-      return;
+    } catch {
+      setSaveError("Không thể lưu thay đổi — vui lòng thử lại.");
+    } finally {
+      setIsSaving(false);
     }
-
-    updateStoredPaymentStatus(order.order_id, paymentStatus);
-    updateStoredDeliveryStatus(order.order_id, deliveryStatus);
-    updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
-    updateStoredOrderWarehouse(order.order_id, warehouseId);
-
-    const selectedShipper = members.find((m) => m.memberId === assignedShipperId);
-    updateOrderShipper(
-      order.order_code,
-      assignedShipperId || null,
-      selectedShipper ? selectedShipper.fullName : null
-    );
-
-    setIsSavedNotice(true);
-    setTimeout(() => setIsSavedNotice(false), 2500);
   };
 
   if (!order) {
@@ -131,6 +194,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       </div>
     );
   }
+
+  // N1 — tiền giảm giá voucher: server trả `voucher_discount` (getOrdersServer
+  // select/map trong orderService); `discount_amount` chỉ có ở đơn tạo local
+  // chưa sync. Không có trường nào → 0 (không tự đoán số tiền).
+  const voucherDiscount = (order.voucher_discount ?? order.discount_amount) || 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -155,13 +223,30 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        <button
-          onClick={handleSaveChanges}
-          className="px-4 py-2 rounded-xl bg-soft-green text-emerald-950 font-bold text-xs hover:bg-emerald-300 transition-colors shadow-xs flex items-center gap-1.5"
-        >
-          {isSavedNotice ? <Check className="w-4 h-4 text-emerald-700" /> : null}
-          {isSavedNotice ? "Đã lưu!" : "Lưu thay đổi"}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={handleSaveChanges}
+            disabled={isSaving}
+            className="px-4 py-2 rounded-xl bg-soft-green text-emerald-950 font-bold text-xs hover:bg-emerald-300 transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSavedNotice ? <Check className="w-4 h-4 text-emerald-700" /> : null}
+            {isSaving ? "Đang lưu..." : isSavedNotice ? "Đã lưu!" : "Lưu thay đổi"}
+          </button>
+          {saveError ? (
+            <p className="text-xs font-bold text-red-600 text-right max-w-xs leading-relaxed" role="alert">
+              {saveError}
+            </p>
+          ) : null}
+          <ControlledOrderDeletePanel
+            orderId={order.order_id}
+            orderCode={order.order_code}
+            finalAmount={Number(order.final_amount)}
+            orderStatus={orderStatus}
+            paymentStatus={paymentStatus}
+            deliveryStatus={deliveryStatus}
+          />
+          <DuplicateOrderReviewPanel orderId={order.order_id} orderCode={order.order_code} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -240,19 +325,22 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <span className="text-gray-500 block text-[11px]">Kho điều phối xuất đơn hàng này:</span>
                 <span className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs mt-0.5">
                   <Building className="w-3.5 h-3.5 text-emerald-700" />
-                  {warehouseId === "wh-2" ? "Kho Cơ Sở 2 (Thủ Đức - KTX ĐHQG)" : "Kho Trung Tâm (Quận 3 - Trụ sở Mầm Mơ)"}
+                  {warehouseId === "wh-2" ? "Kho Cơ Sở 2 (Thủ Đức - KTX ĐHQG)" : warehouseId === "wh-1" ? "Kho Trung Tâm (Quận 3 - Trụ sở Mầm Mơ)" : "Chưa có kho điều phối được lưu"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-gray-500 whitespace-nowrap">Chuyển kho xuất:</span>
                 <select
                   value={warehouseId}
-                  onChange={(e) => setWarehouseId(e.target.value)}
+                  disabled
+                  aria-describedby="warehouse-save-unavailable"
                   className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold outline-none bg-white text-emerald-950 focus:border-emerald-600"
                 >
+                  <option value="">Chưa có kho điều phối</option>
                   <option value="wh-1">📍 Kho 1: Trung Tâm (Quận 3)</option>
                   <option value="wh-2">📍 Kho 2: Cơ Sở 2 (Thủ Đức)</option>
                 </select>
+                <p id="warehouse-save-unavailable" className="text-[11px] text-gray-500">Chưa hỗ trợ lưu thay đổi kho điều phối.</p>
               </div>
             </div>
 
@@ -276,6 +364,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <span className="text-[11px] text-gray-500 whitespace-nowrap">Gán người giao:</span>
                 <select
                   value={assignedShipperId}
+                  disabled={isSaving}
                   onChange={(e) => setAssignedShipperId(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold outline-none bg-white text-emerald-950 focus:border-emerald-600"
                 >
@@ -373,8 +462,33 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                             {item.product_name_snapshot || item.item_name_snapshot || "Sản phẩm Mầm Mơ"}
                           </span>
                           {item.variant_name_snapshot && (
-                            <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
+                            <span className="text-gray-500 text-[11px] block">
+                              Mẫu / màu sắc / phân loại: {item.variant_name_snapshot}
+                            </span>
                           )}
+                          {(item.sku_snapshot || item.sku) && (
+                            <span className="text-gray-400 text-[11px] font-mono block">
+                              SKU: {item.sku_snapshot || item.sku}
+                            </span>
+                          )}
+                          <OrderVariantSwapAction
+                            orderId={order.order_id}
+                            orderCode={order.order_code}
+                            orderStatus={orderStatus}
+                            deliveryStatus={deliveryStatus}
+                            item={item}
+                            onApplied={(change) => setOrder((current) => current ? {
+                              ...current,
+                              items: current.items?.map((currentItem) => currentItem.order_item_id === change.orderItemId ? {
+                                ...currentItem,
+                                variant_id: change.variantId,
+                                variant_name_snapshot: change.variantName,
+                                variant_name: change.variantName,
+                                sku_snapshot: change.sku,
+                                sku: change.sku,
+                              } : currentItem),
+                            } : current)}
+                          />
                           <span className="text-gray-500">
                             Đơn giá:{" "}
                             <MoneyDisplay amount={item.price_snapshot ?? item.unit_price ?? 85000} /> x{" "}
@@ -389,6 +503,24 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       </div>
                     ))}
                   </div>
+
+                  {order.packing_items && order.packing_items.length > 0 && (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
+                      <p className="text-[11px] font-extrabold uppercase tracking-wide text-emerald-900 mb-2">
+                        Danh sách đóng gói theo tồn kho đã giữ
+                      </p>
+                      <div className="space-y-2">
+                        {order.packing_items.map((packingItem) => (
+                          <div key={packingItem.variant_id} className="text-xs text-gray-700">
+                            <span className="font-bold text-gray-900">{packingItem.product_name}</span>
+                            <span> — Mẫu / màu sắc / phân loại: {packingItem.variant_name}</span>
+                            {packingItem.sku && <span className="font-mono text-gray-500"> · SKU {packingItem.sku}</span>}
+                            <span className="font-bold text-emerald-900"> · x{packingItem.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               );
             })()}
@@ -398,10 +530,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <span>Tạm tính tiền hàng:</span>
                 <MoneyDisplay amount={order.subtotal} className="font-bold text-gray-900" />
               </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Giảm giá voucher:</span>
-                <span>-<MoneyDisplay amount={order.discount_amount ?? 10000} /></span>
-              </div>
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Giảm giá voucher:</span>
+                  <span>-<MoneyDisplay amount={voucherDiscount} /></span>
+                </div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>Phí vận chuyển:</span>
                 <MoneyDisplay amount={order.shipping_fee} className="font-bold text-gray-900" />
@@ -475,6 +609,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             <div className="space-y-2">
               <label className="text-xs font-bold text-gray-700 uppercase">Ghi chú nội bộ BTC:</label>
               <textarea
+                disabled={isSaving}
                 value={internalNote}
                 onChange={(e) => setInternalNote(e.target.value)}
                 placeholder="Ghi chú riêng cho nhân viên đóng gói / shipper..."
@@ -662,23 +797,35 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   Sau khi xác nhận, đơn hàng sẽ được đánh dấu <strong>Đã thanh toán (Khớp VietQR)</strong> trên toàn hệ thống và lưu nhật ký đối soát.
                 </span>
               </div>
+
+              {paidConfirmError ? (
+                <div
+                  role="alert"
+                  className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 text-[11.5px] leading-relaxed flex items-start gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <span>{paidConfirmError}</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => setShowPaymentConfirmModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors"
+                disabled={isConfirmingPaid}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Hủy bỏ
               </button>
               <button
                 type="button"
                 onClick={handleConfirmPaid}
-                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                disabled={isConfirmingPaid}
+                className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4 text-emerald-800" />
-                <span>Xác nhận đã nhận tiền</span>
+                <span>{isConfirmingPaid ? "Đang xác nhận..." : "Xác nhận đã nhận tiền"}</span>
               </button>
             </div>
           </div>

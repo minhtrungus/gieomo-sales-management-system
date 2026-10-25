@@ -136,6 +136,7 @@ export interface Product {
   sort_order: number;
   weight_gram: number | null;
   thumbnail: string | null;
+  image_status?: "source" | "fallback_only" | "missing";
   images?: string[];
   reviews?: ProductReview[];
   created_at: string;
@@ -169,6 +170,7 @@ export interface ProductVariant {
   stock_warehouse_2?: number; // Tồn Kho 2 (Cơ Sở 2 - Thủ Đức)
   warehouse_stocks?: Record<string, number>; // Dynamic stock by warehouse_id
   image_url?: string | null; // Ảnh riêng của phân loại
+  image_status?: "source" | "fallback_only" | "missing";
   sort_order?: number;
   weight_gram: number | null;
   status: ProductStatus;
@@ -182,6 +184,7 @@ export interface ProductMedia {
   variant_id: string | null;
   media_type: string;
   url: string;
+  image_status?: "source" | "fallback_only" | "missing";
   sort_order: number;
   alt_text: string | null;
   created_at: string;
@@ -193,6 +196,7 @@ export interface Combo {
   slug: string;
   price: number;
   image_url?: string | null;
+  image_status?: "source" | "fallback_only" | "missing";
   description: string | null;
   status: ProductStatus;
   featured: boolean;
@@ -287,9 +291,19 @@ export interface Order {
   customer?: Customer;
   seller?: Member;
   items?: OrderItem[];
+  /** Exact variant quantities reserved by the atomic order RPC for packing. */
+  packing_items?: OrderPackingItem[];
   payments?: Payment[];
   shipment?: Shipment;
   status_history?: OrderStatusHistory[];
+}
+
+export interface OrderPackingItem {
+  variant_id: string;
+  product_name: string;
+  variant_name: string;
+  sku: string | null;
+  quantity: number;
 }
 
 export interface OrderItem {
@@ -304,6 +318,11 @@ export interface OrderItem {
   price_snapshot?: number;
   cost_price_snapshot?: number;
   sku_snapshot?: string | null;
+  /** Aliases returned by getOrdersServer item mapping — same values as *_snapshot. */
+  product_name?: string;
+  variant_name?: string | null;
+  sku?: string | null;
+  price?: number;
   quantity: number;
   unit_price?: number;
   unit_cost_snapshot?: number | null;

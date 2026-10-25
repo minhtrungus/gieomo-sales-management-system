@@ -12,15 +12,8 @@ import {
 } from "@/lib/data/orderStore";
 import type { ProductCategory } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
-import {
-  FolderPlus,
-  FolderTree,
-  Edit3,
-  Trash2,
-  X,
-  AlertTriangle,
-  Boxes,
-} from "lucide-react";
+import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
+import { FolderPlus, FolderTree, Edit3, Trash2, X, Boxes } from "lucide-react";
 
 export function AdminCategoriesTab() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -52,6 +45,7 @@ export function AdminCategoriesTab() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ProductCategory | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<ProductCategory | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form states for Add
   const [newName, setNewName] = useState("");
@@ -122,12 +116,19 @@ export function AdminCategoriesTab() {
     setEditingCategory(null);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingCategory) return;
-    deleteStoredCategory(deletingCategory.category_id);
-    setCategories(getStoredCategories());
-    setProducts(getStoredProducts());
-    setDeletingCategory(null);
+    setIsDeleting(true);
+    try {
+      deleteStoredCategory(deletingCategory.category_id);
+      setCategories(getStoredCategories());
+      setProducts(getStoredProducts());
+    } catch {
+      alert("Không thể xóa danh mục. Vui lòng thử lại.");
+    } finally {
+      setIsDeleting(false);
+      setDeletingCategory(null);
+    }
   };
 
   // Count products in each category
@@ -624,45 +625,19 @@ export function AdminCategoriesTab() {
 
       {/* Modal: Xác nhận xóa danh mục */}
       {deletingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#F0E5D8] shadow-2xl space-y-4 text-center animate-in zoom-in-95">
-            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-extrabold text-base text-[#231B16]">
-              Xác nhận xóa danh mục?
-            </h3>
-            <p className="text-xs text-[#7E7068] leading-relaxed">
-              Bạn có chắc chắn muốn xóa danh mục <strong>&quot;{deletingCategory.name}&quot;</strong>?
-            </p>
-
-            {(productCountByCat.get(deletingCategory.category_id) || 0) > 0 && (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 text-left space-y-1">
-                <span className="font-bold block">⚠️ Lưu ý an toàn dữ liệu:</span>
-                <span>
-                  Hiện có <strong>{productCountByCat.get(deletingCategory.category_id)}</strong> sản phẩm thuộc danh mục này. Khi xóa, các sản phẩm sẽ được tự động chuyển về danh mục đầu tiên để không bị gián đoạn bán hàng.
-                </span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingCategory(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-colors"
-              >
-                Xác nhận xóa
-              </button>
-            </div>
-          </div>
-        </div>
+        <DoubleConfirmDialog
+          open={true}
+          onClose={() => setDeletingCategory(null)}
+          onConfirm={handleConfirmDelete}
+          title="Xóa danh mục"
+          message="Bạn có chắc chắn muốn xóa danh mục này?"
+          confirmCode="XOA"
+          loading={isDeleting}
+          details={[
+            { label: "Tên danh mục", value: deletingCategory.name },
+            { label: "Slug", value: deletingCategory.slug },
+          ]}
+        />
       )}
     </div>
   );

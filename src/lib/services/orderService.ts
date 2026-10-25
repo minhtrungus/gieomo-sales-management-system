@@ -1,326 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createOrderProofToken } from "@/lib/auth/serverAuth";
-import { validateOrderCreateLines } from "@/lib/orderCreateInput";
-import {
-  buildCanonicalOrderPayload,
-  buildOrderIdempotencyScope,
-  hashCanonicalOrderPayload,
-} from "@/lib/services/orderRequestHash";
+import { verifyOrderProofToken } from "@/lib/auth/serverAuth";
 
-/**
- * Server-Side Order Creation with Complete Price, Voucher, and Inventory Integrity.
- * Does NOT trust client-supplied amounts, prices, or statuses.
- */
+type DbReadError = { code?: string | null; message?: string | null };
 
-export interface VoucherCasOps {
-  readSnapshot(voucherId: string): Promise<{
-    row: { times_used: unknown; usage_limit: unknown } | null;
-    error: string | null;
-  }>;
-  casIncrement(voucherId: string, snapshot: number): Promise<{ rowsAffected: number | null; error: string | null }>;
-  casDecrement(voucherId: string, snapshot: number): Promise<{ rowsAffected: number | null; error: string | null }>;
+export function canExposeOrderPaymentProof(
+  isAdmin: boolean,
+  hasOrderBoundProof: boolean,
+): boolean {
+  return isAdmin || hasOrderBoundProof;
 }
 
-export type VoucherReserveOutcome =
-  | { ok: true; timesUsed: number }
-  | { ok: false; reason: "not_found" | "limit" | "contention" | "db_error"; errorMessage?: string };
-
-const VOUCHER_RESERVE_MAX_ATTEMPTS = 5;
-const VOUCHER_RELEASE_MAX_ATTEMPTS = 3;
-
-function normalizeTimesUsed(value: unknown): number | null {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
-  return null;
-}
-
-type NormalizedUsageLimit = { kind: "unlimited" } | { kind: "limited"; value: number } | { kind: "invalid" };
-
-function normalizeUsageLimit(value: unknown): NormalizedUsageLimit {
-  if (value === null || value === undefined) return { kind: "unlimited" };
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) return { kind: "limited", value };
-  return { kind: "invalid" };
-}
-
-export async function reserveVoucherSlot(
-  ops: VoucherCasOps,
-  voucherId: string,
-  maxAttempts: number = VOUCHER_RESERVE_MAX_ATTEMPTS
-): Promise<VoucherReserveOutcome> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    let snapshot: Awaited<ReturnType<VoucherCasOps["readSnapshot"]>>;
-    try {
-      snapshot = await ops.readSnapshot(voucherId);
-    } catch (err) {
-      return {
-        ok: false,
-        reason: "db_error",
-        errorMessage: err instanceof Error ? err.message : "Không đọc được voucher",
-      };
-    }
-    if (snapshot.error) return { ok: false, reason: "db_error", errorMessage: snapshot.error };
-    if (!snapshot.row) return { ok: false, reason: "not_found" };
-
-    const timesUsed = normalizeTimesUsed(snapshot.row.times_used);
-    if (timesUsed === null) {
-      return { ok: false, reason: "db_error", errorMessage: "times_used không hợp lệ" };
-    }
-
-    const limit = normalizeUsageLimit(snapshot.row.usage_limit);
-    if (limit.kind === "invalid") {
-      return { ok: false, reason: "db_error", errorMessage: "usage_limit không hợp lệ" };
-    }
-    if (limit.kind === "limited" && timesUsed >= limit.value) {
-      return { ok: false, reason: "limit" };
-    }
-
-    let cas: { rowsAffected: number | null; error: string | null };
-    try {
-      cas = await ops.casIncrement(voucherId, timesUsed);
-    } catch (err) {
-      return {
-        ok: false,
-        reason: "db_error",
-        errorMessage: err instanceof Error ? err.message : "Không cập nhật được voucher",
-      };
-    }
-    if (cas.error) return { ok: false, reason: "db_error", errorMessage: cas.error };
-    if (cas.rowsAffected === 1) return { ok: true, timesUsed };
-    if (cas.rowsAffected === 0) continue;
-    return { ok: false, reason: "db_error", errorMessage: "Không xác định được số hàng cập nhật khi giữ chỗ" };
-  }
-  return { ok: false, reason: "contention" };
-}
-
-export type VoucherReleaseOutcome = "released" | "not_found" | "invalid_counter" | "failed";
-
-export async function releaseVoucherSlot(
-  ops: VoucherCasOps,
-  voucherId: string,
-  maxAttempts: number = VOUCHER_RELEASE_MAX_ATTEMPTS
-): Promise<VoucherReleaseOutcome> {
-  try {
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const snapshot = await ops.readSnapshot(voucherId);
-      if (snapshot.error) {
-        console.error("[createOrderServer] voucher-release-read-failed", { voucherId, attempt, error: snapshot.error });
-        continue;
-      }
-      if (!snapshot.row) {
-        console.warn("[createOrderServer] voucher-release-skipped", { voucherId, reason: "not_found" });
-        return "not_found";
-      }
-      const timesUsed = normalizeTimesUsed(snapshot.row.times_used);
-      if (timesUsed === null) {
-        console.error("[createOrderServer] voucher-release-invalid-counter", {
-          voucherId,
-          value: snapshot.row.times_used,
-        });
-        return "invalid_counter";
-      }
-      if (timesUsed === 0) {
-        console.error("[createOrderServer] voucher-release-invalid-counter", {
-          voucherId,
-          reason: "counter_already_zero",
-        });
-        return "invalid_counter";
-      }
-      const cas = await ops.casDecrement(voucherId, timesUsed);
-      if (cas.error) {
-        console.error("[createOrderServer] voucher-release-cas-failed", { voucherId, attempt, error: cas.error });
-        continue;
-      }
-      if (cas.rowsAffected === 1) return "released";
-      if (cas.rowsAffected === 0) continue;
-      console.error("[createOrderServer] voucher-release-cas-failed", {
-        voucherId,
-        attempt,
-        reason: "unknown_rows_affected",
-      });
-    }
-    console.error("[createOrderServer] voucher-release-failed", { voucherId, attempts: maxAttempts });
-    return "failed";
-  } catch (err) {
-    console.error("[createOrderServer] voucher-release-exception", {
-      voucherId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return "failed";
-  }
-}
-
-export function createVoucherCasOps(supabase: ReturnType<typeof createAdminClient>): VoucherCasOps {
-  return {
-    async readSnapshot(voucherId) {
-      const { data, error } = await supabase
-        .from("vouchers")
-        .select("times_used, usage_limit")
-        .eq("voucher_id", voucherId)
-        .maybeSingle();
-      if (error) return { row: null, error: error.message };
-      if (data === null || data === undefined) return { row: null, error: null };
-      if (typeof data !== "object") return { row: null, error: "Dữ liệu voucher không hợp lệ" };
-      const record = data as { times_used?: unknown; usage_limit?: unknown };
-      return { row: { times_used: record.times_used, usage_limit: record.usage_limit }, error: null };
-    },
-    async casIncrement(voucherId, snapshot) {
-      const { data, error } = await supabase
-        .from("vouchers")
-        .update({ times_used: snapshot + 1 })
-        .eq("voucher_id", voucherId)
-        .eq("times_used", snapshot)
-        .select("voucher_id");
-      if (error) return { rowsAffected: null, error: error.message };
-      if (Array.isArray(data)) return { rowsAffected: data.length, error: null };
-      return { rowsAffected: null, error: "Phản hồi cập nhật giữ chỗ không hợp lệ" };
-    },
-    async casDecrement(voucherId, snapshot) {
-      const { data, error } = await supabase
-        .from("vouchers")
-        .update({ times_used: snapshot - 1 })
-        .eq("voucher_id", voucherId)
-        .eq("times_used", snapshot)
-        .gt("times_used", 0)
-        .select("voucher_id");
-      if (error) return { rowsAffected: null, error: error.message };
-      if (Array.isArray(data)) return { rowsAffected: data.length, error: null };
-      return { rowsAffected: null, error: "Phản hồi cập nhật giải phóng không hợp lệ" };
-    },
-  };
-}
-
-export interface OrderCreateInput {
-  buyer_name?: string;
-  buyer_phone?: string;
-  buyer_email?: string | null;
-  recipient_name?: string;
-  recipient_phone?: string;
-  delivery_type?: string;
-  address_detail?: string;
-  district?: string;
-  province?: string;
-  customer_note?: string;
-  voucher_code?: string | null;
-  referral_code?: string | null;
-  seller_id?: string | null;
-  introducer_info?: string;
-  source_type?: string;
-  payment_method?: string;
-  idempotency_key?: string;
-  items: Array<{
-    product_id?: string;
-    variant_id?: string | null;
-    combo_id?: string | null;
-    quantity: number;
-  }>;
-}
-
-export interface CreateOrderResult {
-  success: boolean;
-  orderId?: string;
-  orderCode?: string;
-  finalAmount?: number;
-  proofToken?: string;
-  replayed?: boolean;
-  conflict?: boolean;
-  error?: string;
-}
-
-interface AtomicOrderRpcResult {
-  outcome?: string;
-  order_id?: string;
-  order_code?: string;
-  final_amount?: number | string;
-  replayed?: boolean;
-}
-
-function orderRpcError(message: string): CreateOrderResult {
-  if (message.includes("D3:HASH_MISMATCH")) {
-    return {
-      success: false,
-      conflict: true,
-      error: "Khóa gửi đơn này đã được dùng với nội dung khác. Vui lòng bắt đầu một đơn hàng mới.",
-    };
-  }
-
-  const knownErrors: Record<string, string> = {
-    "D3:INVALID_IDEMPOTENCY_KEY": "Khóa gửi đơn không hợp lệ. Vui lòng tải lại trang và thử lại.",
-    "D3:INVALID_ITEMS": "Giỏ hàng không có sản phẩm hợp lệ.",
-    "D3:INVALID_PHONE": "Số điện thoại người nhận không hợp lệ.",
-    "D3:INVALID_DELIVERY_TYPE": "Hình thức giao hàng không hợp lệ.",
-    "D3:INVALID_PAYMENT_METHOD": "Phương thức thanh toán không hợp lệ.",
-    "D3:INVALID_QUANTITY": "Số lượng sản phẩm không hợp lệ.",
-    "D3:INVALID_LINE_IDENTITY": "Một dòng sản phẩm có định danh không hợp lệ.",
-    "D3:INVALID_PRODUCT": "Một sản phẩm không còn kinh doanh.",
-    "D3:INVALID_VARIANT": "Một phân loại sản phẩm không còn kinh doanh.",
-    "D3:VARIANT_PRODUCT_MISMATCH": "Phân loại sản phẩm không thuộc sản phẩm đã chọn.",
-    "D3:INVALID_COMBO": "Một combo không còn kinh doanh.",
-    "D3:INVALID_COMBO_COMPONENT": "Một thành phần combo không còn kinh doanh.",
-    "D3:COMBO_COMPONENTS_UNMAPPED": "Combo chưa được cấu hình đầy đủ thành phần tồn kho.",
-    "D3:VOUCHER_UNAVAILABLE": "Voucher không hợp lệ, đã hết lượt hoặc chưa đủ điều kiện.",
-    "D3:STOCK_INSUFFICIENT": "Sản phẩm không còn đủ tồn kho cho đơn hàng này.",
-    "D3:INVALID_ACTOR": "Phiên người tạo đơn không còn hợp lệ.",
-  };
-
-  const match = Object.entries(knownErrors).find(([code]) => message.includes(code));
-  return { success: false, error: match?.[1] || "Không thể tạo đơn hàng nguyên tử." };
-}
-
-export async function createOrderServer(
-  orderInput: OrderCreateInput,
-  identity?: { memberId?: string | null }
-): Promise<CreateOrderResult> {
-  const lineValidation = validateOrderCreateLines(orderInput);
-  if (!lineValidation.ok) {
-    return { success: false, error: lineValidation.error };
-  }
-
-  const idempotencyKey = orderInput.idempotency_key?.trim();
-  if (!idempotencyKey || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
-    return orderRpcError("D3:INVALID_IDEMPOTENCY_KEY");
-  }
-
-  const canonicalPayload = buildCanonicalOrderPayload({ ...orderInput }, lineValidation.items);
-  const scopeKey = buildOrderIdempotencyScope(identity?.memberId, canonicalPayload.buyer_phone);
-  const requestHash = hashCanonicalOrderPayload(canonicalPayload);
-  const rpcPayload = {
-    ...canonicalPayload,
-    idempotency_key: idempotencyKey,
-    scope_key: scopeKey,
-    request_hash: requestHash,
-    actor_member_id: identity?.memberId ?? null,
-  };
-
-  try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase.rpc("create_order_atomic", { p: rpcPayload });
-    if (error) return orderRpcError(error.message);
-
-    const result = data as AtomicOrderRpcResult | null;
-    if (
-      result?.outcome !== "created" ||
-      typeof result.order_id !== "string" ||
-      typeof result.order_code !== "string"
-    ) {
-      return { success: false, error: "Máy chủ không trả về kết quả tạo đơn hợp lệ." };
-    }
-
-    const finalAmount = Number(result.final_amount);
-    if (!Number.isFinite(finalAmount) || finalAmount < 0) {
-      return { success: false, error: "Máy chủ trả về tổng tiền không hợp lệ." };
-    }
-
-    return {
-      success: true,
-      orderId: result.order_id,
-      orderCode: result.order_code,
-      finalAmount,
-      proofToken: createOrderProofToken(result.order_code, result.order_id),
-      replayed: result.replayed === true,
-    };
-  } catch (error) {
-    return orderRpcError(error instanceof Error ? error.message : String(error));
-  }
+function isMissingPackingReservationTable(error: DbReadError | null | undefined): boolean {
+  if (!error) return false;
+  const message = String(error.message || "").toLowerCase();
+  return (
+    (error.code === "PGRST205" || error.code === "42P01") &&
+    message.includes("order_inventory_reservations")
+  );
 }
 
 function maskName(name?: string | null): string {
@@ -344,21 +40,17 @@ function maskAddressStr(addr?: string | null): string {
   return `***, ${parts.slice(1).join(",").trim()}`;
 }
 
-export function canExposeOrderPaymentProof(isAdmin: boolean, hasPhoneVerification: boolean): boolean {
-  return isAdmin || hasPhoneVerification;
-}
-
 /**
  * Fetch orders from Supabase.
  * - Admin: Full access with unmasked PII.
  * - Customer:
- *   - If both code and phone provided: verified match.
- *   - If only code provided: masked PII to prevent customer enumeration.
- *   - If only phone provided without code: rejected for unauthenticated users.
+ *   - code + exact receiver phone, or an order-bound proof token.
+ *   - code alone never returns an order.
  */
 export async function getOrdersServer(options?: {
   code?: string;
   phone?: string;
+  proofToken?: string;
   limit?: number;
   isAdmin?: boolean;
 }) {
@@ -368,7 +60,7 @@ export async function getOrdersServer(options?: {
 
     // 1. Unauthenticated users cannot query all orders or query by phone alone
     if (!isAdmin) {
-      if (!options?.code) {
+      if (!options?.code || (!options?.phone && !options?.proofToken)) {
         return [];
       }
     }
@@ -408,6 +100,9 @@ export async function getOrdersServer(options?: {
         ),
         order_items (
           order_item_id,
+          product_id,
+          variant_id,
+          combo_id,
           item_name_snapshot,
           variant_name_snapshot,
           sku_snapshot,
@@ -422,34 +117,104 @@ export async function getOrdersServer(options?: {
       query = query.eq("order_code", options.code.trim().toUpperCase());
     }
 
-    if (options?.phone) {
-      const cleanPhone = options.phone.trim().replace(/\D/g, "");
-      query = query.eq("receiver_phone", cleanPhone);
-    }
-
     if (options?.limit) {
       query = query.limit(options.limit);
     }
 
     const { data, error } = await query;
     if (error) {
-      console.error("[getOrdersServer] DB Error:", error);
-      return [];
+      console.error("[getOrdersServer] base-order-read-failed", { code: error.code || "unknown" });
+      throw new Error("Không thể tải danh sách đơn hàng.");
     }
 
-    const hasPhoneVerification = Boolean(options?.phone && options.phone.trim().length >= 9);
+    const packingByOrder = new Map<string, Array<{
+      variant_id: string;
+      quantity: number;
+      product_name: string;
+      variant_name: string;
+      sku: string | null;
+    }>>();
+    const orderIds = (data || []).map((row: any) => row.order_id).filter(Boolean);
 
-    return (data || []).map((row: any) => {
+    if (orderIds.length > 0) {
+      const reservationResult = await supabase
+        .from("order_inventory_reservations")
+        .select("order_id, variant_id, quantity")
+        .in("order_id", orderIds);
+
+      if (reservationResult.error) {
+        if (isMissingPackingReservationTable(reservationResult.error)) {
+          // Snapshots created before the packing-reservation migration still have
+          // valid orders. Packing metadata is optional for this read path.
+          console.warn("[getOrdersServer] packing-reservations-unavailable", {
+            code: reservationResult.error.code || "unknown",
+          });
+        } else {
+          console.error("[getOrdersServer] packing-reservation-read-failed", {
+            code: reservationResult.error.code || "unknown",
+          });
+          throw new Error("Không thể tải dữ liệu đóng gói của đơn hàng.");
+        }
+      } else {
+        const reservations = reservationResult.data || [];
+        const variantIds = [...new Set(
+          reservations.map((row: any) => row.variant_id).filter(Boolean),
+        )];
+        const variantById = new Map<string, any>();
+
+        if (variantIds.length > 0) {
+          const variantResult = await supabase
+            .from("product_variants")
+            .select("variant_id, name, sku, products(name)")
+            .in("variant_id", variantIds);
+          if (variantResult.error) {
+            console.error("[getOrdersServer] packing-variant-read-failed", {
+              code: variantResult.error.code || "unknown",
+            });
+            throw new Error("Không thể tải dữ liệu đóng gói của đơn hàng.");
+          }
+          for (const variant of variantResult.data || []) {
+            variantById.set(variant.variant_id, variant);
+          }
+        }
+
+        for (const reservation of reservations) {
+          const variant = variantById.get(reservation.variant_id);
+          const product = Array.isArray(variant?.products) ? variant.products[0] : variant?.products;
+          const rows = packingByOrder.get(reservation.order_id) || [];
+          rows.push({
+            variant_id: reservation.variant_id,
+            product_name: product?.name || "Sản phẩm",
+            variant_name: variant?.name || "Phân loại",
+            sku: variant?.sku || null,
+            quantity: reservation.quantity,
+          });
+          packingByOrder.set(reservation.order_id, rows);
+        }
+      }
+    }
+
+    return (data || []).flatMap((row: any) => {
+      const inputPhone = options?.phone?.replace(/\D/g, "") || "";
+      const buyerPhone = String(row.customers?.phone || "").replace(/\D/g, "");
+      const receiverPhone = String(row.receiver_phone || "").replace(/\D/g, "");
+      const hasPhoneVerification = Boolean(
+        inputPhone.length >= 9 && (inputPhone === buyerPhone || inputPhone === receiverPhone)
+      );
+      const hasProofVerification = Boolean(
+        options?.proofToken && verifyOrderProofToken(options.proofToken, row.order_code, row.order_id)
+      );
+      if (!isAdmin && !hasPhoneVerification && !hasProofVerification) return [];
+
       const rawBuyerName = row.customers?.full_name || row.receiver_name || "Khách hàng";
       const rawBuyerPhone = row.customers?.phone || row.receiver_phone || "";
       const rawRecipientName = row.receiver_name || rawBuyerName;
       const rawRecipientPhone = row.receiver_phone || rawBuyerPhone;
       const rawAddress = row.shipping_address_snapshot || "";
 
-      // If requester is not admin and has not verified phone match, mask PII
-      const shouldMask = !isAdmin && !hasPhoneVerification;
+      const shouldMask = !isAdmin && !hasPhoneVerification && !hasProofVerification;
 
-      return {
+      return [{
         order_id: row.order_id,
         order_code: row.order_code,
         buyer_name: shouldMask ? maskName(rawBuyerName) : rawBuyerName,
@@ -471,17 +236,17 @@ export async function getOrdersServer(options?: {
         internal_note: isAdmin ? row.internal_note : undefined,
         payment_proof: (() => {
           const parsed = row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] || null;
-          return canExposeOrderPaymentProof(isAdmin, hasPhoneVerification) ? parsed : undefined;
+          return canExposeOrderPaymentProof(isAdmin, hasProofVerification) ? parsed : undefined;
         })(),
         has_payment_proof: Boolean(
           row.internal_note?.match(/\[Ảnh biên lai\]:\s*(https?:\/\/[^\s|]+|data:image\/[^\s|]+)/)?.[1] ||
           row.internal_note?.includes("[Khách đã nộp ảnh biên lai CK")
         ),
-        seller_id: row.seller_id || null,
-        source_type: row.source_type || "landing_page",
-        introducer_info: row.introducer_info || null,
-        referral_code: row.seller_id ? (row.introducer_info?.match(/\(([^)]+)\)/)?.[1] || null) : null,
-        assigned_shipper_id: row.assigned_shipper_id || null,
+        seller_id: isAdmin ? (row.seller_id || null) : undefined,
+        source_type: isAdmin ? (row.source_type || "landing_page") : undefined,
+        introducer_info: isAdmin ? (row.introducer_info || null) : undefined,
+        referral_code: isAdmin && row.seller_id ? (row.introducer_info?.match(/\(([^)]+)\)/)?.[1] || null) : undefined,
+        assigned_shipper_id: isAdmin ? (row.assigned_shipper_id || null) : undefined,
         created_at: row.created_at,
         confirmed_at: row.confirmed_at,
         completed_at: row.completed_at,
@@ -489,19 +254,27 @@ export async function getOrdersServer(options?: {
         items: (row.order_items || []).map((it: any) => ({
           order_item_id: it.order_item_id,
           order_id: row.order_id,
+          product_id: it.product_id ?? null,
+          variant_id: it.variant_id ?? null,
+          combo_id: it.combo_id ?? null,
           item_name_snapshot: it.item_name_snapshot,
+          product_name_snapshot: it.item_name_snapshot,
+          variant_name_snapshot: it.variant_name_snapshot ?? null,
           product_name: it.item_name_snapshot,
           variant_name: it.variant_name_snapshot,
           sku: it.sku_snapshot,
+          sku_snapshot: it.sku_snapshot,
           quantity: it.quantity,
           unit_price: it.unit_price,
           price: it.unit_price,
           subtotal: it.subtotal,
         })),
-      };
+        packing_items: isAdmin ? (packingByOrder.get(row.order_id) || []) : undefined,
+      }];
     });
   } catch (err) {
-    console.error("[getOrdersServer] Exception:", err);
-    return [];
+    if (err instanceof Error && err.message.startsWith("Không thể tải")) throw err;
+    console.error("[getOrdersServer] unexpected-read-failure");
+    throw new Error("Không thể tải danh sách đơn hàng.");
   }
 }

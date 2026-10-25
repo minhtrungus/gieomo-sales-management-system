@@ -2,7 +2,8 @@
 
 import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
 import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
-import { clearOrderAttemptKey, getOrCreateOrderAttemptKey } from "@/lib/orderIdempotency";
+import { beginCreateOrderAttempt } from "../checkout/createOrderAttempt";
+import { sortProductVariants } from "../productVariantOrder";
 
 export type { ExtendedProduct, ExtendedCombo };
 
@@ -12,7 +13,7 @@ export interface PaymentRecord {
   amount: number;
   paymentMethod: string;
   transactionCode: string;
-  status: "pending" | "paid";
+  status: "pending" | "paid" | "failed";
   createdAt: string;
 }
 
@@ -32,11 +33,15 @@ let hasSyncedPickupPointsWithServer = false;
 let hasSyncedContactMessagesWithServer = false;
 let hasSyncedOrdersWithServer = false;
 let hasSyncedInventoryWithServer = false;
+let ordersSyncInFlight: Promise<void> | null = null;
+let membersSyncInFlight: Promise<void> | null = null;
+let presenceSyncInFlight: Promise<void> | null = null;
 
 export function syncOrdersFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedOrdersWithServer && !force)) return;
+  if (ordersSyncInFlight) return;
   hasSyncedOrdersWithServer = true;
-  safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
+  ordersSyncInFlight = safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.orders)) {
         const localRaw = localStorage.getItem("gieomo_orders");
@@ -75,12 +80,25 @@ export function syncOrdersFromServer(force = false): void {
     })
     .catch((err) => {
       console.warn("Could not sync orders from server:", err);
+    })
+    .finally(() => {
+      ordersSyncInFlight = null;
     });
 }
 
 
 export function getStoredOrders(): Order[] {
   if (typeof window === "undefined") return [];
+  // Batch 2D.1 — lần đầu truy cập store trong phiên: hoàn tất các hủy đơn
+  // server-confirmed còn dang dở (journal) từ phiên trước. Idempotent.
+  if (!hasAttemptedCancelRecovery) {
+    hasAttemptedCancelRecovery = true;
+    try {
+      recoverPendingCancelJournals();
+    } catch (e) {
+      console.warn("[cancelRecovery] Lỗi khi phục hồi journal:", e);
+    }
+  }
   if (!hasSyncedOrdersWithServer) {
     syncOrdersFromServer();
   }
@@ -117,20 +135,158 @@ export function getStoredOrders(): Order[] {
   }
 }
 
-export interface SaveOrderResult {
-  ok: boolean;
-  orderId?: string;
-  orderCode?: string;
+/**
+ * Batch 3A.2 — kết quả server-canonical của saveNewOrder.
+ *
+ * Trước đây saveNewOrder chạy fire-and-forget: POST /api/orders KHÔNG await,
+ * bỏ qua response, và dùng order_code/order_id client tự sinh (GM-<rand> /
+ * ord-<ts>) → mã client LUÔN khác mã server (generateOrderCode) → các thao tác
+ * PATCH/payment sau đó match 0 dòng (silent no-op). Giờ đây CHỈ trả success
+ * khi server trả về định danh canonical hợp lệ; định danh local được ghi đè
+ * bằng giá trị server trước khi ghi cache.
+ */
+export type SaveNewOrderResult = {
+  success: boolean;
+  serverOrderId?: string;
+  serverOrderCode?: string;
   finalAmount?: number;
+  proofToken?: string;
   replayed?: boolean;
   error?: string;
-}
+  /** true khi nên thử lại (mạng/5xx); false với lỗi nghiệp vụ 4xx. */
+  retryable?: boolean;
+};
 
+/**
+ * Batch 3A.2 — tạo đơn SERVER-FIRST (định danh canonical).
+ *
+ * Gửi POST /api/orders có Idempotency-Key và CHỜ server trả orderId/orderCode
+ * thật. Chỉ sau khi HTTP 2xx + body.success=true + định danh hợp lệ mới ghi đè
+ * order_id/order_code local bằng canonical của server và chạy side-effect local
+ * (persistLocalOrderSideEffects). Mọi lỗi (mạng, 4xx/5xx, body sai) → KHÔNG
+ * chạy side-effect local nào, trả lỗi + cờ retryable cho caller hiển thị.
+ *
+ * Không tự retry: mỗi lần gọi là một POST (idempotency key mới) — caller tự
+ * guard double-submit. Idempotency-Key đưa request sang đường dẫn atomic RPC
+ * (create_order_atomic) thay cho legacy multi-step.
+ */
 export async function saveNewOrder(
   newOrder: Order,
-  options: { syncToServer?: boolean; idempotencyFlow?: string } = {}
-): Promise<SaveOrderResult> {
-  if (typeof window === "undefined") return { ok: false, error: "SSR" };
+  options?: { idempotencyKey?: string; attemptScope?: string }
+): Promise<SaveNewOrderResult> {
+  if (typeof window === "undefined") {
+    return { success: false, error: "saveNewOrder chỉ chạy trên trình duyệt." };
+  }
+
+  // KHÔNG gửi order_id/order_code client — server tự sinh canonical
+  // (generateOrderCode / crypto.randomUUID). Input createOrderServer cũng
+  // không đọc các trường này; bỏ chúng khỏi body để tránh nhiễu hash.
+  const postBody = {
+    buyer_name: newOrder.buyer_name,
+    buyer_phone: newOrder.buyer_phone,
+    buyer_email: newOrder.buyer_email || null,
+    recipient_name: newOrder.recipient_name,
+    recipient_phone: newOrder.recipient_phone,
+    delivery_type: newOrder.delivery_type,
+    address_detail: newOrder.address_detail,
+    district: newOrder.district || "",
+    province: newOrder.province,
+    customer_note: newOrder.customer_note,
+    voucher_code: newOrder.voucher_code || null,
+    referral_code: newOrder.referral_code || null,
+    seller_id: newOrder.seller_id || null,
+    introducer_info: newOrder.introducer_info,
+    source_type: newOrder.source_type || null,
+    items: (newOrder.items || []).map((it: any) => ({
+      product_id: it.product_id,
+      variant_id: it.variant_id || null,
+      combo_id: it.combo_id || null,
+      quantity: it.quantity,
+    })),
+  };
+
+  let attempt: Awaited<ReturnType<typeof beginCreateOrderAttempt>>;
+  try {
+    attempt = await beginCreateOrderAttempt(options?.attemptScope || "order-store", postBody, options?.idempotencyKey);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Không giữ được attempt tạo đơn.", retryable: false };
+  }
+  try {
+    let res: Response;
+    try {
+      res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(postBody),
+      });
+    } catch {
+      return {
+        success: false,
+        error: "Không nhận được kết quả từ máy chủ — chưa xác định đơn đã được tạo hay chưa. Thử lại với cùng thông tin và key.",
+        retryable: true,
+      };
+    }
+
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok || !data || data.success !== true) {
+      if (data?.success === false &&
+          ((res.status === 400 && data.idempotency === "failed_terminal") ||
+           (res.status === 409 && data.idempotency === "replay_cancelled"))) {
+        attempt.resolve();
+      }
+      const errMsg = (data && data.error) || `Không tạo được đơn hàng (HTTP ${res.status}).`;
+      // 5xx (máy chủ lỗi tạm thời) → nên thử lại; 4xx (nghiệp vụ) → không auto-retry.
+      return { success: false, error: errMsg, retryable: res.status >= 500 };
+    }
+
+    const serverOrderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
+    const serverOrderCode = typeof data.orderCode === "string" ? data.orderCode.trim() : "";
+    const serverFinalAmount = typeof data.finalAmount === "number" ||
+      (typeof data.finalAmount === "string" && data.finalAmount.trim() !== "")
+      ? Number(data.finalAmount) : NaN;
+    if (!serverOrderId || !serverOrderCode || !Number.isFinite(serverFinalAmount) || serverFinalAmount < 0) {
+      return {
+        success: false,
+        error: "Server trả về định danh đơn hàng không hợp lệ.",
+        retryable: false,
+      };
+    }
+
+    // GHI ĐÈ định danh local bằng canonical của server — chống trùng lặp khi
+    // syncOrdersFromServer merge theo order_code (server authoritative).
+    newOrder.order_id = serverOrderId;
+    newOrder.order_code = serverOrderCode;
+    newOrder.final_amount = serverFinalAmount;
+
+    // Side-effect local CHỈ sau khi server xác nhận (trước đây chạy trước POST).
+    persistLocalOrderSideEffects(newOrder);
+    attempt.resolve();
+
+    return {
+      success: true,
+      serverOrderId,
+      serverOrderCode,
+      finalAmount: newOrder.final_amount,
+      proofToken: data.proofToken,
+      replayed: data.replayed === true,
+    };
+  } finally {
+    attempt.release();
+  }
+}
+
+/**
+ * Ghi cache local + side-effect UI SAU khi server đã tạo đơn xong. Server là
+ * nguồn sự thật; các cập nhật stock/khách hàng dưới đây chỉ là tối ưu giao
+ * diện và sẽ được syncOrdersFromServer hiệu chỉnh ở lần đồng bộ kế tiếp.
+ */
+function persistLocalOrderSideEffects(newOrder: Order): void {
   try {
     // Auto-assign fulfillment warehouse if not specified
     if (!newOrder.warehouse_id) {
@@ -142,70 +298,16 @@ export async function saveNewOrder(
       }
     }
 
-    const idempotencyFlow = options.idempotencyFlow || "order";
-    let replayed = false;
-    if (options.syncToServer !== false) {
-      const attemptPayload = {
-        buyer_name: newOrder.buyer_name,
-        buyer_phone: newOrder.buyer_phone,
-        buyer_email: newOrder.buyer_email,
-        recipient_name: newOrder.recipient_name,
-        recipient_phone: newOrder.recipient_phone,
-        delivery_type: newOrder.delivery_type,
-        address_detail: newOrder.address_detail,
-        district: newOrder.district,
-        province: newOrder.province,
-        customer_note: newOrder.customer_note,
-        voucher_code: newOrder.voucher_code,
-        referral_code: newOrder.referral_code,
-        seller_id: newOrder.seller_id,
-        introducer_info: newOrder.introducer_info,
-        source_type: newOrder.source_type,
-        payment_method: newOrder.payment_method,
-        items: (newOrder.items || []).map((item) => ({
-          product_id: item.product_id || undefined,
-          variant_id: item.variant_id || undefined,
-          combo_id: item.combo_id || undefined,
-          quantity: item.quantity,
-        })),
-      };
-      const idempotencyKey = await getOrCreateOrderAttemptKey(idempotencyFlow, attemptPayload);
-
-      try {
-        const response = await fetch("/api/orders", {
-          method: "POST",
-          headers: getAuthHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ ...attemptPayload, idempotency_key: idempotencyKey }),
-        });
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.success || !result?.orderId || !result?.orderCode) {
-          const serverError = result?.error || `HTTP ${response.status}`;
-          console.warn("[saveNewOrder] Server rejected order:", response.status, serverError);
-          return { ok: false, orderCode: newOrder.order_code, error: serverError };
-        }
-
-        newOrder.order_id = result.orderId;
-        newOrder.order_code = result.orderCode;
-        newOrder.final_amount = Number(result.finalAmount);
-        replayed = result.replayed === true;
-        clearOrderAttemptKey(idempotencyFlow);
-      } catch (err: unknown) {
-        console.warn("[saveNewOrder] Failed to sync order to Supabase:", err);
-        return {
-          ok: false,
-          orderCode: newOrder.order_code,
-          error: err instanceof Error ? err.message : "Network error",
-        };
-      }
-    }
-
     const orders = getStoredOrders();
     const updated = [newOrder, ...orders.filter((o) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code)];
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
 
-    // Deduct inventory stock atomically
-    if (newOrder.items && newOrder.items.length > 0) {
+     // NOTE: Authoritative stock deduction happens ONLY on server via createOrderServer().
+     // Client-side update below is for LOCAL UI OPTIMISM ONLY and will be corrected
+     // by the next server sync (syncOrdersFromServer refetches the database).
+     // This prevents DOUBLE STOCK DEDUCTION between client and server.
+      if (newOrder.items && newOrder.items.length > 0) {
       try {
         const products = getStoredProducts();
         const targetWhId = newOrder.warehouse_id || "wh-1";
@@ -318,59 +420,710 @@ export async function saveNewOrder(
 
     // Automatic push notifications are disabled
 
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
-
-    return {
-      ok: true,
-      orderId: newOrder.order_id,
-      orderCode: newOrder.order_code,
-      finalAmount: newOrder.final_amount,
-      replayed,
-    };
   } catch (e) {
-    console.error("Error saving new order", e);
-    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+    console.error("Error persisting local order side effects", e);
   }
 }
 
-export async function updateStoredOrderStatus(
-  orderId: string,
-  newStatus: OrderStatus
-): Promise<{ ok: boolean; error?: string }> {
-  if (typeof window === "undefined") return { ok: false, error: "Browser context is required." };
+/**
+ * Cache a server-created order locally WITHOUT a second POST /api/orders
+ * and WITHOUT client-side stock deduction (server is authoritative).
+ * Used by checkout after createOrderServer already succeeded.
+ */
+export function cacheServerCreatedOrder(newOrder: Order): void {
+  if (typeof window === "undefined") return;
   try {
-    // Cancellation is a server-authoritative, multi-entity transaction. Do not
-    // publish optimistic local status or inventory effects before it commits.
-    if (newStatus === "cancelled") {
-      const response = await fetch("/api/orders", {
-        method: "PATCH",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ orderId, orderStatus: newStatus }),
-      });
-      const result = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) {
-        return { ok: false, error: result.error || `Cancellation failed (${response.status})` };
+    if (!newOrder.warehouse_id) {
+      const whList = getStoredWarehouses();
+      const defaultWh = whList.find((w: any) => w.is_default) || whList[0];
+      if (defaultWh) {
+        newOrder.warehouse_id = defaultWh.warehouse_id;
+        newOrder.warehouse_name = defaultWh.name;
       }
-
-      const committedAt = new Date().toISOString();
-      const committedOrders = getStoredOrders().map((order) =>
-        order.order_id === orderId || order.order_code === orderId
-          ? {
-              ...order,
-              order_status: "cancelled" as const,
-              status_timestamps: { ...(order.status_timestamps || {}), cancelled: committedAt },
-              cancelled_at: committedAt,
-              updated_at: committedAt,
-            }
-          : order
-      );
-      cachedOrders = committedOrders;
-      localStorage.setItem("gieomo_orders", JSON.stringify(committedOrders));
-      window.dispatchEvent(new Event("gieomo_orders_updated"));
-      return { ok: true };
     }
 
+    const orders = getStoredOrders();
+    const updated = [
+      newOrder,
+      ...orders.filter(
+        (o: any) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code
+      ),
+    ];
+    cachedOrders = updated;
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+
+    try {
+      const custRaw = localStorage.getItem("gieomo_customers");
+      const custList = custRaw ? JSON.parse(custRaw) : [];
+      const cleanPhone = (newOrder.buyer_phone || newOrder.recipient_phone || "").replace(/\s+/g, "");
+      if (cleanPhone) {
+        const existingIdx = custList.findIndex(
+          (c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone
+        );
+        if (existingIdx >= 0) {
+          custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 0) + 1;
+          custList[existingIdx].totalSpent =
+            (custList[existingIdx].totalSpent || 0) + (newOrder.final_amount || 0);
+          if (newOrder.buyer_name) custList[existingIdx].fullName = newOrder.buyer_name;
+          if (newOrder.buyer_email) custList[existingIdx].email = newOrder.buyer_email;
+          if (newOrder.address_detail) {
+            custList[existingIdx].address = `${newOrder.address_detail}, ${newOrder.district || ""}, ${newOrder.province || ""}`;
+          }
+        } else {
+          custList.unshift({
+            customerId: `cust-${Date.now()}`,
+            fullName: newOrder.buyer_name || newOrder.recipient_name || "Khách hàng",
+            phone: cleanPhone,
+            email: newOrder.buyer_email || "",
+            address: `${newOrder.address_detail || ""}, ${newOrder.district || ""}, ${newOrder.province || ""}`,
+            totalOrders: 1,
+            totalSpent: newOrder.final_amount || 0,
+            createdAt: newOrder.created_at,
+          });
+        }
+        localStorage.setItem("gieomo_customers", JSON.stringify(custList));
+        window.dispatchEvent(new Event("gieomo_customers_updated"));
+      }
+    } catch {
+      // ignore
+    }
+
+    if (newOrder.payment_method === "banking") {
+      const payments = getStoredPayments();
+      const newPay: PaymentRecord = {
+        paymentId: `pay-${newOrder.order_id}`,
+        orderCode: newOrder.order_code,
+        amount: newOrder.final_amount,
+        paymentMethod: "banking",
+        transactionCode: `MB-${Math.floor(1000000 + Math.random() * 9000000)}`,
+        status: newOrder.payment_status === "paid" ? "paid" : "pending",
+        createdAt: "Vừa xong",
+      };
+      const updatedPayments = [
+        newPay,
+        ...payments.filter((p: any) => p.orderCode !== newOrder.order_code),
+      ];
+      localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
+    }
+
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error caching server order", e);
+  }
+}
+
+// ============================================================
+// Batch 2D — Hủy đơn server-confirmed (confirm-first).
+//
+// Root cause đã sửa: trước đây updateStoredOrderStatus(orderId, "cancelled")
+// (1) chốt localStorage cancelled + hoàn kho local NGAY, (2) fire-and-forget
+// PATCH không đọc res.ok/body → 404/409/500/network/malformed đều thành
+// "thành công" local, (3) gửi order_id local (ord-<ts>) trong trường orderId
+// — route PATCH diễn giải non-UUID thành order_code (contract M10b) →
+// not_found hoặc trúng đơn sai.
+//
+// Nhận diện server (contract route PATCH, đã pin M1/M10a/M10b):
+//   - order_id UUID (đơn website checkout map từ result.orderId) → trường orderId;
+//   - id local KHÔNG phải UUID (POS/admin-create/sale-create sinh ord-<ts>) →
+//     trường orderCode với order_code — KHÔNG BAO GIỜ gửi id local qua orderId.
+// Local-only order không có mapping server → server trả 404 → fail rõ,
+// KHÔNG chốt cancelled, KHÔNG hoàn kho local.
+//
+// Batch 2D.1 — idempotency cục bộ:
+//   - in-flight map: hai lần hủy cùng đơn trong CÙNG tab → chung một promise
+//     (một PATCH, một lần áp dụng local).
+//   - Journal gieomo_cancel_journal: ghi TRƯỚC mọi ghi cục bộ, xóa SAU khi
+//     flip + hoàn kho đã ghi xong; recovery (recoverPendingLocalCancels)
+//     hoàn tất thao tác còn dang dở sau crash.
+//   - Stamp local_cancel_restored_orders ghi CÙNG setItem gieomo_products với
+//     số lượng hoàn kho → recovery phân biệt "đã hoàn" / "chưa hoàn" mà
+//     không cần transaction đa khóa (localStorage không nguyên tử đa khóa).
+// ============================================================
+
+const UUID_ORDER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type CancelOrderResult =
+  | { success: true; alreadyCancelled: boolean }
+  | {
+      success: false;
+      outcome:
+        | "not_found"
+        | "not_cancellable"
+        | "server_error"
+        | "network_error"
+        | "malformed_response"
+        // 2D.1R: server đã xác nhận nhưng áp dụng cục bộ (journal/flip/hoàn kho)
+        // thất bại → không được báo thành công khi local chưa hoàn thành.
+        | "local_apply_failed";
+      error: string;
+      retryable: boolean;
+      currentStatus?: string | null;
+    };
+
+function findLocalOrderByIdOrCode(orderIdOrCode: string): Order | undefined {
+  return getStoredOrders().find(
+    (o) => o.order_id === orderIdOrCode || o.order_code === orderIdOrCode
+  );
+}
+
+// ------------------------------------------------------------
+// Batch 2D.1 — Journal + stamp + lock chống double-restore.
+//
+// localStorage KHÔNG nguyên tử đa khóa → không thể đặt flip đơn và
+// hoàn kho trong "1 transaction". Thiết kế bù lại:
+//   1. Journal (gieomo_cancel_journal): ghi TRƯỚC mọi thay đổi cục bộ,
+//      CHỈ sau khi server đã xác nhận cancelled/already_cancelled.
+//      Entry = danh tính đơn. Journal còn entry = thao tác còn dang dở.
+//   2. Stamp (local_cancel_restored_orders trên variant): ghi CÙNG một
+//      setItem gieomo_products với số lượng kho đã hoàn → chứng cứ "đã
+//      hoàn kho" nguyên tử theo khóa. Recovery đọc stamp để KHÔNG hoàn
+//      kho lần hai sau crash giữa products-write và journal-remove.
+//   3. Web Locks (navigator.locks) khi trình duyệt hỗ trợ: chặn hai
+//      TAB đồng thời thao tác trên cùng đơn. Không có locks (Node test
+//      / trình duyệt cũ) → fallback đồng nhất tab; GIỚI HẠN XỨC TAB
+//      được ghi nhận trong báo cáo, không tuyên bố giải quyết hoàn toàn.
+// ------------------------------------------------------------
+const CANCEL_JOURNAL_KEY = "gieomo_cancel_journal";
+const CANCEL_RESTORE_STAMP = "local_cancel_restored_orders";
+
+type CancelJournalEntry = {
+  orderId: string;
+  orderCode: string | null;
+  createdAt: string;
+};
+
+function readCancelJournal(): Record<string, CancelJournalEntry> {
+  try {
+    const raw = localStorage.getItem(CANCEL_JOURNAL_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+// Ghi journal. Trả về true = đã lưu bền (setItem/removeItem thành công);
+// false = THẤT BẠI (quota / localStorage bị chặn). Caller quyết định hành vi:
+// ghi TRƯỚC mutation phải fail-closed; dọn journal là best-effort.
+function writeCancelJournal(journal: Record<string, CancelJournalEntry>): boolean {
+  try {
+    if (Object.keys(journal).length === 0) {
+      localStorage.removeItem(CANCEL_JOURNAL_KEY);
+    } else {
+      localStorage.setItem(CANCEL_JOURNAL_KEY, JSON.stringify(journal));
+    }
+    return true;
+  } catch (e) {
+    console.warn("[cancelJournal] Không ghi được journal:", e);
+    return false;
+  }
+}
+
+// Chain per-key cho fallback mutex in-tab (khi thiếu navigator.locks hoặc
+// locks API thất bại). Mỗi key giữ promise "settle khi holder hiện tại xong";
+// acquirer kế tiếp chain onto nó → tuần tự hóa async, giữ khóa xuyên suốt
+// await. Wrapper map cả fulfill+reject → predecessor lỗi KHÔNG chặn acquirer sau.
+const cancelLockChains = new Map<string, Promise<unknown>>();
+
+/**
+ * Khóa thao tác hủy/hoàn kho theo đơn (Batch 2D.1R).
+ * - navigator.locks (Web Locks) khi khả dụng: chặn hai TAB đồng thời. Nếu API
+ *   tồn tại nhưng acquire/thực thi thất bại → warn + fallback mutex in-tab
+ *   (fn được bọc nên lock-level error ≠ fn-level error: fn ném sẽ propagate
+ *   và KHÔNG bị chạy lại lần hai qua fallback).
+ * - Fallback: async mutex in-tab theo chain promise — tuần tự hóa async thật
+ *   sự, giữ khóa xuyên suốt await, nhả khóa khi settle (kể cả khi fn reject).
+ * GIỚI HẠN: mutex in-tab KHÔNG đảm bảo atomicity cross-tab khi thiếu Web Locks.
+ */
+export async function withCancelLock<T>(orderId: string, fn: () => T | Promise<T>): Promise<T> {
+  const key = `gieomo-cancel-${orderId}`;
+  const locks = (globalThis as any)?.navigator?.locks;
+  if (locks?.request) {
+    let fnValue: T | undefined;
+    let fnFailed = false;
+    let fnError: unknown;
+    let lockFailed = false;
+    let lockError: unknown;
+    let unexpected: string | null = null;
+    try {
+      const outcome = await locks.request(key, async () => {
+        try {
+          fnValue = await fn();
+          return "fn-ok";
+        } catch (e) {
+          fnFailed = true;
+          fnError = e;
+          return "fn-err";
+        }
+      });
+      if (outcome === "fn-ok") return fnValue as T;
+      if (outcome !== "fn-err") unexpected = String(outcome);
+    } catch (e) {
+      lockFailed = true;
+      lockError = e;
+    }
+    // fn lỗi THẬT → propagate, không fallback (tránh chạy lại fn đã mutate).
+    if (fnFailed) throw fnError;
+    if (lockFailed) {
+      console.warn("[cancelLock] navigator.locks acquire thất bại, fallback mutex in-tab:", lockError);
+    } else if (unexpected !== null) {
+      console.warn("[cancelLock] navigator.locks outcome bất ngờ, fallback mutex in-tab:", unexpected);
+    }
+    // lockFailed / unexpected → rơi xuống fallback mutex bên dưới.
+  }
+
+  // --- Fallback async mutex in-tab (chain promise) ---
+  const prev = cancelLockChains.get(key) ?? Promise.resolve();
+  const run: Promise<T> = prev.then(() => fn());
+  // "Nhả khóa": wrapper settle cả fulfill+reject → acquirer kế tiếp chain
+  // onto wrapper và chạy ngay khi run settle, kể cả khi run reject.
+  cancelLockChains.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined
+    )
+  );
+  try {
+    return await run; // giữ khóa xuyên suốt await; lỗi fn propagate cho caller
+  } finally {
+    // release đã đảm bảo bởi cancelLockChains.set ở trên (wrapper resolve cả
+    // khi run reject → không chặn acquirer sau). finally trả control sau khi khóa nhả.
+  }
+}
+
+function flipOrderRowToCancelled(orderId: string, orderCode: string | null): void {
+  const orders = getStoredOrders();
+  const nowIso = new Date().toISOString();
+  const updated = orders.map((o: any) => {
+    if (o.order_id === orderId || (orderCode && o.order_code === orderCode)) {
+      const timestamps = { ...(o.status_timestamps || {}) };
+      timestamps["cancelled"] = nowIso;
+      return {
+        ...o,
+        order_status: "cancelled" as const,
+        status_timestamps: timestamps,
+        cancelled_at: nowIso,
+        updated_at: nowIso,
+      };
+    }
+    return o;
+  });
+  cachedOrders = updated;
+  localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+  window.dispatchEvent(new Event("gieomo_orders_updated"));
+}
+
+/**
+ * Hoàn kho LOCAL idempotent theo stamp. Đọc gieomo_products tươi từ
+ * localStorage (không dùng module cache — bớt stale khi đa tab), bỏ qua
+ * dòng variant đã có stamp order_id này, ghi lại MỘT lần + stamp mới.
+ * Ném lỗi (ví dụ quota) để caller giữ journal → recovery hoàn tất sau.
+ */
+function restoreLocalStockForCancelledOrder(order: Order): void {
+  if (!order.items || order.items.length === 0) return;
+  const raw = localStorage.getItem("gieomo_products");
+  const prods: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+  const targetWhId = order.warehouse_id || "wh-1";
+  let prodsChanged = false;
+  const restored = prods.map((prod) => {
+    let prodModified = false;
+    const updatedVariants = prod.variants?.map((v: any) => {
+      const matchingItem = order.items?.find(
+        (it: any) =>
+          it.product_id === prod.product_id &&
+          (it.variant_id ? it.variant_id === v.variant_id : true)
+      );
+      if (!matchingItem) return v;
+      const stamps: string[] = Array.isArray(v[CANCEL_RESTORE_STAMP])
+        ? v[CANCEL_RESTORE_STAMP]
+        : [];
+      if (stamps.includes(order.order_id)) return v; // đã hoàn kho cho đơn này
+      prodModified = true;
+      prodsChanged = true;
+      const qty = matchingItem.quantity || 1;
+      const stocks = { ...(v.warehouse_stocks || {}) };
+      let wh1 = v.stock_warehouse_1 ?? 0;
+      let wh2 = v.stock_warehouse_2 ?? 0;
+      if (targetWhId === "wh-1") wh1 += qty;
+      else if (targetWhId === "wh-2") wh2 += qty;
+      stocks[targetWhId] = (stocks[targetWhId] ?? 0) + qty;
+      return {
+        ...v,
+        stock: (v.stock || 0) + qty,
+        stock_warehouse_1: wh1,
+        stock_warehouse_2: wh2,
+        warehouse_stocks: stocks,
+        [CANCEL_RESTORE_STAMP]: [...stamps, order.order_id],
+      };
+    });
+    return prodModified ? { ...prod, variants: updatedVariants } : prod;
+  });
+  if (prodsChanged) {
+    localStorage.setItem("gieomo_products", JSON.stringify(restored));
+    cachedProducts = restored;
+    window.dispatchEvent(new Event("gieomo_products_updated"));
+  }
+}
+
+type ApplyCancelOutcome = { ok: true } | { ok: false; error: string; retryable: boolean };
+
+/**
+ * Áp dụng hậu quả cục bộ sau khi server ĐÃ xác nhận hủy (Batch 2D.1).
+ * FAIL-CLOSED (2D.1R): journal phải ghi thành công TRƯỚC mọi mutation
+ * (flip/hoàn kho). Journal write thất bại → DỪNG, không flip, không hoàn kho,
+ * trả lỗi retryable (server đã hủy; retry sẽ qua already_cancelled và apply
+ * lại idempotent).
+ * Idempotent: journal còn entry → hoàn tất; journal vắng + local đã
+ * cancelled → đã áp dụng trước đó (hoặc legacy) → ok (C10).
+ * Nếu flip/restore ném lỗi SAU khi journal đã ghi → GIỮ journal để
+ * recoverPendingCancelJournals hoàn tất đúng một lần (stamp chặn hoàn kho đôi);
+ * trả lỗi retryable vì local chưa hoàn thành đầy đủ.
+ */
+function applyConfirmedCancel(order: Order): ApplyCancelOutcome {
+  const journal = readCancelJournal();
+  const hasJournal = Boolean(journal[order.order_id]);
+  if (order.order_status === "cancelled" && !hasJournal) {
+    return { ok: true }; // đã áp dụng trước đó (C10)
+  }
+
+  // FAIL-CLOSED: journal phải được lưu BỀN trước mọi mutation cục bộ.
+  if (!hasJournal) {
+    const nextJournal: Record<string, CancelJournalEntry> = {
+      ...journal,
+      [order.order_id]: {
+        orderId: order.order_id,
+        orderCode: order.order_code ?? null,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    if (!writeCancelJournal(nextJournal)) {
+      return {
+        ok: false,
+        retryable: true,
+        error:
+          "Không ghi được journal hủy đơn (localStorage đầy hoặc bị chặn) — đơn đã hủy trên máy chủ nhưng CHƯA cập nhật tình trạng/kho cục bộ. Hãy thử lại.",
+      };
+    }
+  }
+
+  if (order.order_status !== "cancelled") {
+    try {
+      flipOrderRowToCancelled(order.order_id, order.order_code ?? null);
+    } catch (e) {
+      console.warn("[cancel] Flip trạng thái cancelled thất bại — journal giữ lại để phục hồi:", e);
+      return {
+        ok: false,
+        retryable: true,
+        error:
+          "Đã hủy trên máy chủ nhưng chưa cập nhật được tình trạng đơn cục bộ — journal còn đó, sẽ tự phục hồi. Hãy thử lại.",
+      };
+    }
+  }
+
+  try {
+    restoreLocalStockForCancelledOrder(order);
+  } catch (e) {
+    console.warn("[cancel] Hoàn kho cục bộ thất bại — journal giữ lại để phục hồi:", e);
+    return {
+      ok: false,
+      retryable: true,
+      error:
+        "Đã hủy trên máy chủ nhưng chưa hoàn kho cục bộ được — journal còn đó, sẽ tự phục hồi. Hãy thử lại.",
+    };
+  }
+
+  // Dọn journal — best-effort: dọn thất bại → journal giữ lại + stamp chứng
+  // minh "đã hoàn" → recovery chạy lại sẽ no-op (idempotent). An toàn.
+  const fresh = readCancelJournal();
+  delete fresh[order.order_id];
+  writeCancelJournal(fresh);
+  return { ok: true };
+}
+
+let hasAttemptedCancelRecovery = false;
+
+/**
+ * Batch 2D.1 — hoàn tất các hủy đơn server-confirmed còn dang dở ở lần
+ * khởi động trước (journal còn entry). Idempotent theo stamp; chạy lại
+ * bao nhiêu lần cũng an toàn. Đọc/ghi localStorage tươi, cập nhật cache.
+ */
+export function recoverPendingCancelJournals(): void {
+  if (typeof window === "undefined") return;
+  let journal: Record<string, CancelJournalEntry>;
+  try {
+    journal = readCancelJournal();
+  } catch {
+    return;
+  }
+  const entries = Object.values(journal);
+  if (entries.length === 0) return;
+
+  let ordersRaw: string | null = null;
+  let orders: Order[] = [];
+  let ordersReadOk = false;
+  try {
+    ordersRaw = localStorage.getItem("gieomo_orders");
+    orders = ordersRaw ? JSON.parse(ordersRaw) : [];
+    ordersReadOk = true;
+  } catch {
+    orders = [];
+  }
+
+  let productsRaw: string | null = null;
+  let prods: ExtendedProduct[] = [];
+  let productsReadOk = false;
+  try {
+    productsRaw = localStorage.getItem("gieomo_products");
+    prods = productsRaw ? JSON.parse(productsRaw) : [];
+    productsReadOk = true;
+  } catch {
+    prods = [];
+  }
+
+  let ordersChanged = false;
+  let productsChanged = false;
+  const nowIso = new Date().toISOString();
+
+  for (const entry of entries) {
+    const row = orders.find(
+      (o) => o.order_id === entry.orderId || (entry.orderCode && o.order_code === entry.orderCode)
+    );
+    if (!row) {
+      // Đơn không còn trên máy này — server là nguồn sự thật, KHÔNG bịa tồn kho.
+      console.warn("[cancelRecovery] Không tìm thấy đơn local cho journal", entry.orderId);
+      delete journal[entry.orderId];
+      continue;
+    }
+    if (row.order_status !== "cancelled") {
+      const timestamps = { ...(row.status_timestamps || {}) };
+      timestamps["cancelled"] = nowIso;
+      const idx = orders.findIndex((o) => o.order_id === row.order_id);
+      orders[idx] = {
+        ...row,
+        order_status: "cancelled",
+        status_timestamps: timestamps,
+        cancelled_at: nowIso,
+        updated_at: nowIso,
+      } as Order;
+      ordersChanged = true;
+    }
+    // Hoàn kho idempotent theo stamp (cùng matcher như apply).
+    const targetWhId = row.warehouse_id || "wh-1";
+    const prodById = new Map(prods.map((p) => [p.product_id, p]));
+    for (const prod of prods) {
+      if (!prod.variants) continue;
+      let prodModified = false;
+      const updatedVariants = prod.variants.map((v: any) => {
+        const matchingItem = row.items?.find(
+          (it: any) =>
+            it.product_id === prod.product_id &&
+            (it.variant_id ? it.variant_id === v.variant_id : true)
+        );
+        if (!matchingItem) return v;
+        const stamps: string[] = Array.isArray(v[CANCEL_RESTORE_STAMP])
+          ? v[CANCEL_RESTORE_STAMP]
+          : [];
+        if (stamps.includes(row.order_id)) return v;
+        prodModified = true;
+        productsChanged = true;
+        const qty = matchingItem.quantity || 1;
+        const stocks = { ...(v.warehouse_stocks || {}) };
+        let wh1 = v.stock_warehouse_1 ?? 0;
+        let wh2 = v.stock_warehouse_2 ?? 0;
+        if (targetWhId === "wh-1") wh1 += qty;
+        else if (targetWhId === "wh-2") wh2 += qty;
+        stocks[targetWhId] = (stocks[targetWhId] ?? 0) + qty;
+        return {
+          ...v,
+          stock: (v.stock || 0) + qty,
+          stock_warehouse_1: wh1,
+          stock_warehouse_2: wh2,
+          warehouse_stocks: stocks,
+          [CANCEL_RESTORE_STAMP]: [...stamps, row.order_id],
+        };
+      });
+      if (prodModified) {
+        prodById.set(prod.product_id, { ...prod, variants: updatedVariants });
+      }
+    }
+    prods = Array.from(prodById.values());
+    delete journal[entry.orderId];
+  }
+
+  try {
+    if (ordersChanged) {
+      localStorage.setItem("gieomo_orders", JSON.stringify(orders));
+    }
+    if (productsChanged) {
+      localStorage.setItem("gieomo_products", JSON.stringify(prods));
+    }
+    // Đồng bộ module cache với snapshot vừa đọc/ghi — kể cả khi không đổi,
+    // cache cũ có thể lệch với storage (test/đơn vị seed trực tiếp).
+    if (ordersReadOk) cachedOrders = orders;
+    if (productsReadOk) cachedProducts = prods;
+    writeCancelJournal(journal);
+    if (ordersChanged || productsChanged) {
+      window.dispatchEvent(new Event("gieomo_orders_updated"));
+      window.dispatchEvent(new Event("gieomo_products_updated"));
+    }
+  } catch (e) {
+    console.warn("[cancelRecovery] Ghi localStorage thất bại (journal giữ lại):", e);
+  }
+}
+
+/**
+ * Hủy đơn có xác nhận server (Batch 2D). Chỉ chốt local + hoàn kho local
+ * sau khi response thể hiện rõ outcome cancelled/already_cancelled.
+ * 404 / 409 not_cancellable / 500 / malformed / network → fail rõ, local
+ * giữ nguyên. already_cancelled là end-state thành công idempotent theo
+ * contract route (M2: success=true + alreadyCancelled=true).
+ *
+ * Batch 2D.1 — chống concurrent double-restore trong cùng tab: hai lời
+ * gọi cho CÙNG đơn (dù input là id hay code) dùng chung MỘT promise
+ * (in-flight map) → một PATCH, một lần áp dụng local. Sau server confirm
+ * luôn đọc lại row TƯƠI từ store (không tin snapshot đầu hàm) và áp dụng
+ * dưới Web Locks (nếu có) + journal/stamp idempotent.
+ */
+const inFlightCancels = new Map<string, Promise<CancelOrderResult>>();
+
+export async function cancelStoredOrder(orderIdOrCode: string): Promise<CancelOrderResult> {
+  const localOrder = findLocalOrderByIdOrCode(orderIdOrCode);
+
+  // Nhận diện server: UUID order_id → trường orderId; ngược lại → trường
+  // orderCode. KHÔNG gửi id local (ord-...) qua orderId — route sẽ hiểu
+  // nhầm thành order_code (p_order_code UPPER) và có thể trúng đơn khác.
+  const uuidCandidate = localOrder?.order_id || orderIdOrCode;
+  const identity: Record<string, string> = UUID_ORDER_ID_RE.test(uuidCandidate.trim())
+    ? { orderId: uuidCandidate.trim() }
+    : {
+        orderCode: (localOrder?.order_code || orderIdOrCode).trim().toUpperCase(),
+      };
+
+  // Khóa đồng bộ theo DỊNH DANH SERVER đã resolve — gọi lại qua id hay
+  // code của cùng đơn đều gặp nhau tại một promise.
+  const flightKey = identity.orderId
+    ? `orderId:${identity.orderId}`
+    : `orderCode:${identity.orderCode}`;
+  const existing = inFlightCancels.get(flightKey);
+  if (existing) return existing;
+
+  const flight = performCancelStoredOrder(identity, localOrder).finally(() => {
+    inFlightCancels.delete(flightKey);
+  });
+  inFlightCancels.set(flightKey, flight);
+  return flight;
+}
+
+async function performCancelStoredOrder(
+  identity: Record<string, string>,
+  localOrder: Order | undefined
+): Promise<CancelOrderResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ ...identity, orderStatus: "cancelled" }),
+    });
+  } catch (err: any) {
+    return {
+      success: false,
+      outcome: "network_error",
+      error: err?.message || "Mất kết nối khi hủy đơn — kết quả không xác định, đơn chưa bị hủy.",
+      retryable: true,
+    };
+  }
+
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== "object" || typeof body.success !== "boolean") {
+    return {
+      success: false,
+      outcome: "malformed_response",
+      error: `Phản hồi không hợp lệ từ máy chủ (HTTP ${res.status}) — đơn chưa bị hủy.`,
+      retryable: true,
+    };
+  }
+
+  if (
+    res.ok &&
+    body.success === true &&
+    (body.outcome === "cancelled" || body.outcome === "already_cancelled")
+  ) {
+    const alreadyCancelled = body.outcome === "already_cancelled" || body.alreadyCancelled === true;
+    // Server đã xác nhận. Đọc lại row TƯƠI (snapshot đầu hàm có thể cũ
+    // khi có request khác vừa áp dụng) và áp dụng idempotent dưới lock.
+    const target = findLocalOrderByIdOrCode(localOrder?.order_id || String(identity.orderId || identity.orderCode || ""));
+    if (target) {
+      const applyOutcome = await withCancelLock(target.order_id, () => applyConfirmedCancel(target));
+      // 2D.1R: server đã hủy nhưng áp dụng cục bộ THẤT BẠI → không được báo
+      // thành công. Trả lỗi retryable để user thử lại (idempotent).
+      if (!applyOutcome.ok) {
+        return {
+          success: false,
+          outcome: "local_apply_failed",
+          error: applyOutcome.error,
+          retryable: applyOutcome.retryable,
+        };
+      }
+    }
+    return { success: true, alreadyCancelled };
+  }
+
+  if (res.status === 404 && body.outcome === "not_found") {
+    return {
+      success: false,
+      outcome: "not_found",
+      error: body.error || "Đơn hàng không tồn tại trên máy chủ — không thể hủy.",
+      retryable: false,
+    };
+  }
+  if (res.status === 409 && body.outcome === "not_cancellable") {
+    return {
+      success: false,
+      outcome: "not_cancellable",
+      error: body.error || "Trạng thái đơn hiện tại không cho phép hủy.",
+      retryable: false,
+      currentStatus: body.currentStatus ?? null,
+    };
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      outcome: "server_error",
+      error: body.error || `Lỗi máy chủ (HTTP ${res.status}) khi hủy đơn.`,
+      retryable: body.retryable !== false,
+    };
+  }
+  // HTTP 2xx nhưng success !== true / outcome lạ — không bao giờ coi là thành công.
+  return {
+    success: false,
+    outcome: "malformed_response",
+    error: body.error || `Kết quả không xác định từ máy chủ (HTTP ${res.status}) — đơn chưa bị hủy.`,
+    retryable: true,
+  };
+}
+
+export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus): void {
+  if (typeof window === "undefined") return;
+  // Batch 2D — hủy đơn đi nhánh confirm-first (cancelStoredOrder): không
+  // optimistic, không hoàn kho trước server. Các trạng thái khác giữ nguyên
+  // hành vi optimistic như cũ.
+  if (newStatus === "cancelled") {
+    void cancelStoredOrder(orderId).then((res) => {
+      if (!res.success) {
+        console.warn("[updateStoredOrderStatus] cancel rejected by server:", res);
+      }
+    });
+    return;
+  }
+  try {
     const orders = getStoredOrders();
     const nowIso = new Date().toISOString();
     const updated = orders.map((o: any) => {
@@ -383,7 +1136,6 @@ export async function updateStoredOrderStatus(
           status_timestamps: timestamps,
           confirmed_at: newStatus === "confirmed" ? nowIso : o.confirmed_at,
           completed_at: newStatus === "completed" ? nowIso : o.completed_at,
-          cancelled_at: o.cancelled_at,
           updated_at: nowIso,
         };
       }
@@ -405,24 +1157,30 @@ export async function updateStoredOrderStatus(
     });
 
     window.dispatchEvent(new Event("gieomo_orders_updated"));
-    return { ok: true };
   } catch (e) {
     console.error("Error updating order status", e);
-    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
-export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
+// Batch 1 — updateStoredPaymentStatus ĐÃ XÓA: hàm cũ fire-and-forget
+// PATCH /api/orders {paymentStatus} bypass payment pipeline (ghi paid không
+// có payment record). Server đã reject own-property paymentStatus/
+// payment_status bằng 400. Đồng bộ trạng thái thanh toán local dùng
+// syncStoredPaymentStatusLocal (CHỈ local, không PATCH); xác nhận thanh toán
+// đi qua /api/orders/payment (confirmPaymentServerFirst).
+
+/**
+ * Batch 3A — đồng bộ payment_status vào localStorage/CHỈ local, KHÔNG gửi
+ * PATCH server. Dùng sau khi server đã xác nhận qua /api/orders/payment
+ * (xác nhận mark-paid server-first) — server đã ghi xong, ta chỉ cập nhật
+ * cache cục bộ để UI nhất quán, tránh fire-and-forget PATCH bypass pipeline.
+ */
+export function syncStoredPaymentStatusLocal(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
-    let justPaidOrder: Order | null = null;
-
     const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
-        if (o.payment_status !== "paid" && paymentStatus === "paid") {
-          justPaidOrder = { ...o, payment_status: paymentStatus };
-        }
         return {
           ...o,
           payment_status: paymentStatus,
@@ -431,28 +1189,46 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
       }
       return o;
     });
-
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
-
-    // Automatic push notifications are disabled
-
-
-    // Sync payment status to Supabase
-    fetch("/api/orders", {
-      method: "PATCH",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        orderId: orderCodeOrId,
-        paymentStatus,
-      }),
-    }).catch((err) => {
-      console.warn("[updateStoredPaymentStatus] Failed to sync payment status to Supabase:", err);
-    });
-
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
-    console.error("Error updating payment status", e);
+    console.error("Error syncing payment status locally", e);
+  }
+}
+
+/**
+ * Batch 3A.2 — đồng bộ order_status vào localStorage/CHỈ local, KHÔNG gửi
+ * PATCH server. Dùng sau khi server đã xác nhận qua /api/orders/payment
+ * (create/POS confirm-paid server-first) — server đã ghi xong, ta chỉ cập
+ * nhật cache cục bộ để UI nhất quán, tránh fire-and-forget PATCH bypass
+ * pipeline (updateStoredOrderStatus gửi PATCH thừa).
+ */
+export function syncStoredOrderStatusLocal(orderCodeOrId: string, orderStatus: OrderStatus): void {
+  if (typeof window === "undefined") return;
+  try {
+    const orders = getStoredOrders();
+    const nowIso = new Date().toISOString();
+    const updated = orders.map((o: any) => {
+      if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
+        const timestamps = { ...((o as any).status_timestamps || {}) };
+        timestamps[orderStatus] = nowIso;
+        return {
+          ...o,
+          order_status: orderStatus,
+          status_timestamps: timestamps,
+          confirmed_at: orderStatus === "confirmed" ? nowIso : o.confirmed_at,
+          completed_at: orderStatus === "completed" ? nowIso : o.completed_at,
+          updated_at: nowIso,
+        };
+      }
+      return o;
+    });
+    cachedOrders = updated;
+    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
+    window.dispatchEvent(new Event("gieomo_orders_updated"));
+  } catch (e) {
+    console.error("Error syncing order status locally", e);
   }
 }
 
@@ -499,26 +1275,56 @@ export function updateStoredDeliveryStatus(orderCodeOrId: string, deliveryStatus
   }
 }
 
-export function updateStoredOrderNotes(orderId: string, notes: { customer_note?: string; internal_note?: string }): void {
-  if (typeof window === "undefined") return;
+export type OrderDetailsResult =
+  | { success: true; order: Pick<Order, "internal_note" | "assigned_shipper_id" | "updated_at"> }
+  | { success: false; error: string };
+
+// Notes and assignment share one server write so a failed save cannot apply
+// one field locally while rejecting the other. Customer notes are not editable here.
+export async function updateStoredOrderDetails(
+  orderId: string,
+  changes: { internalNote?: string; assignedShipperId?: string | null }
+): Promise<OrderDetailsResult> {
+  if (typeof window === "undefined") return { success: false, error: "Không thể lưu ngoài trình duyệt." };
   try {
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ orderId, ...changes }),
+    });
+    const data = await response.json();
+    if (!response.ok || data?.success !== true) {
+      return { success: false, error: data?.error || "Không thể lưu ghi chú hoặc người giao hàng." };
+    }
+    const saved = data.order;
+    if (!saved || !(saved.internal_note === null || typeof saved.internal_note === "string") ||
+      !(saved.assigned_shipper_id === null || typeof saved.assigned_shipper_id === "string") ||
+      typeof saved.updated_at !== "string") {
+      return { success: false, error: "Phản hồi lưu đơn hàng không hợp lệ. Vui lòng tải lại đơn." };
+    }
     const orders = getStoredOrders();
     const updated = orders.map((o) =>
       o.order_id === orderId || o.order_code === orderId
         ? {
           ...o,
-          customer_note: notes.customer_note !== undefined ? notes.customer_note : o.customer_note,
-          internal_note: notes.internal_note !== undefined ? notes.internal_note : o.internal_note,
-          updated_at: new Date().toISOString(),
+          internal_note: saved.internal_note,
+          assigned_shipper_id: saved.assigned_shipper_id,
+          assigned_shipper_name: saved.assigned_shipper_id === o.assigned_shipper_id ? o.assigned_shipper_name : null,
+          updated_at: saved.updated_at,
         }
         : o
     );
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_orders_updated"));
-  } catch (e) {
-    console.error("Error updating order notes", e);
+    return { success: true, order: { internal_note: saved.internal_note, assigned_shipper_id: saved.assigned_shipper_id, updated_at: saved.updated_at } };
+  } catch {
+    return { success: false, error: "Lỗi kết nối hoặc lưu dữ liệu — vui lòng tải lại và thử lại." };
   }
+}
+
+export async function updateStoredOrderNotes(orderId: string, notes: { internal_note: string }): Promise<OrderDetailsResult> {
+  return updateStoredOrderDetails(orderId, { internalNote: notes.internal_note });
 }
 
 export function updateStoredPaymentProof(orderId: string, proof: string): void {
@@ -552,27 +1358,8 @@ export function updateStoredPaymentProof(orderId: string, proof: string): void {
   }
 }
 
-export function updateStoredOrderWarehouse(orderId: string, warehouseId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const orders = getStoredOrders();
-    const warehouseName = warehouseId === "wh-2" ? "Kho Cơ Sở 2 (Thủ Đức)" : "Kho Trung Tâm (Quận 3)";
-    const updated = orders.map((o) =>
-      o.order_id === orderId || o.order_code === orderId
-        ? {
-          ...o,
-          warehouse_id: warehouseId,
-          warehouse_name: warehouseName,
-          updated_at: new Date().toISOString(),
-        }
-        : o
-    );
-    cachedOrders = updated;
-    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
-    window.dispatchEvent(new Event("gieomo_orders_updated"));
-  } catch (e) {
-    console.error("Error updating order warehouse", e);
-  }
+export function updateStoredOrderWarehouse(_orderId: string, _warehouseId: string): OrderDetailsResult {
+  return { success: false, error: "Chưa hỗ trợ lưu kho điều phối cho đơn hàng." };
 }
 
 export function getStoredPayments(): PaymentRecord[] {
@@ -608,7 +1395,7 @@ export function getStoredPayments(): PaymentRecord[] {
             transactionCode:
               (o as any).transaction_code ||
               `MB-${o.order_code.replace(/\D/g, "") || Math.floor(1000000 + Math.random() * 9000000)}`,
-            status: o.payment_status === "paid" ? "paid" : "pending",
+            status: o.payment_status === "paid" ? "paid" : o.payment_status === "failed" ? "failed" : "pending",
             createdAt: o.created_at
               ? new Date(o.created_at).toLocaleString("vi-VN", {
                   hour: "2-digit",
@@ -620,16 +1407,20 @@ export function getStoredPayments(): PaymentRecord[] {
               : "Vừa xong",
           });
         } else {
-          // Keep synchronized with order payment status
-          if (o.payment_status === "paid") {
-            existing.status = "paid";
-          }
+// Keep synchronized with order payment status
+           if (o.payment_status === "paid") {
+             existing.status = "paid";
+           } else if (o.payment_status === "failed") {
+             existing.status = "failed";
+           }
           existing.amount = o.final_amount;
         }
       }
     });
 
     const combined = Array.from(paymentMap.values()).sort((a, b) => {
+      if (a.status === "failed" && b.status !== "failed") return -1;
+      if (b.status === "failed" && a.status !== "failed") return 1;
       if (a.status === "pending" && b.status === "paid") return -1;
       if (a.status === "paid" && b.status === "pending") return 1;
       return 0;
@@ -659,7 +1450,10 @@ export function approveStoredPayment(paymentId: string): void {
     localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
 
     if (approvedOrderCode) {
-      updateStoredPaymentStatus(approvedOrderCode, "paid");
+      // Batch 3A — server ĐÃ xác nhận qua /api/orders/payment TRƯỚC khi hàm
+      // này được gọi (xem admin/payments/page.tsx handleApprove). Chỉ đồng bộ
+      // local, KHÔNG fire-and-forget PATCH (tránh bypass payment pipeline).
+      syncStoredPaymentStatusLocal(approvedOrderCode, "paid");
     }
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -912,45 +1706,6 @@ export function deleteStoredContactMessage(id: string): void {
   }
 }
 
-// === SEPAY WEBHOOK PAYMENT CONFIRMATION HELPER ===
-
-export function confirmOrderPaymentFromWebhook(orderCode: string, amount: number, transactionId: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const orders = getStoredOrders();
-    const normalizedCode = orderCode.trim().toUpperCase();
-    const target = orders.find((o) => o.order_code.toUpperCase() === normalizedCode);
-
-    if (!target) return false;
-
-    // Update order
-    updateStoredPaymentStatus(target.order_code, "paid");
-    if (target.order_status === "pending") {
-      updateStoredOrderStatus(target.order_code, "confirmed");
-    }
-
-    // Update payment record
-    const payments = getStoredPayments();
-    const newPay: PaymentRecord = {
-      paymentId: `pay-sepay-${transactionId}`,
-      orderCode: target.order_code,
-      amount: amount,
-      paymentMethod: "banking",
-      transactionCode: `SEPAY-${transactionId}`,
-      status: "paid",
-      createdAt: new Date().toLocaleString("vi-VN"),
-    };
-    localStorage.setItem("gieomo_payments", JSON.stringify([newPay, ...payments.filter((p) => p.orderCode !== target.order_code)]));
-
-    // Automatic push notifications are disabled
-    window.dispatchEvent(new Event("gieomo_orders_updated"));
-    return true;
-  } catch (e) {
-    console.error("Error confirming payment via webhook helper", e);
-    return false;
-  }
-}
-
 // === MEMBER & SHIPPER ASSIGNMENT HELPERS ===
 
 export interface StoredMember {
@@ -987,7 +1742,8 @@ export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
 
 export function syncMembersFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedMembersWithServer && !force)) return;
-  safeFetchJson<{ success: boolean; members: any[] }>("/api/members", 10000)
+  if (membersSyncInFlight) return;
+  membersSyncInFlight = safeFetchJson<{ success: boolean; members: any[] }>("/api/members", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.members)) {
         hasSyncedMembersWithServer = true;
@@ -1049,6 +1805,9 @@ export function syncMembersFromServer(force = false): void {
     })
     .catch(() => {
       // Graceful fallback to cached
+    })
+    .finally(() => {
+      membersSyncInFlight = null;
     });
 }
 
@@ -1212,7 +1971,8 @@ let lastHeartbeatSentAt = 0;
  */
 export function syncPresenceFromServer(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
-  return safeFetchJson<{ success: boolean; presence: Record<string, string> }>("/api/members/presence")
+  if (presenceSyncInFlight) return presenceSyncInFlight;
+  presenceSyncInFlight = safeFetchJson<{ success: boolean; presence: Record<string, string> }>("/api/members/presence")
     .then((data) => {
       if (data?.success && data.presence) {
         localStorage.setItem("gieomo_presence", JSON.stringify(data.presence));
@@ -1232,7 +1992,11 @@ export function syncPresenceFromServer(): Promise<void> {
         }
       }
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      presenceSyncInFlight = null;
+    });
+  return presenceSyncInFlight;
 }
 
 /**
@@ -1366,31 +2130,12 @@ export function getMemberPresence(m: StoredMember): {
   };
 }
 
-export function updateOrderShipper(
+export async function updateOrderShipper(
   orderCode: string,
   shipperId: string | null,
-  shipperName: string | null
-): void {
-  if (typeof window === "undefined") return;
-  try {
-    const orders = getStoredOrders();
-    const updated = orders.map((o) => {
-      if (o.order_code === orderCode) {
-        return {
-          ...o,
-          assigned_shipper_id: shipperId,
-          assigned_shipper_name: shipperName,
-          delivery_status: (shipperId ? "out_for_delivery" : o.delivery_status) as DeliveryStatus,
-        };
-      }
-      return o;
-    });
-    localStorage.setItem("gieomo_orders", JSON.stringify(updated));
-    cachedOrders = updated;
-    window.dispatchEvent(new Event("gieomo_orders_updated"));
-  } catch (e) {
-    console.error("Error updating shipper", e);
-  }
+  _shipperName: string | null
+): Promise<OrderDetailsResult> {
+  return updateStoredOrderDetails(orderCode, { assignedShipperId: shipperId });
 }
 
 // ==========================================
@@ -1432,22 +2177,66 @@ export function getStoredVouchers(): Voucher[] {
   }
 }
 
-async function requestVoucherMutation(path: string, init: RequestInit): Promise<void> {
+function isVoucherMutationSnapshot(value: unknown, expected: Voucher): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const voucher = value as Record<string, unknown>;
+  const numeric = (value: unknown): number =>
+    typeof value === "number" || (typeof value === "string" && value.trim() !== "")
+      ? Number(value)
+      : NaN;
+  const discount = numeric(voucher.discount_value);
+  const minimum = numeric(voucher.min_order_value);
+  const used = numeric(voucher.times_used);
+  const limit = voucher.usage_limit === null ? null : numeric(voucher.usage_limit);
+  const validDate = (value: unknown): boolean => value === null ||
+    (typeof value === "string" && Number.isFinite(Date.parse(value)));
+  return (
+    typeof voucher.voucher_id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voucher.voucher_id) &&
+    typeof voucher.code === "string" && voucher.code === expected.code.trim().toUpperCase() &&
+    typeof voucher.discount_type === "string" &&
+    ["percentage", "fixed_amount", "freeship"].includes(voucher.discount_type) &&
+    voucher.discount_type === expected.discount_type &&
+    Number.isFinite(discount) && discount > 0 &&
+    (voucher.discount_type !== "freeship" || discount === 1) &&
+    Number.isFinite(minimum) && minimum >= 0 &&
+    Number.isInteger(used) && used >= 0 &&
+    (limit === null || (Number.isInteger(limit) && limit > 0)) &&
+    typeof voucher.status === "string" &&
+    ["active", "inactive", "scheduled"].includes(voucher.status) &&
+    voucher.status === (expected.status || "active") &&
+    validDate(voucher.start_date) && validDate(voucher.end_date) &&
+    typeof voucher.created_at === "string" && Number.isFinite(Date.parse(voucher.created_at))
+  );
+}
+
+async function requestVoucherMutation(
+  path: string,
+  init: RequestInit,
+  expectedVoucher?: Voucher
+): Promise<void> {
   let response: Response;
   try {
     response = await fetch(path, init);
   } catch (err) {
     throw new Error(err instanceof Error ? err.message : "Không thể kết nối máy chủ");
   }
-  if (!response.ok) {
-    let serverError = "";
-    try {
-      const body = (await response.json()) as { error?: unknown };
-      if (typeof body?.error === "string") serverError = body.error;
-    } catch {
-      // non-JSON error body — fall back to the status code below
-    }
-    throw new Error(serverError || `Máy chủ từ chối yêu cầu (HTTP ${response.status})`);
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    if (response.ok) throw new Error("Máy chủ trả về JSON voucher không hợp lệ");
+  }
+  const result = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : null;
+  if (!response.ok || result?.success !== true) {
+    const serverError = typeof result?.error === "string" ? result.error : "";
+    throw new Error(serverError || `Máy chủ chưa xác nhận thao tác voucher (HTTP ${response.status})`);
+  }
+  if (init.method === "POST" &&
+      (!expectedVoucher || !isVoucherMutationSnapshot(result.voucher, expectedVoucher))) {
+    throw new Error("Máy chủ trả về dữ liệu voucher không hợp lệ hoặc sai mã");
   }
 }
 
@@ -1459,7 +2248,7 @@ export async function saveNewVoucher(voucher: Voucher): Promise<void> {
     method: "POST",
     headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(voucherToSave),
-  });
+  }, voucherToSave);
 
   try {
     const list = getStoredVouchers();
@@ -1483,7 +2272,7 @@ export async function updateStoredVoucher(voucher: Voucher): Promise<void> {
     method: "POST",
     headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(voucherToSave),
-  });
+  }, voucherToSave);
 
   try {
     const list = getStoredVouchers();
@@ -1533,7 +2322,12 @@ export function syncProductsFromServer(force = false): Promise<ExtendedProduct[]
     .then((data) => {
       if (data?.success && Array.isArray(data.products)) {
         hasSyncedProductsWithServer = true;
-        const merged = data.products.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        const merged = data.products
+          .map((product) => ({
+            ...product,
+            variants: sortProductVariants(product.variants),
+          }))
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         cachedProducts = merged;
         try {
           localStorage.setItem("gieomo_products", JSON.stringify(merged));
@@ -1574,7 +2368,10 @@ export function getStoredProducts(): ExtendedProduct[] {
   if (cachedProducts !== null) return cachedProducts;
   try {
     const raw = localStorage.getItem("gieomo_products");
-    const products: ExtendedProduct[] = raw ? JSON.parse(raw) : [];
+    const products: ExtendedProduct[] = (raw ? JSON.parse(raw) : []).map((product: ExtendedProduct) => ({
+      ...product,
+      variants: sortProductVariants(product.variants),
+    }));
     cachedProducts = products;
     return products;
   } catch (e) {
@@ -2488,7 +3285,7 @@ export function syncCombosFromServer(force = false): void {
       if (data?.success && Array.isArray(data.combos)) {
         hasSyncedCombosWithServer = true;
         const mapped: ExtendedCombo[] = data.combos.map((sC) => {
-          const itemThumb = sC.image_url || sC.thumbnail || "/images/products/set_combo_1.jpg";
+          const itemThumb = sC.image_url || sC.thumbnail || "/images/product-image-unavailable.svg";
           return {
             combo_id: sC.combo_id,
             name: sC.name,
@@ -2497,6 +3294,7 @@ export function syncCombosFromServer(force = false): void {
             description: sC.description || "",
             thumbnail: itemThumb,
             images: [itemThumb],
+            image_status: sC.image_status || "missing",
             status: sC.status || "active",
             featured: Boolean(sC.featured),
             sort_order: Number(sC.sort_order) || 1,
@@ -2505,6 +3303,7 @@ export function syncCombosFromServer(force = false): void {
               const p = ci.product || {};
               return {
                 product_id: ci.product_id,
+                variant_id: ci.variant_id ?? null,
                 quantity: ci.quantity || 1,
                 name: p.name || "Sản phẩm",
                 slug: p.slug || "",
@@ -2514,7 +3313,8 @@ export function syncCombosFromServer(force = false): void {
                   name: p.name || "Sản phẩm",
                   slug: p.slug || "",
                   price: Number(p.price) || 0,
-                  thumbnail: p.thumbnail || "/images/products/pounch_1.png",
+                  thumbnail: p.thumbnail || "/images/product-image-unavailable.svg",
+                  image_status: p.image_status || "missing",
                   compare_at_price: null,
                   cost_price: null,
                   status: "active" as const,
@@ -2553,8 +3353,16 @@ export function getStoredCombos(): ExtendedCombo[] {
   }
 }
 
-export function saveNewCombo(combo: ExtendedCombo): void {
-  if (typeof window === "undefined") return;
+export type ComboSyncResult = {
+  success: boolean;
+  error?: string;
+  // "http" = server trả 4xx/5xx (từ chối xác định, state cục bộ đã hoàn nguyên nếu ghi trước);
+  // "network" = không nhận được response (trạng thái server không xác định, giữ state cục bộ).
+  kind?: "http" | "network";
+};
+
+export function saveNewCombo(combo: ExtendedCombo): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return Promise.resolve({ success: true });
   try {
     const combos = getStoredCombos();
     const updated = [
@@ -2565,19 +3373,54 @@ export function saveNewCombo(combo: ExtendedCombo): void {
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
 
-    // Sync to Supabase in background
-    fetch("/api/combos", {
+    // Sync to Supabase in background — KHÔNG coi là thành công khi server từ chối.
+    return fetch("/api/combos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(combo),
-    }).catch((err) => console.warn("Could not persist combo to server:", err));
+    })
+      .then(async (res): Promise<ComboSyncResult> => {
+        if (res.ok) return { success: true };
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const error = body?.error || `HTTP ${res.status}`;
+        console.warn("Server rejected combo save:", error);
+        // Server từ chối xác định → hoàn nguyên state cục bộ về trước khi ghi
+        // (chỉ khi chưa có ghi đè khác giữa chừng) để UI không hiển thị như đã lưu.
+        if (cachedCombos === updated) {
+          try {
+            if (localStorage.getItem("gieomo_combos") === JSON.stringify(updated)) {
+              cachedCombos = combos;
+              localStorage.setItem("gieomo_combos", JSON.stringify(combos));
+              window.dispatchEvent(new Event("gieomo_combos_updated"));
+            }
+          } catch {}
+        }
+        return { success: false, error, kind: "http" };
+      })
+      .catch((err): ComboSyncResult => {
+        // Lỗi mạng: không xác định được server đã nhận request hay chưa → giữ state cục bộ.
+        console.warn("Could not persist combo to server:", err);
+        return {
+          success: false,
+          error: err?.message || "Không thể kết nối máy chủ",
+          kind: "network",
+        };
+      });
   } catch (e) {
     console.error("Error saving new combo", e);
+    return Promise.resolve({
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    });
   }
 }
 
-export function updateStoredCombo(combo: ExtendedCombo): void {
-  if (typeof window === "undefined") return;
+export function updateStoredCombo(
+  combo: ExtendedCombo,
+  options?: { includeItems?: boolean }
+): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return Promise.resolve({ success: true });
   try {
     const combos = getStoredCombos();
     const updated = combos.map((c) => (c.combo_id === combo.combo_id ? combo : c));
@@ -2585,22 +3428,88 @@ export function updateStoredCombo(combo: ExtendedCombo): void {
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
     window.dispatchEvent(new Event("gieomo_combos_updated"));
 
-    // Sync to Supabase in background
-    fetch("/api/combos", {
+    // Sync to Supabase in background.
+    // Mặc định KHÔNG gửi items: các thao tác sửa trường không liên quan
+    // (đổi tên, bật/tắt status...) không được phép động đến combo_items.
+    // Chỉ luồng sửa thành phần truyền { includeItems: true }.
+    const { items: _items, ...comboHeader } = combo;
+    const serverPayload = options?.includeItems === true ? combo : comboHeader;
+    return fetch("/api/combos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(combo),
-    }).catch((err) => console.warn("Could not update combo on server:", err));
+      body: JSON.stringify(serverPayload),
+    })
+      .then(async (res): Promise<ComboSyncResult> => {
+        if (res.ok) return { success: true };
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const error = body?.error || `HTTP ${res.status}`;
+        console.warn("Server rejected combo update:", error);
+        // Server từ chối xác định → hoàn nguyên state cục bộ về trước khi ghi
+        // (chỉ khi chưa có ghi đè khác giữa chừng) để UI không hiển thị như đã lưu.
+        if (cachedCombos === updated) {
+          try {
+            if (localStorage.getItem("gieomo_combos") === JSON.stringify(updated)) {
+              cachedCombos = combos;
+              localStorage.setItem("gieomo_combos", JSON.stringify(combos));
+              window.dispatchEvent(new Event("gieomo_combos_updated"));
+            }
+          } catch {}
+        }
+        return { success: false, error, kind: "http" };
+      })
+      .catch((err): ComboSyncResult => {
+        // Lỗi mạng: không xác định được server đã nhận request hay chưa → giữ state cục bộ.
+        console.warn("Could not update combo on server:", err);
+        return {
+          success: false,
+          error: err?.message || "Không thể kết nối máy chủ",
+          kind: "network",
+        };
+      });
   } catch (e) {
     console.error("Error updating combo", e);
+    return Promise.resolve({
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    });
   }
 }
 
-export function deleteStoredCombo(comboId: string): void {
-  if (typeof window === "undefined") return;
+export async function deleteStoredCombo(comboId: string): Promise<ComboSyncResult> {
+  if (typeof window === "undefined") return { success: true };
   try {
     const combos = getStoredCombos();
     const target = combos.find((c) => c.combo_id === comboId || c.slug === comboId);
+
+    const params = new URLSearchParams();
+    if (target?.combo_id) params.set("id", target.combo_id);
+    else params.set("id", comboId);
+    if (target?.slug) params.set("slug", target.slug);
+
+    // Xác nhận server xóa TRƯỚC khi cập nhật local: local (kể cả prune giỏ hàng)
+    // chỉ phản ánh trạng thái thật khi server trả về thành công.
+    let res: Response;
+    try {
+      res = await fetch(`/api/combos?${params.toString()}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      // Lỗi mạng: không xác định được server đã xóa hay chưa → giữ local, báo lỗi.
+      console.warn("Could not delete combo on server:", err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+        kind: "network",
+      };
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      const error = body?.error || `HTTP ${res.status}`;
+      console.warn("Server rejected combo delete:", error);
+      return { success: false, error, kind: "http" };
+    }
+
     const updated = combos.filter((c) => c.combo_id !== comboId && c.slug !== comboId);
     cachedCombos = updated;
     localStorage.setItem("gieomo_combos", JSON.stringify(updated));
@@ -2625,17 +3534,14 @@ export function deleteStoredCombo(comboId: string): void {
 
     window.dispatchEvent(new Event("gieomo_combos_updated"));
     window.dispatchEvent(new Event("gieomo_cart_updated"));
-
-    const params = new URLSearchParams();
-    if (target?.combo_id) params.set("id", target.combo_id);
-    else params.set("id", comboId);
-    if (target?.slug) params.set("slug", target.slug);
-
-    fetch(`/api/combos?${params.toString()}`, {
-      method: "DELETE",
-    }).catch((err) => console.warn("Could not delete combo on server:", err));
+    return { success: true };
   } catch (e) {
     console.error("Error deleting combo", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : String(e),
+      kind: "network",
+    };
   }
 }
 
@@ -2736,8 +3642,16 @@ export function verifyAdminLogin(password: string, emailOrAccount?: string): Log
 
 export function clearAdminSession(): void {
   if (typeof window === "undefined") return;
+  const hadSession = localStorage.getItem("gieomo_admin_session") !== null;
   localStorage.removeItem("gieomo_admin_session");
-  window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+  localStorage.removeItem("gieomo_session_token");
+  // Keep logout idempotent. The admin layout listens to this event and
+  // re-checks /api/auth/session; emitting it while there is no local session
+  // makes an unauthenticated check trigger itself indefinitely and can starve
+  // the router.replace("/admin/login") navigation.
+  if (hadSession) {
+    window.dispatchEvent(new Event("gieomo_admin_auth_changed"));
+  }
 }
 
 export function isAdminAuthenticated(): boolean {

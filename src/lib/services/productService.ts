@@ -1,7 +1,43 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { ProductVariant } from "@/types/database";
+import { sortProductVariants } from "@/lib/productVariantOrder";
+import {
+  LOCAL_ASSET_UNAVAILABLE,
+  resolveRuntimeAsset,
+  type RuntimeAssetStatus,
+} from "@/lib/runtimeAssetSafety";
 
+function resolveProductImageSet(rawMedia: unknown, thumbnail: unknown): {
+  thumbnail: string;
+  images: string[];
+  status: RuntimeAssetStatus;
+} {
+  type MediaImageInput = { url?: unknown; sort_order?: unknown };
+  const mediaRows: MediaImageInput[] = (Array.isArray(rawMedia) ? rawMedia : [])
+    .filter((media): media is MediaImageInput => Boolean(media) && typeof media === "object");
+  const mediaAssets = mediaRows
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .map((media) => resolveRuntimeAsset(media.url));
+  const thumbnailAsset = resolveRuntimeAsset(thumbnail);
+  const mediaImages = mediaAssets
+    .map((asset) => asset.url)
+    .filter((url: string | null): url is string => Boolean(url));
+  const images = [...new Set(mediaImages.length > 0
+    ? mediaImages
+    : [thumbnailAsset.url || LOCAL_ASSET_UNAVAILABLE])];
+  const status: RuntimeAssetStatus = mediaAssets.some((asset) => asset.status === "source") || thumbnailAsset.status === "source"
+    ? "source"
+    : mediaAssets.some((asset) => asset.status === "fallback_only") || thumbnailAsset.status === "fallback_only"
+      ? "fallback_only"
+      : "missing";
+
+  return {
+    thumbnail: thumbnailAsset.url || images[0] || LOCAL_ASSET_UNAVAILABLE,
+    images,
+    status,
+  };
+}
 
 
 /**
@@ -47,7 +83,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
 
     let { data, error } = await query;
     if (error) {
-      console.warn("[getProductsServer] Primary query returned notice:", error?.message || error);
+      console.warn("[getProductsServer] primary-query-fallback", { code: error.code || "unknown" });
       try {
         let fallbackQuery = supabase
           .from("products")
@@ -58,13 +94,29 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         }
         const { data: rawProds, error: fbErr } = await fallbackQuery;
         if (fbErr || !rawProds) {
-          console.warn("[getProductsServer] Fallback query failed:", fbErr);
-          return [];
+          console.error("[getProductsServer] fallback-product-read-failed", {
+            code: fbErr?.code || "unknown",
+          });
+          throw new Error("Không thể tải danh sách sản phẩm.");
         }
 
         // Fetch variants and media separately
-        const { data: allVariants } = await supabase.from("product_variants").select("*");
-        const { data: allMedia } = await supabase.from("product_media").select("*");
+        const { data: allVariants, error: variantsError } = await supabase
+          .from("product_variants")
+          .select("*");
+        if (variantsError) {
+          console.error("[getProductsServer] fallback-variant-read-failed", {
+            code: variantsError.code || "unknown",
+          });
+          throw new Error("Không thể tải danh sách sản phẩm.");
+        }
+        const { data: allMedia, error: mediaError } = await supabase.from("product_media").select("*");
+        if (mediaError) {
+          console.error("[getProductsServer] fallback-media-read-failed", {
+            code: mediaError.code || "unknown",
+          });
+          throw new Error("Không thể tải danh sách sản phẩm.");
+        }
 
         data = rawProds.map((p: any) => ({
           ...p,
@@ -72,8 +124,11 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
           product_media: (allMedia || []).filter((m: any) => m.product_id === p.product_id),
         }));
       } catch (fallbackEx) {
-        console.error("[getProductsServer] Exception during fallback:", fallbackEx);
-        return [];
+        if (fallbackEx instanceof Error && fallbackEx.message === "Không thể tải danh sách sản phẩm.") {
+          throw fallbackEx;
+        }
+        console.error("[getProductsServer] unexpected-fallback-failure");
+        throw new Error("Không thể tải danh sách sản phẩm.");
       }
     }
 
@@ -84,26 +139,20 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
     return (data as any[]).map((p) => {
       // Map media to images array
       const rawMedia = p.product_media || p.media || [];
-      const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
-        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-        .map((m: any) => m.url);
-      
-      const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
-      const images = mediaImages.length > 0
-        ? mediaImages
-        : p.thumbnail
-        ? [p.thumbnail]
-        : [fallbackImage];
+      const imageSet = resolveProductImageSet(rawMedia, p.thumbnail);
 
       // Map variants with warehouse calculations
       const rawVariants = p.product_variants || p.variants || [];
-      const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+      const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
       const variants: ProductVariant[] = variantsList.map((v: any) => {
         const stock = v.stock ?? 0;
         const wh1 = Math.ceil(stock * 0.7);
         const wh2 = stock - wh1;
+        const variantAsset = resolveRuntimeAsset(v.image_url);
         return {
           ...v,
+          image_url: variantAsset.url,
+          image_status: variantAsset.status,
           stock,
           stock_warehouse_1: wh1,
           stock_warehouse_2: wh2,
@@ -133,8 +182,9 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         featured: Boolean(p.featured),
         sort_order: p.sort_order || 1,
         weight_gram: p.weight_gram || 100,
-        thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
-        images,
+        thumbnail: imageSet.thumbnail,
+        image_status: imageSet.status,
+        images: imageSet.images,
         category: category || undefined,
         variants,
         created_at: p.created_at,
@@ -142,8 +192,9 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
       };
     });
   } catch (err) {
-    console.error("[getProductsServer] Unexpected exception:", err);
-    return [];
+    if (err instanceof Error && err.message === "Không thể tải danh sách sản phẩm.") throw err;
+    console.error("[getProductsServer] unexpected-read-failure");
+    throw new Error("Không thể tải danh sách sản phẩm.");
   }
 }
 
@@ -202,20 +253,19 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
 
       if (p) {
         const rawMedia = (p as any).product_media || (p as any).media || [];
-        const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
-          .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-          .map((m: any) => m.url);
-        const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
-        const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
+        const imageSet = resolveProductImageSet(rawMedia, p.thumbnail);
 
         const rawVariants = (p as any).product_variants || (p as any).variants || [];
-        const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
+        const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
         const variants: ProductVariant[] = variantsList.map((v: any) => {
           const stock = v.stock ?? 0;
           const wh1 = Math.ceil(stock * 0.7);
           const wh2 = stock - wh1;
+          const variantAsset = resolveRuntimeAsset(v.image_url);
           return {
             ...v,
+            image_url: variantAsset.url,
+            image_status: variantAsset.status,
             stock,
             stock_warehouse_1: wh1,
             stock_warehouse_2: wh2,
@@ -245,8 +295,9 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           featured: Boolean(p.featured),
           sort_order: p.sort_order || 1,
           weight_gram: p.weight_gram || 100,
-          thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
-          images,
+          thumbnail: imageSet.thumbnail,
+          image_status: imageSet.status,
+          images: imageSet.images,
           category: category || undefined,
           variants,
           created_at: p.created_at,
@@ -413,51 +464,151 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
       savedProductId = newProd.product_id;
     }
 
-    // 3. Batch save variants if present (Ultra-fast 1-query batch insert)
+    // 3. Batch 2F — SAFE variant upsert:
+    //    - KHÔNG delete-all rồi insert lại (trước đây: xóa hết → insert fail
+    //      là mất trắng variants/stock).
+    //    - Match variant hiện có theo variant_id (UUID thật có trong DB) trước,
+    //      SKU (UNIQUE theo schema 001:115) làm fallback; mơ hồ → fail closed.
+    //    - Variant hiện có: UPDATE metadata, KHÔNG ghi stock từ client
+    //      (chống clobber stock vừa bị order RPC trừ → chống oversell).
+    //    - Variant mới: INSERT với stock payload (stock ban đầu khi tạo).
+    //    - Variant vắng trong payload: GIỮ NGUYÊN (không tự xóa).
+    //    - Lỗi variant trả về tường minh, không nuốt, không success giả.
+    //    Lưu ý: các bước (product → variants → media) KHÔNG nằm trong 1 tx —
+    //    partial update có thể xảy ra; không có rollback tự động.
     if (product.variants && product.variants.length > 0) {
-      const varPayloads = product.variants.map((v, i) => {
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      // 3a. Đọc identity variants hiện có (variant_id + sku)
+      const { data: existingVars, error: readVarErr } = await supabase
+        .from("product_variants")
+        .select("variant_id, sku")
+        .eq("product_id", savedProductId);
+      if (readVarErr) {
+        return { success: false, error: `Không đọc được danh sách biến thể: ${readVarErr.message}` };
+      }
+      const dbRows: Array<{ variant_id: string; sku: string | null }> = Array.isArray(existingVars)
+        ? existingVars
+        : [];
+      const byId = new Map<string, { variant_id: string; sku: string | null }>();
+      const bySku = new Map<string, { variant_id: string; sku: string | null }>();
+      for (const row of dbRows) {
+        if (row.variant_id) byId.set(String(row.variant_id), row);
+        if (row.sku) bySku.set(String(row.sku), row);
+      }
+
+      // 3b. Resolve SKU cho từng payload entry (giữ nguyên logic sinh SKU cũ)
+      const cleanPart = (product.slug || "prod").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+      const resolved = product.variants.map((v, i) => {
         let sku = v.sku?.trim() || null;
         if (!sku) {
-          const cleanPart = (product.slug || "prod").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
           sku = `GM-${cleanPart || "PROD"}-${i < 9 ? "0" : ""}${i + 1}`;
         }
+        return { v, i, sku };
+      });
+      // SKU trùng trong payload → không xác định được variant tương ứng → fail closed
+      const skuSeen = new Set<string>();
+      for (const r of resolved) {
+        if (skuSeen.has(r.sku)) {
+          return {
+            success: false,
+            error: `SKU "${r.sku}" bị trùng lặp trong payload — không xác định được biến thể tương ứng (fail closed)`,
+          };
+        }
+        skuSeen.add(r.sku);
+      }
 
-        const stockVal = v.stock !== undefined && v.stock !== null ? Number(v.stock) : 1;
-        const wh1 = v.stock_warehouse_1 !== undefined ? Number(v.stock_warehouse_1) : stockVal;
-        const wh2 = v.stock_warehouse_2 !== undefined ? Number(v.stock_warehouse_2) : 0;
+      // 3c. Match: variant_id (UUID thật trong DB) trước, SKU fallback; mơ hồ → fail closed
+      type PlanItem =
+        | { kind: "update"; targetVariantId: string; entry: (typeof resolved)[number] }
+        | { kind: "insert"; entry: (typeof resolved)[number] };
+      const claimed = new Set<string>();
+      const plan: PlanItem[] = [];
+      for (const entry of resolved) {
+        const vid = entry.v.variant_id ? String(entry.v.variant_id) : "";
+        const idRow = UUID_RE.test(vid) ? byId.get(vid) : undefined;
+        if (idRow) {
+          if (claimed.has(idRow.variant_id)) {
+            return {
+              success: false,
+              error: `Nhiều biến thể trong payload match cùng biến thể hiện có (variant_id ${idRow.variant_id}) — mơ hồ (fail closed)`,
+            };
+          }
+          claimed.add(idRow.variant_id);
+          plan.push({ kind: "update", targetVariantId: idRow.variant_id, entry });
+          continue;
+        }
+        const skuRow = bySku.get(entry.sku);
+        if (skuRow) {
+          if (claimed.has(skuRow.variant_id)) {
+            return {
+              success: false,
+              error: `Nhiều biến thể trong payload match cùng biến thể hiện có (sku "${entry.sku}") — mơ hồ (fail closed)`,
+            };
+          }
+          claimed.add(skuRow.variant_id);
+          plan.push({ kind: "update", targetVariantId: skuRow.variant_id, entry });
+          continue;
+        }
+        plan.push({ kind: "insert", entry });
+      }
 
-        return {
-          product_id: savedProductId,
+      // 3d. Thực thi plan: UPDATE metadata (không stock) / INSERT mới (stock payload)
+      for (const item of plan) {
+        const { v, i, sku } = item.entry;
+        const metaPayload = {
           name: v.name || `Mẫu #${i + 1}`,
-          sku: sku,
+          sku,
           price: sanitizePrice(v.price),
           compare_at_price: sanitizePrice(v.compare_at_price),
           cost_price: sanitizePrice(v.cost_price),
-          stock: stockVal,
           weight_gram: sanitizePrice(v.weight_gram) ?? 100,
           image_url: v.image_url || (v as any).imageUrl || null,
           status: v.status || "active",
           sort_order: v.sort_order || i + 1,
           updated_at: new Date().toISOString(),
         };
-      });
 
-      // Clear existing variants and batch insert fresh ones in parallel
-      try {
-        await supabase.from("product_variants").delete().eq("product_id", savedProductId);
-        const { error: batchVarErr } = await supabase.from("product_variants").insert(varPayloads);
-        if (batchVarErr) {
-          console.warn("[upsertProductServer] Batch insert warning, attempting fallback:", batchVarErr.message);
-          // Fallback if image_url column doesn't exist yet on remote table
-          const sanitizedPayloads = varPayloads.map(({ image_url, ...rest }) => rest);
-          await supabase.from("product_variants").insert(sanitizedPayloads);
+        if (item.kind === "update") {
+          // KHÔNG chứa stock — server giữ giá trị DB (chống clobber do order RPC trừ)
+          const { data: updRows, error: updErr } = await supabase
+            .from("product_variants")
+            .update(metaPayload)
+            .eq("variant_id", item.targetVariantId)
+            .select("variant_id");
+          if (updErr) {
+            return { success: false, error: `Không cập nhật được biến thể "${sku}": ${updErr.message}` };
+          }
+          if (!Array.isArray(updRows) || updRows.length === 0) {
+            return {
+              success: false,
+              error: `Biến thể "${sku}" không còn tồn tại khi cập nhật (đã bị xóa đồng thời?) — dừng, không đoán (fail closed)`,
+            };
+          }
+        } else {
+          // Stock ban đầu cho variant MỚI — lấy từ payload client (đã verify semantics:
+          // undefined/null → 1 như hành vi cũ; phải là integer >= 0).
+          const stockRaw = v.stock !== undefined && v.stock !== null ? Number(v.stock) : 1;
+          if (!Number.isInteger(stockRaw) || stockRaw < 0) {
+            return {
+              success: false,
+              error: `Stock ban đầu của biến thể mới "${sku}" không hợp lệ: ${String(v.stock)} (fail closed)`,
+            };
+          }
+          const { error: insErr } = await supabase.from("product_variants").insert([
+            { product_id: savedProductId, ...metaPayload, stock: stockRaw },
+          ]);
+          if (insErr) {
+            return { success: false, error: `Không tạo được biến thể mới "${sku}": ${insErr.message}` };
+          }
         }
-      } catch (varEx) {
-        console.error("[upsertProductServer] Error batch inserting variants:", varEx);
       }
+      // Variant có trong DB nhưng vắng trong payload: GIỮ NGUYÊN — không tự xóa.
     }
 
     // 4. Save media images if present (filter out bulky base64 data URIs)
+    //    Lưu ý (ngoài phạm vi sửa 2F): delete+insert media KHÔNG transactional —
+    //    insert fail sau delete có thể mất media (không liên quan stock).
     if (product.images && product.images.length > 0) {
       await supabase.from("product_media").delete().eq("product_id", savedProductId);
       const validImages = product.images.filter(
@@ -488,9 +639,22 @@ export async function deleteProductServer(identifier: string, slug?: string): Pr
   try {
     const supabase = createAdminClient();
     if (identifier === "all") {
+      // Batch 2G.2: các bước dọn combo/media có thể đã commit nếu một
+      // bước sau fail — KHÔNG giả định atomic. Kiểm tra lỗi biến thể
+      // TRƯỚC khi đụng products để không half-delete thêm.
       await supabase.from("combo_items").delete().neq("combo_item_id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("product_media").delete().neq("media_id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("product_variants").delete().neq("variant_id", "00000000-0000-0000-0000-000000000000");
+      const { error: variantAllError } = await supabase
+        .from("product_variants")
+        .delete()
+        .neq("variant_id", "00000000-0000-0000-0000-000000000000");
+      if (variantAllError) {
+        console.error("[deleteProductServer] Error clearing product variants:", variantAllError);
+        return {
+          success: false,
+          error: `Không thể xóa biến thể sản phẩm: ${variantAllError.message}. Lưu ý: các bước dọn dữ liệu trước đó (combo/media) có thể đã được áp dụng.`,
+        };
+      }
       const { error } = await supabase.from("products").delete().neq("product_id", "00000000-0000-0000-0000-000000000000");
       if (error) {
         console.error("[deleteProductServer] Error clearing all products:", error);
@@ -519,10 +683,22 @@ export async function deleteProductServer(identifier: string, slug?: string): Pr
     }
 
     if (targetProductId) {
-      // Clear dependent combo_items first to prevent FK constraint error
+      // Clear dependent combo_items first to prevent FK constraint error.
+      // Batch 2G.2: kiểm tra lỗi xóa biến thể (FK ledger có thể chặn);
+      // fail TRƯỚC khi đụng products — không nuốt lỗi PostgREST.
       await supabase.from("combo_items").delete().eq("product_id", targetProductId);
       await supabase.from("product_media").delete().eq("product_id", targetProductId);
-      await supabase.from("product_variants").delete().eq("product_id", targetProductId);
+      const { error: variantError } = await supabase
+        .from("product_variants")
+        .delete()
+        .eq("product_id", targetProductId);
+      if (variantError) {
+        console.error("[deleteProductServer] Error deleting product variants:", variantError);
+        return {
+          success: false,
+          error: `Không thể xóa biến thể sản phẩm: ${variantError.message}. Lưu ý: các bước dọn dữ liệu trước đó (combo/media) có thể đã được áp dụng.`,
+        };
+      }
       const { error } = await supabase.from("products").delete().eq("product_id", targetProductId);
       if (error) {
         console.error("[deleteProductServer] Error deleting product by UUID:", error);

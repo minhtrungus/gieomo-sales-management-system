@@ -86,7 +86,18 @@ function makeVoucher(overrides: Partial<Voucher> = {}): Voucher {
   };
 }
 
-const httpOk = (body: unknown = { success: true }): StubResponse => ({
+function serverVoucher(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...makeVoucher(),
+    voucher_id: "11111111-1111-4111-8111-111111111111",
+    times_used: 0,
+    start_date: null,
+    end_date: null,
+    ...overrides,
+  };
+}
+
+const httpOk = (body: unknown = { success: true, voucher: serverVoucher() }): StubResponse => ({
   ok: true,
   status: 200,
   json: async () => body,
@@ -150,7 +161,7 @@ test("updateStoredVoucher: HTTP 500 → throw, giữ nguyên trạng thái cũ",
 });
 
 test("updateStoredVoucher: HTTP 200 → cập nhật local", async () => {
-  fetchHandler = async () => httpOk();
+  fetchHandler = async () => httpOk({ success: true, voucher: serverVoucher({ status: "inactive" }) });
   await updateStoredVoucher(makeVoucher({ voucher_id: "v-test-1", status: "inactive" }));
   const fs = getStoredVouchers().find((v) => v.code === "FSTEST");
   assert.equal(fs?.status, "inactive");
@@ -166,10 +177,111 @@ test("deleteStoredVoucher: HTTP 500 → throw, voucher vẫn còn", async () => 
 });
 
 test("deleteStoredVoucher: HTTP 200 → xóa khỏi local", async () => {
-  fetchHandler = async () => httpOk();
+  fetchHandler = async () => httpOk({ success: true });
   await deleteStoredVoucher("v-test-1");
   const list = getStoredVouchers();
   assert.equal(list.some((v) => v.code === "FSTEST"), false);
   assert.equal(list.length, 1);
+  fetchHandler = defaultHandler;
+});
+
+test("mutation response errors preserve local storage, cached vouchers and events", async () => {
+  const beforeStorage = [...storage.entries()];
+  const beforeVouchers = structuredClone(getStoredVouchers());
+  let events = 0;
+  const previousDispatch = g.dispatchEvent;
+  g.dispatchEvent = () => { events++; return true; };
+  try {
+    const invalidBodies: unknown[] = [
+      { success: false, error: "Server did not save voucher" },
+      null, [], { success: "true" }, { success: true },
+      { success: true, voucher: null },
+      ...[
+        { voucher_id: "local-id" }, { code: "OTHER" },
+        { discount_type: "unknown" }, { discount_type: ["freeship"] },
+        { discount_value: 0 }, { discount_value: 15000 }, { discount_value: "Infinity" },
+        { min_order_value: -1 }, { times_used: 0.5 }, { usage_limit: 0 },
+        { status: "inactive" }, { status: ["active"] },
+        { created_at: "invalid" }, { start_date: "invalid" },
+      ].map((fields) => ({ success: true, voucher: serverVoucher(fields) })),
+    ];
+    for (const body of invalidBodies) {
+      fetchHandler = async () => httpOk(body);
+      await assert.rejects(saveNewVoucher(makeVoucher()));
+      assert.deepEqual([...storage.entries()], beforeStorage);
+      assert.deepEqual(getStoredVouchers(), beforeVouchers);
+    }
+    fetchHandler = async () => ({ ok: true, status: 200, json: async () => { throw new Error("invalid JSON"); } });
+    await assert.rejects(saveNewVoucher(makeVoucher()), /JSON/);
+    fetchHandler = async () => httpOk({ success: false });
+    await assert.rejects(updateStoredVoucher(makeVoucher()));
+    await assert.rejects(deleteStoredVoucher("v-old"));
+    fetchHandler = async () => httpError(500, { success: true, voucher: serverVoucher() });
+    await assert.rejects(saveNewVoucher(makeVoucher()), /HTTP 500/);
+    assert.deepEqual([...storage.entries()], beforeStorage);
+    assert.deepEqual(getStoredVouchers(), beforeVouchers);
+    assert.equal(events, 0);
+  } finally {
+    g.dispatchEvent = previousDispatch;
+    fetchHandler = defaultHandler;
+  }
+});
+
+test("numeric PostgREST fields and normalized freeship value are valid", async () => {
+  fetchHandler = async () => httpOk({
+    success: true,
+    voucher: serverVoucher({ discount_value: "1", min_order_value: "0", times_used: "0", usage_limit: "5" }),
+  });
+  await saveNewVoucher(makeVoucher({ discount_value: 15000 }));
+  assert.equal(getStoredVouchers().some((voucher) => voucher.code === "FSTEST"), true);
+  fetchHandler = defaultHandler;
+});
+
+test("saveNewVoucher: HTTP 409 duplicate code → throw, KHÔNG ghi local", async () => {
+  fetchHandler = async () => httpError(409, {
+    success: false,
+    error: 'Mã giảm giá "SUMMER20" đã tồn tại. Vui lòng chọn mã khác.',
+  });
+  await assert.rejects(
+    saveNewVoucher(makeVoucher({ voucher_id: "v-dup", code: "SUMMER20" })),
+    /đã tồn tại/
+  );
+  assert.equal(getStoredVouchers().some((v) => v.code === "SUMMER20"), false);
+  fetchHandler = defaultHandler;
+});
+
+test("updateStoredVoucher: HTTP 409 đổi sang mã của voucher khác → throw, giữ nguyên local", async () => {
+  // Seed two vouchers via saveNewVoucher so cache is consistent
+  fetchHandler = async () => httpOk({ success: true, voucher: serverVoucher({ voucher_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", code: "CODE_A" }) });
+  await saveNewVoucher(makeVoucher({ voucher_id: "v-a", code: "CODE_A" }));
+  fetchHandler = async () => httpOk({ success: true, voucher: serverVoucher({ voucher_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", code: "CODE_B" }) });
+  await saveNewVoucher(makeVoucher({ voucher_id: "v-b", code: "CODE_B" }));
+
+  // Now try to change A's code to B's code → 409
+  fetchHandler = async () => httpError(409, {
+    success: false,
+    error: 'Mã giảm giá "CODE_B" đã tồn tại. Vui lòng chọn mã khác.',
+  });
+  await assert.rejects(
+    updateStoredVoucher(makeVoucher({ voucher_id: "v-a", code: "CODE_B" })),
+    /đã tồn tại/
+  );
+  const list = getStoredVouchers();
+  assert.equal(list.find((v) => v.code === "CODE_A") !== undefined, true, "voucher A giữ nguyên mã CODE_A");
+  assert.equal(list.find((v) => v.code === "CODE_B") !== undefined, true, "voucher B không bị ghi đè");
+  fetchHandler = defaultHandler;
+});
+
+test("updateStoredVoucher: HTTP 200 đổi mã mới → cập nhật local", async () => {
+  // Seed one voucher
+  fetchHandler = async () => httpOk({ success: true, voucher: serverVoucher({ voucher_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", code: "OLD_CODE" }) });
+  await saveNewVoucher(makeVoucher({ voucher_id: "v-c", code: "OLD_CODE" }));
+
+  // Change code to NEW_CODE
+  fetchHandler = async () => httpOk({ success: true, voucher: serverVoucher({ voucher_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", code: "NEW_CODE" }) });
+  await updateStoredVoucher(makeVoucher({ voucher_id: "v-c", code: "NEW_CODE" }));
+  const list = getStoredVouchers();
+  assert.equal(list.find((v) => v.voucher_id === "v-c")?.code, "NEW_CODE");
+  assert.equal(list.some((v) => v.code === "OLD_CODE"), false);
   fetchHandler = defaultHandler;
 });

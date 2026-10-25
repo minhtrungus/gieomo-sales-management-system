@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Scale,
   RefreshCw,
@@ -22,6 +22,8 @@ import {
   X,
   Download,
   Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
@@ -30,6 +32,10 @@ import type {
   ReconciliationSummary,
   ReconciliationStatus,
 } from "@/lib/services/reconciliationService";
+import { createRequestSequenceGuard } from "@/lib/utils/requestSequenceGuard";
+
+// Batch 3C — page size UI (server clamp max 200 — reconciliationService).
+const PAGE_SIZE = 50;
 
 export default function AdminReconciliationPage() {
   const [records, setRecords] = useState<ReconciliationRecord[]>([]);
@@ -37,6 +43,9 @@ export default function AdminReconciliationPage() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Batch 3C — pagination state (server trả total_count sau in-memory filters)
+  const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,53 +62,92 @@ export default function AdminReconciliationPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setError(null);
-      const params = new URLSearchParams();
-      if (debouncedSearchQuery.trim()) params.set("search", debouncedSearchQuery.trim());
-      if (activeTab === "action_required") {
-        params.set("action_required", "true");
-      } else if (activeTab !== "all") {
-        params.set("reconciliation_status", activeTab);
-      }
-      if (dateRange.start) params.set("start_date", dateRange.start);
-      if (dateRange.end) params.set("end_date", dateRange.end);
-
-      const res = await fetch(`/api/admin/reconciliation?${params.toString()}`);
-      if (res.status === 401) {
-        throw new Error("Phiên làm việc đã hết hạn hoặc chưa đăng nhập. Vui lòng đăng nhập lại!");
-      }
-      if (res.status === 403) {
-        throw new Error("Bạn không có quyền truy cập dữ liệu đối soát (Yêu cầu tài khoản Quản trị viên).");
-      }
-      if (!res.ok) {
-        throw new Error(`Lỗi máy chủ (${res.status}) khi tải dữ liệu đối soát.`);
-      }
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || "Không thể tải dữ liệu đối soát");
-      }
-
-      setRecords(Array.isArray(data?.records) ? data.records : []);
-      setSummary(data?.summary || null);
-    } catch (err: any) {
-      console.error("[Reconciliation UI] Fetch error:", err);
-      setError(err?.message || "Lỗi tải dữ liệu");
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [debouncedSearchQuery, activeTab, dateRange]);
-
+  // Batch 3C.1 — guard chống race (M1): mỗi begin() vô hiệu request trước
+  // (token + abort). Chỉ response token hiện hành ghi state; finally chỉ
+  // current được tắt loading. Unmount → invalidate tất cả.
+  const guardRef = useRef(createRequestSequenceGuard());
   useEffect(() => {
-    setLoading(true);
-    fetchData();
+    const guard = guardRef.current;
+    return () => guard.invalidate();
+  }, []);
+
+  const fetchData = useCallback(
+    async (fetchOffset: number) => {
+      const req = guardRef.current.begin();
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (debouncedSearchQuery.trim()) params.set("search", debouncedSearchQuery.trim());
+        if (activeTab === "action_required") {
+          params.set("action_required", "true");
+        } else if (activeTab !== "all") {
+          params.set("reconciliation_status", activeTab);
+        }
+        if (dateRange.start) params.set("start_date", dateRange.start);
+        if (dateRange.end) params.set("end_date", dateRange.end);
+        // Batch 3C — gửi pagination; server clamp limit trong [1, 200].
+        params.set("limit", String(PAGE_SIZE));
+        params.set("offset", String(fetchOffset));
+
+        const res = await fetch(`/api/admin/reconciliation?${params.toString()}`, {
+          signal: req.signal,
+        });
+        if (res.status === 401) {
+          throw new Error("Phiên làm việc đã hết hạn hoặc chưa đăng nhập. Vui lòng đăng nhập lại!");
+        }
+        if (res.status === 403) {
+          throw new Error("Bạn không có quyền truy cập dữ liệu đối soát (Yêu cầu tài khoản Quản trị viên).");
+        }
+        if (!res.ok) {
+          throw new Error(`Lỗi máy chủ (${res.status}) khi tải dữ liệu đối soát.`);
+        }
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || "Không thể tải dữ liệu đối soát");
+        }
+
+        // Token stale → request mới đã vô hiệu request này: KHÔNG ghi đè.
+        if (!req.isCurrent()) return;
+        setRecords(Array.isArray(data?.records) ? data.records : []);
+        setSummary(data?.summary || null);
+        setTotalCount(Number(data?.totalCount) || 0);
+      } catch (err: any) {
+        // Abort (bởi begin() mới hoặc unmount) — không phải lỗi hiển thị.
+        if (req.signal.aborted) return;
+        if (!req.isCurrent()) return;
+        console.error("[Reconciliation UI] Fetch error:", err);
+        setError(err?.message || "Lỗi tải dữ liệu");
+      } finally {
+        // Chỉ request hiện hành được tắt loading — request cũ đang "thua"
+        // không được phép tắt loading trong khi request mới còn pending.
+        if (req.isCurrent()) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [debouncedSearchQuery, activeTab, dateRange]
+  );
+
+  // Đổi bộ lọc/tìm kiếm → về trang đầu + fetch đúng 1 request (offset 0).
+  // setOffset(0) đồng bộ state UI; fetchData(0) chạy ngay với offset đúng
+  // (không tạo request thừa với offset cũ như cách 2-effect trước 3C.1).
+  useEffect(() => {
+    setOffset(0);
+    fetchData(0);
   }, [fetchData]);
+
+  // Đổi trang → fetch với offset cụ thể (trực tiếp, không qua effect
+  // để không duplicate request).
+  const handlePageChange = (nextOffset: number) => {
+    setOffset(nextOffset);
+    fetchData(nextOffset);
+  };
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    fetchData();
+    fetchData(offset);
   };
 
   const getStatusBadge = (status: ReconciliationStatus) => {
@@ -286,6 +334,24 @@ export default function AdminReconciliationPage() {
                 {summary.status_counts.underpaid} thiếu / {summary.status_counts.overpaid} dư
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch C — orphan payment alert (chỉ hiện khi có payment không gắn đơn) */}
+      {summary?.orphan_payments && summary.orphan_payments.count > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-amber-800">
+              {summary.orphan_payments.count.toLocaleString("vi-VN")} thanh toán mồ côi không
+              gắn đơn hàng hợp lệ
+            </p>
+            <p className="text-xs text-amber-700 mt-1">
+              {summary.orphan_payments.null_order_id_count} không có order_id /{" "}
+              {summary.orphan_payments.missing_order_count} trỏ đơn không tồn tại — cần đối
+              soát thủ công
+            </p>
           </div>
         </div>
       )}
@@ -555,6 +621,40 @@ export default function AdminReconciliationPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Batch 3C — pagination footer (chỉ khi có dữ liệu trong bảng) */}
+        {!loading && !error && records.length > 0 && (
+          <div className="px-5 py-3.5 border-t border-gray-200 bg-gray-50/60 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              Hiển thị{" "}
+              <span className="font-semibold text-gray-700">{offset + 1}</span>–
+              <span className="font-semibold text-gray-700">{offset + records.length}</span> /{" "}
+              <span className="font-semibold text-gray-700">{totalCount.toLocaleString("vi-VN")}</span> đơn
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(Math.max(0, offset - PAGE_SIZE))}
+                disabled={offset === 0 || isRefreshing}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Trước
+              </button>
+              <span className="text-xs text-gray-600 px-1.5">
+                Trang {Math.floor(offset / PAGE_SIZE) + 1} /{" "}
+                {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
+              </span>
+              <button
+                onClick={() => handlePageChange(offset + PAGE_SIZE)}
+                disabled={offset + records.length >= totalCount || isRefreshing}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                Sau
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>

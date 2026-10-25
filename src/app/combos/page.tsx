@@ -252,6 +252,13 @@ export default function CombosPage() {
                     ) : (
                       <span>🎁</span>
                     )}
+                    {combo.image_status !== "source" && (
+                      <div className="absolute bottom-3 left-3 right-3 text-center">
+                        <span className="inline-flex px-2 py-1 rounded-full bg-white/95 border border-[#D8CBBE] text-[#5F5148] text-[10px] font-bold">
+                          Ảnh thật chưa có cục bộ
+                        </span>
+                      </div>
+                    )}
                     {savings > 0 && (
                       <div className="absolute top-3 left-3">
                         <Badge variant="accent" className="shadow-2xs font-extrabold text-[11px]">

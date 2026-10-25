@@ -428,7 +428,9 @@ export default function SaleDashboardPage() {
                 {selectedOrder.items?.map((it, idx) => (
                   <div key={idx} className="p-3 text-xs flex justify-between items-center bg-white">
                     <div>
-                      <span className="font-bold text-gray-900 block">{it.product_name_snapshot}</span>
+                      <span className="font-bold text-gray-900 block">
+                        {it.product_name_snapshot || it.item_name_snapshot}
+                      </span>
                       {it.variant_name_snapshot && (
                         <span className="text-[11px] text-gray-500">
                           Phân loại: {it.variant_name_snapshot}

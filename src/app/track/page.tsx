@@ -175,7 +175,20 @@ function TrackContent() {
 
     // 2. Query Supabase database via API
     try {
-      const res = await fetch(`/api/orders?code=${encodeURIComponent(upperQuery)}`);
+      const storedToken = localStorage.getItem(`gieomo_order_token_${upperQuery}`) || "";
+      const profileRaw = localStorage.getItem("gieomo_customer_profile");
+      const profilePhone = profileRaw ? String(JSON.parse(profileRaw)?.phone || "").replace(/\D/g, "") : "";
+      const candidatePhone = searchPhone.replace(/\D/g, "") || profilePhone;
+      if (!storedToken && candidatePhone.length < 9) {
+        setErrorMsg("Vui lòng nhập số điện thoại đặt hàng để xác thực mã đơn trên thiết bị mới.");
+        setMatchedOrders([]);
+        setSelectedOrder(null);
+        return;
+      }
+      const access = storedToken
+        ? `token=${encodeURIComponent(storedToken)}`
+        : `phone=${encodeURIComponent(candidatePhone)}`;
+      const res = await fetch(`/api/orders?code=${encodeURIComponent(upperQuery)}&${access}`);
       if (res.ok) {
         const text = await res.text();
         const data = text ? JSON.parse(text) : null;
@@ -378,12 +391,19 @@ function TrackContent() {
         <form onSubmit={handleSearchSubmit} className="space-y-4">
           {searchMode === "code" ? (
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   label="Mã đơn hàng:"
                   placeholder="Ví dụ: GM-369817 hoặc GM-260901..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Input
+                  label="Số điện thoại đặt hàng:"
+                  placeholder="Dùng để xác thực trên thiết bị mới"
+                  type="tel"
+                  value={searchPhone}
+                  onChange={(e) => setSearchPhone(e.target.value)}
                 />
               </div>
               <div className="flex items-end">

@@ -110,8 +110,9 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
     }
   };
 
-  const formatShortTime = (isoString: string) => {
-    const diffMs = Date.now() - new Date(isoString).getTime();
+const formatShortTime = (isoString: string) => {
+     const nowMs = Date.now();
+     const diffMs = nowMs - new Date(isoString).getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     if (diffMins < 1) return "Vừa xong";
     if (diffMins < 60) return `${diffMins} phút trước`;

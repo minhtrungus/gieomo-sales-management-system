@@ -1,72 +1,139 @@
-import { createHash } from "node:crypto";
-import type { ValidatedOrderCreateLine } from "@/lib/orderCreateInput";
+/**
+ * Canonical request hash for checkout idempotency.
+ * Built SERVER-SIDE only. Never trust client-supplied hash or prices.
+ */
 
-type OrderInput = Record<string, unknown>;
+export type CanonicalItemKind = "product" | "variant" | "combo";
 
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+export interface CanonicalItem {
+  kind: CanonicalItemKind;
+  id: string;
+  quantity: number;
 }
 
-function nullableText(value: unknown): string | null {
-  const normalized = text(value);
-  return normalized || null;
+export interface CanonicalOrderPayload {
+  buyer_phone: string;
+  recipient_phone: string;
+  address_detail: string;
+  province: string;
+  delivery_type: string;
+  voucher_code: string | null;
+  referral_code: string | null;
+  seller_id: string | null;
+  items: CanonicalItem[];
+}
+
+export interface RawCheckoutItem {
+  product_id?: string | null;
+  variant_id?: string | null;
+  combo_id?: string | null;
+  quantity?: number | number | string;
+}
+
+export interface RawOrderPayloadForHash {
+  buyer_phone?: string | null;
+  recipient_phone?: string | null;
+  address_detail?: string | null;
+  province?: string | null;
+  delivery_type?: string | null;
+  voucher_code?: string | null;
+  referral_code?: string | null;
+  seller_id?: string | null;
+  items?: RawCheckoutItem[] | null;
 }
 
 function digits(value: unknown): string {
-  return text(value).replace(/\D/g, "");
+  return String(value ?? "").replace(/\D/g, "");
 }
 
-export function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    .join(",")}}`;
+function trimOrNull(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const s = String(value).trim();
+  return s.length === 0 ? null : s;
 }
 
-export function buildCanonicalOrderPayload(input: OrderInput, items: ValidatedOrderCreateLine[]) {
-  const canonicalItems = items
-    .map((item) => ({
-      product_id: item.product_id ?? null,
-      variant_id: item.variant_id ?? null,
-      combo_id: item.combo_id ?? null,
-      quantity: item.quantity,
-    }))
-    .sort((left, right) => {
-      const leftKey = `${left.combo_id ?? ""}|${left.variant_id ?? ""}|${left.product_id ?? ""}|${left.quantity}`;
-      const rightKey = `${right.combo_id ?? ""}|${right.variant_id ?? ""}|${right.product_id ?? ""}|${right.quantity}`;
-      return leftKey.localeCompare(rightKey);
-    });
+function upperOrNull(value: unknown): string | null {
+  const s = trimOrNull(value);
+  return s ? s.toUpperCase() : null;
+}
+
+function clampQty(value: unknown): number {
+  const n = Math.floor(Number(value) || 1);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  if (n > 99) return 99;
+  return n;
+}
+
+function itemKindAndId(item: RawCheckoutItem): { kind: CanonicalItemKind; id: string } | null {
+  const comboId = trimOrNull(item.combo_id);
+  if (comboId) return { kind: "combo", id: comboId };
+  const variantId = trimOrNull(item.variant_id);
+  if (variantId) return { kind: "variant", id: variantId };
+  const productId = trimOrNull(item.product_id);
+  if (productId) return { kind: "product", id: productId };
+  return null;
+}
+
+/**
+ * Normalize + merge duplicate (kind,id) + sort stable.
+ * Merging ensures client sending two lines vs one merged line → same hash.
+ */
+export function buildCanonicalOrderPayload(raw: RawOrderPayloadForHash): CanonicalOrderPayload {
+  const merge = new Map<string, CanonicalItem>();
+  const items = Array.isArray(raw.items) ? raw.items : [];
+
+  for (const item of items) {
+    if (!item) continue;
+    const kindId = itemKindAndId(item);
+    if (!kindId) continue;
+    const key = `${kindId.kind}:${kindId.id}`;
+    const qty = clampQty(item.quantity);
+    const existing = merge.get(key);
+    if (existing) {
+      existing.quantity = clampQty(existing.quantity + qty);
+    } else {
+      merge.set(key, { kind: kindId.kind, id: kindId.id, quantity: qty });
+    }
+  }
+
+  const sortedItems = Array.from(merge.values()).sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return 0;
+  });
 
   return {
-    buyer_name: text(input.buyer_name),
-    buyer_phone: digits(input.buyer_phone ?? input.recipient_phone),
-    buyer_email: text(input.buyer_email).toLowerCase(),
-    recipient_name: text(input.recipient_name ?? input.buyer_name),
-    recipient_phone: digits(input.recipient_phone ?? input.buyer_phone),
-    delivery_type: text(input.delivery_type) || "home_delivery",
-    address_detail: text(input.address_detail),
-    district: text(input.district),
-    province: text(input.province),
-    customer_note: text(input.customer_note),
-    voucher_code: nullableText(input.voucher_code)?.toUpperCase() ?? null,
-    referral_code: nullableText(input.referral_code)?.toUpperCase() ?? null,
-    seller_id: nullableText(input.seller_id),
-    introducer_info: text(input.introducer_info),
-    source_type: text(input.source_type),
-    payment_method: text(input.payment_method) || "banking",
-    items: canonicalItems,
+    buyer_phone: digits(raw.buyer_phone),
+    recipient_phone: digits(raw.recipient_phone || raw.buyer_phone),
+    address_detail: trimOrNull(raw.address_detail) ?? "",
+    province: trimOrNull(raw.province) ?? "",
+    delivery_type: trimOrNull(raw.delivery_type) || "home_delivery",
+    voucher_code: upperOrNull(raw.voucher_code),
+    referral_code: upperOrNull(raw.referral_code),
+    seller_id: trimOrNull(raw.seller_id),
+    items: sortedItems,
   };
 }
 
-export function hashCanonicalOrderPayload(payload: unknown): string {
-  return createHash("sha256").update(stableStringify(payload), "utf8").digest("hex");
+async function sha256Hex(input: string): Promise<string> {
+  const cryptoMod = await import("node:crypto");
+  return cryptoMod.createHash("sha256").update(input, "utf8").digest("hex");
 }
 
-export function buildOrderIdempotencyScope(memberId: string | null | undefined, guestPhone: unknown): string {
-  if (memberId && /^[0-9a-f-]{36}$/i.test(memberId)) return `member:${memberId.toLowerCase()}`;
-  const phone = digits(guestPhone);
-  return `guest:${createHash("sha256").update(`gieomo-order:${phone}`, "utf8").digest("hex")}`;
+/** Stable JSON stringify with sorted object keys (arrays keep order). */
+export function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+}
+
+export async function buildOrderRequestHash(raw: RawOrderPayloadForHash): Promise<string> {
+  const canonical = buildCanonicalOrderPayload(raw);
+  return sha256Hex(stableStringify(canonical));
 }

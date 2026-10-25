@@ -3,6 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Warehouse } from "@/types/database";
 import type { InflowLog, TransferLog } from "@/lib/data/orderStore";
 import { requireAdmin, requireAuth } from "@/lib/auth/serverAuth";
+import {
+  validateAdjustStockInput,
+  executeStockAdjustment,
+} from "@/lib/services/inventoryAdjustService";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { action, warehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog, stockAdjustment } = body;
+    const { action, warehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog } = body;
 
     const supabase = createAdminClient();
 
@@ -137,22 +141,59 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    if (action === "stockAdjustment" && stockAdjustment) {
-      const { variantId, productId, newStock } = stockAdjustment;
-      const cleanStock = Math.max(0, Number(newStock) || 0);
-
-      if (variantId) {
-        await supabase
-          .from("product_variants")
-          .update({ stock: cleanStock, updated_at: new Date().toISOString() })
-          .eq("variant_id", variantId);
-      } else if (productId) {
-        await supabase
-          .from("products")
-          .update({ stock: cleanStock, updated_at: new Date().toISOString() })
-          .eq("product_id", productId);
+    // Batch 2G — điều chỉnh tồn kho SERVER-AUTHORITATIVE qua RPC
+    // adjust_variant_stock (migration 019): relative delta, idempotent,
+    // guard không cho stock âm. THAY THẾ nhánh absolute "stockAdjustment"
+    // cũ (đã gỡ) — không còn đường ghi đè absolute-stock từ client.
+    if (action === "adjustStock") {
+      const validated = validateAdjustStockInput(body);
+      if (!validated.ok) {
+        return NextResponse.json(
+          { success: false, outcome: "invalid", error: validated.message },
+          { status: 400 }
+        );
       }
-      return NextResponse.json({ success: true });
+
+      // Actor chỉ lấy từ session admin — KHÔNG tin client payload.
+      const isMemberUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        authCheck.user.memberId || ""
+      );
+
+      const result = await executeStockAdjustment(supabase, {
+        ...validated.input,
+        actorMemberId: isMemberUuid ? authCheck.user.memberId : null,
+      });
+
+      const payload = {
+        success: result.applied || result.duplicate,
+        outcome: result.status,
+        error: result.status === "applied" || result.status === "duplicate" ? undefined : result.message,
+        message: result.message,
+        stockBefore: result.stockBefore,
+        stockAfter: result.stockAfter,
+        ...(result.duplicate ? { alreadyApplied: true } : {}),
+        ...(result.retryable ? { retryable: true } : {}),
+      };
+
+      if (result.status === "applied" || result.status === "duplicate") {
+        return NextResponse.json(payload);
+      }
+      if (result.status === "not_found") {
+        return NextResponse.json(payload, { status: 404 });
+      }
+      if (
+        result.status === "insufficient_stock" ||
+        result.status === "idempotency_mismatch"
+      ) {
+        return NextResponse.json(payload, { status: 409 });
+      }
+      if (result.status === "rpc_unavailable") {
+        return NextResponse.json(payload, { status: 503 });
+      }
+      if (result.status === "invalid") {
+        return NextResponse.json(payload, { status: 400 });
+      }
+      return NextResponse.json(payload, { status: 500 });
     }
 
     return NextResponse.json({ success: false, error: "Hành động kho không hợp lệ" }, { status: 400 });

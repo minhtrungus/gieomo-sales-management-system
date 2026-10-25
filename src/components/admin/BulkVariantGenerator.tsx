@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { generateSku } from "@/lib/utils/skuGenerator";
 import { uploadAsset } from "@/lib/services/uploadService";
+import { moveProductVariant } from "@/lib/productVariantOrder";
 
 export interface VariantItem {
   name: string;
@@ -32,6 +33,7 @@ export interface VariantItem {
   price?: number | null;
   compare_at_price?: number | null;
   variant_id?: string;
+  sort_order?: number;
 }
 
 interface BulkVariantGeneratorProps {
@@ -199,6 +201,10 @@ export function BulkVariantGenerator({
         sku: generateSku(productName || "SP", v.name, i),
       }))
     );
+  };
+
+  const handleMoveVariant = (fromIndex: number, toIndex: number) => {
+    onVariantsChange(moveProductVariant(variants, fromIndex, toIndex));
   };
 
   // 7. Handle variant photo upload
@@ -517,14 +523,36 @@ export function BulkVariantGenerator({
                       <span className="px-2.5 py-0.5 rounded-lg bg-[#EBF7EE] text-[#16381D] font-mono font-extrabold text-xs border border-[#BFE9C3]">
                         {v.name.replace(/^Mẫu\s*/i, "") || `#${idx + 1}`}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
-                        className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Xoá mẫu này"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveVariant(idx, idx - 1)}
+                          disabled={idx === 0}
+                          className="p-1 rounded-lg text-gray-500 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                          title="Đưa mẫu lên trước khi bán"
+                          aria-label={`Đưa ${v.name} lên trước`}
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveVariant(idx, idx + 1)}
+                          disabled={idx === variants.length - 1}
+                          className="p-1 rounded-lg text-gray-500 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                          title="Đưa mẫu xuống sau khi bán"
+                          aria-label={`Đưa ${v.name} xuống sau`}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
+                          className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Xoá mẫu này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Middle: Image Preview (56x56) & Name/SKU */}
@@ -730,13 +758,36 @@ export function BulkVariantGenerator({
                       />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
-                      className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveVariant(idx, idx - 1)}
+                        disabled={idx === 0}
+                        className="p-1 text-gray-500 hover:text-emerald-700 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                        title="Đưa lên"
+                        aria-label={`Đưa ${v.name} lên trước`}
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveVariant(idx, idx + 1)}
+                        disabled={idx === variants.length - 1}
+                        className="p-1 text-gray-500 hover:text-emerald-700 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                        title="Đưa xuống"
+                        aria-label={`Đưa ${v.name} xuống sau`}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onVariantsChange(variants.filter((_, i) => i !== idx))}
+                        className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
+                        title="Xoá mẫu này"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}

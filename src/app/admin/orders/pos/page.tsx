@@ -9,12 +9,13 @@ import {
   getStoredProducts,
   getActiveReferralMembers,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
+  syncStoredOrderStatusLocal,
   type StoredMember,
   type ExtendedProduct,
 } from "@/lib/data/orderStore";
-import type { Order, OrderItem } from "@/types/database";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
+import type { Order, OrderItem, OrderStatus } from "@/types/database";
 
 export default function AdminPosPage() {
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -56,8 +57,18 @@ export default function AdminPosPage() {
 
   const [lastCompletedOrder, setLastCompletedOrder] = useState<string | null>(null);
   const [copiedMemo, setCopiedMemo] = useState(false);
+
+  // Batch 3A.2 — server-first: chặn double-submit, theo dõi lỗi, và trạng thái
+  // cash-confirm dang dở (đơn ĐÃ tạo server nhưng CHƯA xác nhận thu tiền —
+  // retry confirm chứ KHÔNG tạo lại đơn).
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [paidConfirmError, setPaidConfirmError] = useState<string | null>(null);
+  const [pendingCashConfirm, setPendingCashConfirm] = useState<{
+    serverOrderCode: string;
+    amount: number;
+  } | null>(null);
 
   // Initialize with first product if cart empty
   useEffect(() => {
@@ -160,6 +171,9 @@ export default function AdminPosPage() {
     setQuickCustomerName("");
     setQuickPhone("");
     setQuickNote("");
+    setSubmitError(null);
+    setPaidConfirmError(null);
+    setPendingCashConfirm(null);
     if (products.length > 0) {
       setCartItems([
         {
@@ -175,115 +189,143 @@ export default function AdminPosPage() {
     setActiveQrModal(null);
   };
 
-  const handleCheckoutSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    if (cartItems.length === 0 || subtotal <= 0) return;
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
-    const newOrderId = `ord-${Date.now()}`;
-    const matchedSeller = members.find((m) => m.memberId === sellerId);
-
-    const orderItemsSnapshot: OrderItem[] = cartItems.map((item, idx) => {
-      const prod = products.find((p) => p.product_id === item.productId);
-      const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
-      return {
-        order_item_id: `item-${newOrderId}-${idx + 1}`,
-        order_id: newOrderId,
-        product_id: item.productId,
-        variant_id: item.variantId || variant?.variant_id || null,
-        combo_id: null,
-        product_name_snapshot: item.name,
-        item_name_snapshot: item.name,
-        variant_name_snapshot: item.variantName || variant?.name || null,
-        price_snapshot: item.price,
-        quantity: item.quantity,
-        subtotal: item.price * item.quantity,
-        created_at: new Date().toISOString(),
-      };
-    });
-
-    const isCash = paymentMode === "cash";
-
-    const newOrder: Order = {
-      order_id: newOrderId,
-      order_code: randomCode,
-      source_type: "event_sale",
-      buyer_name: quickCustomerName.trim() || "Khách tại quầy",
-      buyer_phone: quickPhone.trim() || "",
-      buyer_email: "",
-      recipient_name: quickCustomerName.trim() || "Khách tại quầy",
-      recipient_phone: quickPhone.trim() || "",
-      delivery_type: "member_delivery",
-      address_detail: "Bán trực tiếp tại sự kiện / Quầy Mầm Mơ",
-      district: "",
-      province: "TP. Hồ Chí Minh",
-      payment_method: isCash ? "cod" : "banking",
-      payment_status: isCash ? "paid" : "pending",
-      order_status: isCash ? "completed" : "pending",
-      delivery_status: "delivered",
-      subtotal: subtotal,
-      discount_amount: 0,
-      shipping_fee: 0,
-      final_amount: subtotal,
-      total_cost: Math.round(subtotal * 0.4),
-      seller_id: matchedSeller ? matchedSeller.memberId : null,
-      introducer_info: matchedSeller
-        ? `${matchedSeller.fullName} (${matchedSeller.referralCode})`
-        : "Ban tổ chức trực quầy",
-      referral_code: matchedSeller?.referralCode || null,
-      created_by_member_id: matchedSeller ? matchedSeller.memberId : null,
-      customer_note: quickNote ? `[Bán sự kiện] ${quickNote}` : "Bán trực tiếp tại sự kiện",
-      items: orderItemsSnapshot,
-      created_at: new Date().toISOString(),
-      completed_at: isCash ? new Date().toISOString() : null,
-      updated_at: new Date().toISOString(),
-    };
-
+  // Batch 3A.2 — cash confirm server-first: gọi /api/orders/payment action=confirm
+  // với paymentMethod=cod + amount. Atomic RPC ghi payment/order/history/audit
+  // cùng transaction và trả trạng thái canonical; client không chọn lifecycle.
+  const performCashConfirm = async (serverOrderCode: string, amount: number) => {
+    if (isConfirmingPaid) return;
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
     try {
-      // Decision 3: đơn chỉ được coi là TẠO khi máy chủ trả về kết quả đã commit.
-      // Khóa idempotency được lưu trong sessionStorage và chỉ xoá sau thành công,
-      // nên retry sau timeout/mất kết nối dùng lại đúng khoá + đúng payload.
-      const result = await saveNewOrder(newOrder, { idempotencyFlow: "admin-pos-order" });
+      const outcome = await confirmPaymentServerFirst(serverOrderCode, {
+        paymentMethod: "cod",
+        amount,
+      });
 
-      if (!result.ok) {
-        setSubmitError(
-          result.error || "Không thể tạo đơn hàng trên máy chủ. Vui lòng thử lại."
-        );
+      if (outcome.ok || outcome.kind === "already_paid") {
+        // Đồng bộ đúng trạng thái canonical server trả về; payment RPC chỉ
+        // chuyển pending -> confirmed, không tự ý hoàn tất đơn bán hàng.
+        syncStoredPaymentStatusLocal(serverOrderCode, "paid");
+        syncStoredOrderStatusLocal(serverOrderCode, outcome.ok && outcome.orderStatus
+          ? outcome.orderStatus as OrderStatus
+          : "confirmed");
+        setLastCompletedOrder(serverOrderCode);
+        resetFormForNextCustomer();
         return;
       }
 
-      const createdOrderId = result.orderId || newOrder.order_id;
-      const createdOrderCode = result.orderCode || newOrder.order_code;
-      const createdFinalAmount = result.finalAmount ?? newOrder.final_amount;
+      // Thất bại: đơn ĐÃ tồn tại trên server (banking/pending) — KHÔNG tạo lại.
+      // Giữ pendingCashConfirm để hiển thị nút "Thử xác nhận lại".
+      setPaidConfirmError(outcome.message);
+    } catch {
+      setPaidConfirmError("Lỗi kết nối — vui lòng thử lại.");
+    } finally {
+      setIsConfirmingPaid(false);
+    }
+  };
 
-      newOrder.order_id = createdOrderId;
-      newOrder.order_code = createdOrderCode;
-      newOrder.final_amount = createdFinalAmount;
-      newOrder.items = (newOrder.items || []).map((item, idx) => ({
-        ...item,
-        order_id: createdOrderId,
-        order_item_id: `item-${createdOrderId}-${idx + 1}`,
-      }));
+  // Batch 3A.2 — tạo đơn SERVER-FIRST. newOrder dùng trạng thái khớp server
+  // (banking/pending/pending/not_ready) cho CẢ cash lẫn QR — server luôn tạo
+  // banking/pending/pending; cash được chuyển sang cod/paid/completed SAU khi
+  // confirm pipeline thành công (không còn local-first paid/completed).
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cartItems.length === 0 || subtotal <= 0) return;
+    // Chặn double-submit + chặn tạo đơn mới khi cash-confirm còn dang dở.
+    if (isSubmitting || pendingCashConfirm) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const randomCode = `GM-${Math.floor(100000 + Math.random() * 900000)}`;
+      const newOrderId = `ord-${Date.now()}`;
+      const matchedSeller = members.find((m) => m.memberId === sellerId);
+
+      const orderItemsSnapshot: OrderItem[] = cartItems.map((item, idx) => {
+        const prod = products.find((p) => p.product_id === item.productId);
+        const variant = prod?.variants?.find((v) => v.variant_id === item.variantId) || prod?.variants?.[0];
+        return {
+          order_item_id: `item-${newOrderId}-${idx + 1}`,
+          order_id: newOrderId,
+          product_id: item.productId,
+          variant_id: item.variantId || variant?.variant_id || null,
+          combo_id: null,
+          product_name_snapshot: item.name,
+          item_name_snapshot: item.name,
+          variant_name_snapshot: item.variantName || variant?.name || null,
+          price_snapshot: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+      const isCash = paymentMode === "cash";
+
+      // Trạng thái TẠO ĐƠN khớp server (RPC path hardcode banking/pending/
+      // pending/not_ready). isCash chỉ quyết định đường xác nhận SAU tạo.
+      const newOrder: Order = {
+        order_id: newOrderId,
+        order_code: randomCode,
+        source_type: "event_sale",
+        buyer_name: quickCustomerName.trim() || "Khách tại quầy",
+        buyer_phone: quickPhone.trim() || "",
+        buyer_email: "",
+        recipient_name: quickCustomerName.trim() || "Khách tại quầy",
+        recipient_phone: quickPhone.trim() || "",
+        delivery_type: "member_delivery",
+        address_detail: "Bán trực tiếp tại sự kiện / Quầy Mầm Mơ",
+        district: "",
+        province: "TP. Hồ Chí Minh",
+        payment_method: "banking",
+        payment_status: "pending",
+        order_status: "pending",
+        delivery_status: "not_ready",
+        subtotal: subtotal,
+        discount_amount: 0,
+        shipping_fee: 0,
+        final_amount: subtotal,
+        total_cost: Math.round(subtotal * 0.4),
+        seller_id: matchedSeller ? matchedSeller.memberId : null,
+        introducer_info: matchedSeller
+          ? `${matchedSeller.fullName} (${matchedSeller.referralCode})`
+          : "Ban tổ chức trực quầy",
+        referral_code: matchedSeller?.referralCode || null,
+        created_by_member_id: matchedSeller ? matchedSeller.memberId : null,
+        customer_note: quickNote ? `[Bán sự kiện] ${quickNote}` : "Bán trực tiếp tại sự kiện",
+        items: orderItemsSnapshot,
+        created_at: new Date().toISOString(),
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const result = await saveNewOrder(newOrder, { attemptScope: "pos-create" });
+
+      if (!result.success) {
+        setSubmitError(result.error || "Không thể tạo đơn hàng. Vui lòng thử lại.");
+        return;
+      }
+
+      const serverCode = result.serverOrderCode!;
+      const serverAmount = result.finalAmount ?? subtotal;
 
       if (isCash) {
-        setLastCompletedOrder(createdOrderCode);
-        resetFormForNextCustomer();
+        // Đơn ĐÃ tạo server → vào trạng thái cash-confirm (retry confirm,
+        // KHÔNG tạo lại đơn nếu confirm fail).
+        setPendingCashConfirm({ serverOrderCode: serverCode, amount: serverAmount });
+        await performCashConfirm(serverCode, serverAmount);
       } else {
-        // Build VietQR dynamic URL
+        // QR: dùng server orderCode cho nội dung chuyển khoản + confirm.
         const qrUrl =
           settings.qrMode === "upload" && settings.qrImageUrl
             ? settings.qrImageUrl
-            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${createdFinalAmount}&addInfo=${createdOrderCode}&accountName=${encodeURIComponent(
+            : `https://img.vietqr.io/image/MB-${settings.bankNumber || "03456789999"}-compact2.png?amount=${serverAmount}&addInfo=${serverCode}&accountName=${encodeURIComponent(
                 settings.bankHolder || "CLB MAM MO GIEO MO"
               )}`;
 
         setActiveQrModal({
-          orderCode: createdOrderCode,
-          orderId: createdOrderId,
-          amount: createdFinalAmount,
+          orderCode: serverCode,
+          orderId: result.serverOrderId!,
+          amount: serverAmount,
           qrUrl,
         });
       }
@@ -292,12 +334,42 @@ export default function AdminPosPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "completed");
-    setLastCompletedOrder(activeQrModal.orderCode);
-    resetFormForNextCustomer();
+  // Batch 3A.2 — QR confirm server-first: /api/orders/payment action=confirm
+  // với amount + mã ngân hàng thật. Không còn bypass payment pipeline.
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const outcome = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+
+      if (outcome.ok || outcome.kind === "already_paid") {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+        syncStoredOrderStatusLocal(activeQrModal.orderCode, outcome.ok && outcome.orderStatus
+          ? outcome.orderStatus as OrderStatus
+          : "confirmed");
+        setLastCompletedOrder(activeQrModal.orderCode);
+        resetFormForNextCustomer();
+        return;
+      }
+
+      if (outcome.paymentStatusIsPaid) {
+        syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      }
+      setPaidConfirmError(outcome.message);
+    } catch {
+      setPaidConfirmError("Lỗi kết nối — vui lòng thử lại.");
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {
@@ -355,16 +427,39 @@ export default function AdminPosPage() {
         </div>
       )}
 
+      {/* Batch 3A.2 — cash-confirm dang dở: đơn ĐÃ tạo server nhưng CHƯA xác
+          nhận thu tiền. Retry confirm (KHÔNG tạo lại đơn). */}
+      {pendingCashConfirm && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-2">
+          <div className="font-bold flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span>
+              Đơn <strong>{pendingCashConfirm.serverOrderCode}</strong> (
+              {pendingCashConfirm.amount.toLocaleString("vi-VN")}đ) đã tạo trên máy chủ
+              nhưng CHƯA xác nhận thu tiền mặt.
+            </span>
+          </div>
+          {paidConfirmError && <p className="text-amber-800">{paidConfirmError}</p>}
+          <button
+            type="button"
+            onClick={() => performCashConfirm(pendingCashConfirm.serverOrderCode, pendingCashConfirm.amount)}
+            disabled={isConfirmingPaid}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isConfirmingPaid ? "Đang xác nhận..." : "Thử xác nhận thu tiền lại"}
+          </button>
+        </div>
+      )}
+
+      {/* Batch 3A.2 — lỗi tạo đơn (server chưa tạo) */}
+      {submitError && !pendingCashConfirm && (
+        <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-700">
+          {submitError}
+        </div>
+      )}
+
       {/* Main Grid */}
       <form onSubmit={handleCheckoutSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {submitError && (
-          <div
-            role="alert"
-            className="lg:col-span-12 bg-red-50 border border-red-200 text-red-700 rounded-2xl px-4 py-3 text-sm font-semibold"
-          >
-            {submitError}
-          </div>
-        )}
         {/* Left Column: Product Table & Fast Add */}
         <div className="lg:col-span-7 space-y-6">
           {/* Quick Item Picker Chips */}
@@ -634,24 +729,26 @@ export default function AdminPosPage() {
               {paymentMode === "cash" ? (
                 <button
                   type="submit"
-                  disabled={subtotal <= 0 || isSubmitting}
-                  className="w-full py-3.5 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3] disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={subtotal <= 0 || isSubmitting || !!pendingCashConfirm}
+                  className="w-full py-3.5 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Banknote className="w-4 h-4" />
                   <span>
                     {isSubmitting
-                      ? "Đang xử lý..."
+                      ? "Đang tạo đơn & xác nhận trên máy chủ..."
                       : `Thu tiền mặt ${subtotal.toLocaleString("vi-VN")}đ & Hoàn tất`}
                   </span>
                 </button>
               ) : (
                 <button
                   type="submit"
-                  disabled={subtotal <= 0 || isSubmitting}
-                  className="w-full py-3.5 px-4 rounded-full bg-[#16381D] hover:bg-[#204e2a] text-white font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={subtotal <= 0 || isSubmitting || !!pendingCashConfirm}
+                  className="w-full py-3.5 px-4 rounded-full bg-[#16381D] hover:bg-[#204e2a] text-white font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <QrCode className="w-4 h-4 text-[#BFE9C3]" />
-                  <span>{isSubmitting ? "Đang xử lý..." : "Xuất mã VietQR cho khách quét ➔"}</span>
+                  <span>
+                    {isSubmitting ? "Đang tạo đơn trên máy chủ..." : "Xuất mã VietQR cho khách quét ➔"}
+                  </span>
                 </button>
               )}
             </div>
@@ -720,13 +817,23 @@ export default function AdminPosPage() {
 
             {/* Confirm Paid Action */}
             <div className="space-y-2 pt-2 border-t border-[#F0E5D8]">
+              {paidConfirmError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 text-left">
+                  {paidConfirmError}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleConfirmQrPaid}
-                className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3]"
+                disabled={isConfirmingPaid}
+                className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-800" />
-                <span>✓ Khách đã chuyển khoản xong — Đã nhận tiền</span>
+                <span>
+                  {isConfirmingPaid
+                    ? "Đang xác nhận thanh toán..."
+                    : "✓ Khách đã chuyển khoản xong — Đã nhận tiền"}
+                </span>
               </button>
 
               <button

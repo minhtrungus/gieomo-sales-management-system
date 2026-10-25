@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapPin, Plus, Edit3, Trash2, Phone, Clock, User, X, Check, AlertCircle } from "lucide-react";
+import { MapPin, Plus, Edit3, Trash2, Phone, Clock, User, X, Check } from "lucide-react";
+import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import { getStoredPickupPoints, saveStoredPickupPoint, deleteStoredPickupPoint } from "@/lib/data/orderStore";
 import type { PickupPoint } from "@/types/database";
 
@@ -10,6 +11,7 @@ export default function AdminPickupPointsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPoint, setEditingPoint] = useState<PickupPoint | null>(null);
   const [deletingPoint, setDeletingPoint] = useState<PickupPoint | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState<Partial<PickupPoint>>({
@@ -81,11 +83,18 @@ export default function AdminPickupPointsPage() {
     loadPoints();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingPoint) return;
-    deleteStoredPickupPoint(deletingPoint.pickup_point_id);
-    setDeletingPoint(null);
-    loadPoints();
+    setIsDeleting(true);
+    try {
+      deleteStoredPickupPoint(deletingPoint.pickup_point_id);
+      loadPoints();
+    } catch {
+      alert("Không thể xóa điểm nhận. Vui lòng thử lại.");
+    } finally {
+      setIsDeleting(false);
+      setDeletingPoint(null);
+    }
   };
 
   return (
@@ -338,35 +347,19 @@ export default function AdminPickupPointsPage() {
 
       {/* Delete Confirmation Modal */}
       {deletingPoint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-red-100 shadow-soft space-y-4 animate-in fade-in">
-            <div className="flex items-center gap-3 text-red-600">
-              <AlertCircle className="w-6 h-6" />
-              <h3 className="font-heading font-bold text-base text-gray-900">
-                Xác nhận xóa điểm nhận?
-              </h3>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Bạn có chắc muốn xóa điểm nhận <strong>&ldquo;{deletingPoint.name}&rdquo;</strong>? Thao tác này sẽ gỡ điểm nhận khỏi danh sách lựa chọn của khách.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingPoint(null)}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-100 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer"
-              >
-                Xóa vĩnh viễn
-              </button>
-            </div>
-          </div>
-        </div>
+        <DoubleConfirmDialog
+          open={true}
+          onClose={() => setDeletingPoint(null)}
+          onConfirm={handleDelete}
+          title="Xóa điểm nhận"
+          message="Bạn có chắc muốn xóa điểm nhận này? Thao tác này sẽ gỡ điểm nhận khỏi danh sách lựa chọn của khách."
+          confirmCode="XOA"
+          loading={isDeleting}
+          details={[
+            { label: "Tên điểm nhận", value: deletingPoint.name },
+            { label: "Địa chỉ", value: deletingPoint.address },
+          ]}
+        />
       )}
     </div>
   );
