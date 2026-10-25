@@ -3,9 +3,10 @@ import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
+import { defaultPsqlBin, resolvePsqlBin } from "./helpers/psqlBin.ts";
 
 const databaseUrl = process.env.ATOMIC_PG_URL;
-const psql = process.env.PSQL_BIN || "psql.exe";
+const psql = databaseUrl ? resolvePsqlBin() : defaultPsqlBin();
 const execFileAsync = promisify(execFile);
 
 function literal(value: string): string {

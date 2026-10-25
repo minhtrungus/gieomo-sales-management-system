@@ -21,6 +21,16 @@ try {
   process.exit(2);
 }
 
+try {
+  const { resolvePsqlBin } = await import("../../tests/helpers/psqlBin.ts");
+  const executable = resolvePsqlBin();
+  process.stdout.write(`MANDATORY_PG_CLIENT_OK executable=${executable}\n`);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`MANDATORY_PG_INFRA_FAILURE ${message}\n`);
+  process.exit(2);
+}
+
 const mandatoryFiles = [
   "tests/adjustStockPg.integration.test.ts",
   "tests/atomicOrderPg.integration.test.ts",

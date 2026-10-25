@@ -3,7 +3,9 @@ param(
   [int]$Port = 55441,
   [string]$PostgresBin = "$env:USERPROFILE\scoop\apps\postgresql\current\bin",
   [string[]]$ProposalFiles = @(),
+  [string[]]$AdditionalTestFiles = @(),
   [switch]$RequireSupabaseLint,
+  [switch]$SkipSupabaseLint,
   [switch]$KeepCluster
 )
 
@@ -137,6 +139,23 @@ END `$`$;
     Invoke-Checked "mandatory Node PostgreSQL tests" {
       & node scripts/postgres/run-mandatory-pg-tests.mjs
     }
+    if ($AdditionalTestFiles.Count -gt 0) {
+      $normalizedAdditionalTests = $AdditionalTestFiles |
+        ForEach-Object { $_ -split ',' } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+      $resolvedAdditionalTests = foreach ($testFile in $normalizedAdditionalTests) {
+        $resolved = (Resolve-Path (Join-Path $repoRoot $testFile)).Path
+        $testsRoot = (Resolve-Path (Join-Path $repoRoot "tests")).Path
+        if (-not $resolved.StartsWith("$testsRoot\", [System.StringComparison]::OrdinalIgnoreCase) -or
+            $resolved -notlike "*.test.ts") {
+          throw "Refusing additional test outside tests/*.test.ts: $resolved"
+        }
+        $resolved
+      }
+      Invoke-Checked "additional Node PostgreSQL tests" {
+        & node --test @resolvedAdditionalTests
+      }
+    }
     if ($ProposalFiles.Count -gt 0) {
       Invoke-Checked "remediation proposal PostgreSQL tests" {
         & node --test tests/paymentRejectionPg.integration.test.ts
@@ -149,18 +168,24 @@ END `$`$;
     Remove-Item Env:GIEOMO_PG_ISOLATED -ErrorAction SilentlyContinue
   }
 
-  $env:PGSSLMODE = "disable"
-  try { & supabase db lint --db-url $connectionString --fail-on error --schema public }
-  finally { Remove-Item Env:PGSSLMODE -ErrorAction SilentlyContinue }
-  $lintExit = $LASTEXITCODE
-  if ($lintExit -ne 0) {
-    if ($RequireSupabaseLint) {
-      throw "Supabase database lint failed with exit code $lintExit"
+  if ($SkipSupabaseLint) {
+    $lintResult = "skipped_by_explicit_switch"
+  }
+  else {
+    $env:PGSSLMODE = "disable"
+    try { & supabase db lint --db-url $connectionString --fail-on error --schema public }
+    finally { Remove-Item Env:PGSSLMODE -ErrorAction SilentlyContinue }
+    $lintExit = $LASTEXITCODE
+    $lintResult = "exit=$lintExit"
+    if ($lintExit -ne 0) {
+      if ($RequireSupabaseLint) {
+        throw "Supabase database lint failed with exit code $lintExit"
+      }
+      Write-Warning "SUPABASE_LINT_BLOCKED exit=$lintExit (vanilla PostgreSQL may not provide plpgsql_check)"
     }
-    Write-Warning "SUPABASE_LINT_BLOCKED exit=$lintExit (vanilla PostgreSQL may not provide plpgsql_check)"
   }
 
-  Write-Host "CANONICAL_REPLAY_PASS migrations=$($migrationFiles.Count) tip=$($migrationFiles[-1].Name) lint_exit=$lintExit"
+  Write-Host "CANONICAL_REPLAY_PASS migrations=$($migrationFiles.Count) tip=$($migrationFiles[-1].Name) lint=$lintResult"
 }
 finally {
   if ($started -and -not $KeepCluster) {

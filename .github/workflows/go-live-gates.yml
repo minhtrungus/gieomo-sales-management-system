@@ -54,6 +54,18 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Install and verify PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1 || ! command -v pg_isready >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+          command -v psql
+          psql --version
+          pg_isready --host 127.0.0.1 --port 5432 --username postgres --dbname gieomo_ci
+
       - name: Validate canonical migration chain
         run: node scripts/migrations/validate-chain.mjs
 

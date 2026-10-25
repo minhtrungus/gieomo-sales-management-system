@@ -3,9 +3,10 @@ import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
-import { psqlBin as psql, psqlTimeoutMs } from "./helpers/psqlBin.ts";
+import { defaultPsqlBin, psqlTimeoutMs, resolvePsqlBin } from "./helpers/psqlBin.ts";
 
 const databaseUrl = process.env.ATOMIC_PG_URL;
+const psql = databaseUrl ? resolvePsqlBin() : defaultPsqlBin();
 const execFileAsync = promisify(execFile);
 
 // Random per-run identity: fixed UUIDs collide across parallel PG test files
