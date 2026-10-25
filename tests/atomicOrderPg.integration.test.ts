@@ -283,15 +283,18 @@ test("Decision 3 atomic order PostgreSQL contract", { skip: !databaseUrl, timeou
     assert.equal(query(`SELECT times_used FROM public.vouchers WHERE code=${literal(code)};`), "0");
   });
 
-  await t.test("combo without a component variant fails closed", () => {
-    const item = createCatalog("unmapped-combo");
+  await t.test("combo NULL component uses the migration-035 wildcard contract", () => {
+    const item = createCatalog("wildcard-combo");
     const comboId = randomUUID();
     query(`
       INSERT INTO public.combos(combo_id,name,slug,price,status) VALUES (${literal(comboId)}::uuid,'D3 combo',${literal(`d3-combo-${comboId}`)},150000,'active');
       INSERT INTO public.combo_items(combo_id,product_id,variant_id,quantity) VALUES (${literal(comboId)}::uuid,${literal(item.productId)}::uuid,NULL,1);
     `);
-    const request = payload({ label: `unmapped-combo-${randomUUID()}`, comboId });
-    assert.throws(() => query(rpc(request.value)));
-    assert.equal(orderCounts(request.key), "0|0|0|0|0");
+    const request = payload({ label: `wildcard-combo-${randomUUID()}`, comboId });
+    const result = JSON.parse(query(rpc(request.value)));
+    assert.equal(result.outcome, "created");
+    assert.equal(orderCounts(request.key), "1|1|1|1|1");
+    assert.equal(query(`SELECT stock FROM public.product_variants WHERE variant_id=${literal(item.variantId)}::uuid;`), "19");
+    assert.equal(query(`SELECT quantity FROM public.order_inventory_reservations WHERE order_id=${literal(result.order_id)}::uuid AND variant_id=${literal(item.variantId)}::uuid;`), "1");
   });
 });

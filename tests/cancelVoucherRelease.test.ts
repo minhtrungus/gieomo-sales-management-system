@@ -415,16 +415,17 @@ test("C7 — voucher đã xóa (voucher_id null do FK SET NULL): hủy thành c�
   assert.equal(countAction(world, "voucher-cas-decrement"), 0);
 });
 
-test("C8 — PATCH không phải cancel (paymentStatus): không đi nhánh release", async () => {
+test("C8 — generic paymentStatus PATCH is rejected without entering voucher release", async () => {
   const world = emptyWorld();
   seedOrder(world, VOUCHER_ID);
+  const paymentStatusBefore = world.orders[0].payment_status;
   g.__fakeCancelDb = createFakeSupabase(world);
 
   const res = await patchRequest({ orderId: ORDER_ID, paymentStatus: "paid" });
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 400);
   assert.equal(countAction(world, "voucher-cas-decrement"), 0);
   assert.equal(world.orders[0].order_status, "pending");
-  assert.equal(world.orders[0].payment_status, "paid");
+  assert.equal(world.orders[0].payment_status, paymentStatusBefore);
 });
 
 test("C9 — hủy theo order_code thay vì orderId: vẫn idempotent", async () => {

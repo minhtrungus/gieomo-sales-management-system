@@ -16,6 +16,7 @@ import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
 import { Toast } from "@/components/ui/Toast";
+import { LOCAL_ASSET_UNAVAILABLE } from "@/lib/runtimeAssetSafety";
 
 interface ProductDetailClientProps {
   slug: string;
@@ -155,10 +156,10 @@ export function ProductDetailClient({
 
   // Gallery images combined
   const displayImages = useMemo(() => {
-    if (!product) return ["/images/products/pounch_1.png"];
+    if (!product) return [LOCAL_ASSET_UNAVAILABLE];
     const base = product.images && product.images.length > 0
       ? [...product.images]
-      : [product.thumbnail || "/images/products/pounch_1.png"];
+      : [product.thumbnail || LOCAL_ASSET_UNAVAILABLE];
     if (product.variants) {
       product.variants.forEach((v) => {
         if (v.image_url && !base.includes(v.image_url)) {
@@ -343,6 +344,11 @@ export function ProductDetailClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft mb-12">
           {/* Gallery - Left 6 Cols */}
           <div className="lg:col-span-6 space-y-4">
+            {product.image_status !== "source" && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
+                Ảnh sản phẩm thật chưa có trong bản sao cục bộ; hình bên dưới là trạng thái thay thế, không phải ảnh đã xác minh.
+              </div>
+            )}
             <div 
               onClick={() => {
                 setIsLightboxOpen(true);

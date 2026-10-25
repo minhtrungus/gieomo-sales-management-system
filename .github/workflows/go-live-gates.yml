@@ -1,0 +1,80 @@
+name: Go-live release gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-live-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gieomo_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gieomo_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      ATOMIC_PG_URL: postgresql://postgres:postgres@127.0.0.1:5432/gieomo_ci?sslmode=disable
+      GIEOMO_PG_ISOLATED: "1"
+      GIEOMO_EXPECTED_MIGRATION_TIP: "037"
+      PGPASSWORD: postgres
+      PGSSLMODE: disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.98.2
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate canonical migration chain
+        run: node scripts/migrations/validate-chain.mjs
+
+      - name: Replay canonical migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$ATOMIC_PG_URL" -v ON_ERROR_STOP=1 -f scripts/postgres/bootstrap_supabase_test_roles.sql
+          while IFS= read -r migration; do
+            echo "Applying ${migration}"
+            psql "$ATOMIC_PG_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
+
+      - name: Run mandatory PostgreSQL tests with zero skips
+        run: npm run test:pg:mandatory
+
+      - name: Run all tests with PostgreSQL target
+        run: node --test tests/*.test.ts
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build

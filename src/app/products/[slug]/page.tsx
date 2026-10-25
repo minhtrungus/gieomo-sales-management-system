@@ -77,7 +77,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   );
 
   // 3. Open Graph image (ensure absolute URL)
-  let rawImage = product.thumbnail || product.images?.[0] || "/images/products/pounch_1.png";
+  const rawImage = product.thumbnail || product.images?.[0] || "/images/product-image-unavailable.svg";
   const ogImageUrl = rawImage.startsWith("http")
     ? rawImage
     : `${siteUrl}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;

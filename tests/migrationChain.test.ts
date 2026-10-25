@@ -31,9 +31,20 @@ const expected = [
   "024_repair_payment_cash_contract.sql",
   "025_atomic_idempotent_order_creation.sql",
   "026_atomic_order_cancellation.sql",
+  "027_close_runtime_read_and_rpc_bypasses.sql",
+  "028_orders_payments_least_privilege.sql",
+  "029_atomic_payment_rejection.sql",
+  "030_atomic_combo_persistence.sql",
+  "031_optional_combo_variant_persistence.sql",
+  "032_controlled_order_deletion.sql",
+  "033_order_item_variant_swap.sql",
+  "034_harden_order_deletion_and_mark_duplicates.sql",
+  "035_combo_wildcard_checkout.sql",
+  "036_preserve_order_source_delivery_pickup_guidance.sql",
+  "037_preserve_order_source_delivery_writer.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 026", () => {
+test("the migration chain has exactly one SQL file for 001 through 037", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();

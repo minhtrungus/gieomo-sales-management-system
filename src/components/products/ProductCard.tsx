@@ -98,6 +98,14 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
           </div>
         )}
 
+        {product.image_status !== "source" && (
+          <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none text-center">
+            <span className="inline-flex px-2.5 py-1 rounded-full bg-white/95 border border-[#D8CBBE] text-[#5F5148] text-[10px] font-bold shadow-xs">
+              Ảnh thật chưa có trong bản sao cục bộ
+            </span>
+          </div>
+        )}
+
         {/* Out of Stock Overlay Badge */}
         {isOutOfStock ? (
           <div className="absolute top-3 left-3 z-20 pointer-events-none">

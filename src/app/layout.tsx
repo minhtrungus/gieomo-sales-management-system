@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Montserrat, Caveat, Playfair_Display } from "next/font/google";
 import { getSiteUrl } from "@/lib/constants";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
@@ -8,31 +7,8 @@ import { ReferralTracker } from "@/components/common/ReferralTracker";
 import { SEO_KEYWORD_LIST } from "@/lib/seo/keywords";
 import "./globals.css";
 
-const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID || "G-P3MJB88K1K";
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin", "vietnamese"],
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
-const caveat = Caveat({
-  variable: "--font-handwriting",
-  subsets: ["latin", "latin-ext"],
-  display: "swap",
-  weight: ["700"],
-});
-
-const playfair = Playfair_Display({
-  variable: "--font-serif",
-  subsets: ["latin", "vietnamese"],
-  display: "swap",
-  weight: ["400"],
-});
-
-// Note: Boldonse will be loaded via CSS @font-face when font file is provided.
-// For now we use Montserrat as primary and will add Boldonse for display text later.
+// Analytics is opt-in so local/offline acceptance never emits third-party traffic.
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
@@ -99,7 +75,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="vi" className={`${montserrat.variable} ${caveat.variable} ${playfair.variable} h-full`} suppressHydrationWarning>
+    <html lang="vi" className="h-full" suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <OrganizationJsonLd />
         <ReferralTracker />

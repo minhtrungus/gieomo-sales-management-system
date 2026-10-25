@@ -22,7 +22,7 @@ import {
   getAdminSession,
   getStoredOrders,
   updateStoredDeliveryStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   updateStoredOrderStatus,
   type AdminSession,
 } from "@/lib/data/orderStore";

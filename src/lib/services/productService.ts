@@ -1,7 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
 import type { ProductVariant } from "@/types/database";
-
+import {
+  resolveRuntimeAsset,
+  resolveRuntimeImageSet,
+} from "@/lib/runtimeAssetSafety";
 
 
 /**
@@ -84,16 +87,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
     return (data as any[]).map((p) => {
       // Map media to images array
       const rawMedia = p.product_media || p.media || [];
-      const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
-        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-        .map((m: any) => m.url);
-      
-      const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
-      const images = mediaImages.length > 0
-        ? mediaImages
-        : p.thumbnail
-        ? [p.thumbnail]
-        : [fallbackImage];
+      const imageSet = resolveRuntimeImageSet(rawMedia, p.thumbnail);
 
       // Map variants with warehouse calculations
       const rawVariants = p.product_variants || p.variants || [];
@@ -102,8 +96,11 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         const stock = v.stock ?? 0;
         const wh1 = Math.ceil(stock * 0.7);
         const wh2 = stock - wh1;
+        const variantAsset = resolveRuntimeAsset(v.image_url);
         return {
           ...v,
+          image_url: variantAsset.url,
+          image_status: variantAsset.status,
           stock,
           stock_warehouse_1: wh1,
           stock_warehouse_2: wh2,
@@ -133,8 +130,9 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
         featured: Boolean(p.featured),
         sort_order: p.sort_order || 1,
         weight_gram: p.weight_gram || 100,
-        thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
-        images,
+        thumbnail: imageSet.thumbnail,
+        image_status: imageSet.status,
+        images: imageSet.images,
         category: category || undefined,
         variants,
         created_at: p.created_at,
@@ -202,11 +200,7 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
 
       if (p) {
         const rawMedia = (p as any).product_media || (p as any).media || [];
-        const mediaImages = (Array.isArray(rawMedia) ? rawMedia : [])
-          .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-          .map((m: any) => m.url);
-        const fallbackImage = p.thumbnail || "/images/placeholder.jpg";
-        const images = mediaImages.length > 0 ? mediaImages : p.thumbnail ? [p.thumbnail] : [fallbackImage];
+        const imageSet = resolveRuntimeImageSet(rawMedia, p.thumbnail);
 
         const rawVariants = (p as any).product_variants || (p as any).variants || [];
         const variantsList = Array.isArray(rawVariants) ? rawVariants : [];
@@ -214,8 +208,11 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           const stock = v.stock ?? 0;
           const wh1 = Math.ceil(stock * 0.7);
           const wh2 = stock - wh1;
+          const variantAsset = resolveRuntimeAsset(v.image_url);
           return {
             ...v,
+            image_url: variantAsset.url,
+            image_status: variantAsset.status,
             stock,
             stock_warehouse_1: wh1,
             stock_warehouse_2: wh2,
@@ -245,8 +242,9 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           featured: Boolean(p.featured),
           sort_order: p.sort_order || 1,
           weight_gram: p.weight_gram || 100,
-          thumbnail: p.thumbnail || images[0] || "/images/products/pounch_1.png",
-          images,
+          thumbnail: imageSet.thumbnail,
+          image_status: imageSet.status,
+          images: imageSet.images,
           category: category || undefined,
           variants,
           created_at: p.created_at,
