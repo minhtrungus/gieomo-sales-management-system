@@ -1,13 +1,13 @@
 # H40.1 — PostgreSQL CI Repair, Supabase Backup Gate, and Schema-Push Decision
 
-Generated: 2026-10-25 12:47:42 +07:00 (Asia/Saigon)  
-Repository: `C:\Users\MT\Workspaces\gieomo-sales-management-system`  
-Release worktree: `.tmp/h37-integration-origin-main-20261024T020000`  
-Release branch: `release/h39-production-readiness-20261025`  
-Starting SHA: `1ac5b91dc5648bfb7c287b461a88a6933e94a63b`  
-Reviewed source SHA: `70f1ae86a4c73788975c2552c97de22933c20ea5`  
-Pull request: [#3](https://github.com/minhtrungus/gieomo-sales-management-system/pull/3)  
-CI: [Go-live release gates run 40166936259](https://github.com/minhtrungus/gieomo-sales-management-system/actions/runs/40166936259) — **PASS**  
+Generated: 2026-10-25 12:47:42 +07:00 (Asia/Saigon)
+Repository: `C:\Users\MT\Workspaces\gieomo-sales-management-system`
+Release worktree: `.tmp/h37-integration-origin-main-20261024T020000`
+Release branch: `release/h39-production-readiness-20261025`
+Starting SHA: `1ac5b91dc5648bfb7c287b461a88a6933e94a63b`
+Reviewed source SHA: `70f1ae86a4c73788975c2552c97de22933c20ea5`
+Pull request: [#3](https://github.com/minhtrungus/gieomo-sales-management-system/pull/3)
+CI: [Go-live release gates run 40166936259](https://github.com/minhtrungus/gieomo-sales-management-system/actions/runs/40166936259) — **PASS**
 Verdict: **NO-GO FOR PRODUCTION DATABASE PUSH — CI FIXED; BACKUP, RESTORE, REMOTE LEDGER, AND REMOTE CATALOG GATES ARE NOT SATISFIED**
 
 ## 1. Executive result
@@ -190,4 +190,3 @@ The following mandatory gates are open: fresh backup, checksum/integrity, restor
 The CI incident is resolved and proven on Linux at exact source SHA `70f1ae86a4c73788975c2552c97de22933c20ea5`. The production database mission is not safe to continue because recoverability and actual schema state are unproven.
 
 **Final verdict: NO-GO FOR PRODUCTION DATABASE PUSH.** Keep PR #3 open for review. Do not merge, deploy, or push Supabase migrations until the backup/restore and remote-catalog gates above are satisfied.
-
