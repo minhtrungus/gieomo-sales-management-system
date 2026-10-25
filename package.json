@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "type-check": "tsc --noEmit",
+    "type-check": "next typegen && tsc --noEmit",
     "test:pg:mandatory": "node scripts/postgres/run-mandatory-pg-tests.mjs"
   },
   "dependencies": {
