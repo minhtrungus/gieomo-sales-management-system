@@ -5,6 +5,14 @@ import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
+type PickupPointWrite = Partial<Omit<PickupPoint, "pickup_point_id">> & {
+  updated_at: string;
+};
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function GET() {
   try {
     const supabase = createAdminClient();
@@ -19,7 +27,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, pickup_points: data || [] });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/pickup-points] Exception:", err);
     return NextResponse.json({ success: false, pickup_points: [] });
   }
@@ -40,12 +48,13 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.pickup_point_id);
 
-    const payload: any = {
+    const payload: PickupPointWrite = {
       name: body.name.trim(),
       address: body.address.trim(),
       contact_name: body.contact_name || null,
       contact_phone: body.contact_phone || null,
       opening_hours: body.opening_hours || null,
+      location_guide: body.location_guide || null,
       status: body.status || "active",
       updated_at: new Date().toISOString(),
     };
@@ -62,7 +71,7 @@ export async function POST(request: Request) {
       if (exPoint) existingPointId = exPoint.pickup_point_id;
     }
 
-    let savedPoint: any;
+    let savedPoint: PickupPoint | null;
     if (existingPointId) {
       const { data, error } = await supabase
         .from("pickup_points")
@@ -84,9 +93,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, pickup_point: savedPoint });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/pickup-points] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu điểm nhận hàng" }, { status: 500 });
+    return NextResponse.json({ success: false, error: errorMessage(err, "Lỗi lưu điểm nhận hàng") }, { status: 500 });
   }
 }
 
@@ -98,7 +107,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, name, address, contact_name, contact_phone, opening_hours, status } = body;
+    const { id, name, address, contact_name, contact_phone, opening_hours, location_guide, status } = body;
 
     if (!id && !name) {
       return NextResponse.json(
@@ -113,7 +122,7 @@ export async function PATCH(request: Request) {
     // Find existing pickup point
     let existingPointId: string | null = null;
     if (isUuid) {
-      existingPointId = body.pickup_point_id;
+      existingPointId = id;
     } else if (name) {
       const { data: exPoint } = await supabase
         .from("pickup_points")
@@ -127,7 +136,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Không tìm thấy điểm nhận" }, { status: 404 });
     }
 
-    const payload: any = {
+    const payload: PickupPointWrite = {
       updated_at: new Date().toISOString(),
     };
 
@@ -136,6 +145,7 @@ export async function PATCH(request: Request) {
     if (contact_name !== undefined) payload.contact_name = contact_name;
     if (contact_phone !== undefined) payload.contact_phone = contact_phone;
     if (opening_hours !== undefined) payload.opening_hours = opening_hours;
+    if (location_guide !== undefined) payload.location_guide = location_guide || null;
     if (status !== undefined) payload.status = status;
 
     const { data, error } = await supabase
@@ -148,10 +158,10 @@ export async function PATCH(request: Request) {
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
 
     return NextResponse.json({ success: true, pickup_point: data });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[PATCH /api/pickup-points] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi cập nhật điểm nhận hàng" },
+      { success: false, error: errorMessage(err, "Lỗi cập nhật điểm nhận hàng") },
       { status: 500 }
     );
   }
@@ -190,8 +200,8 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[DELETE /api/pickup-points] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa điểm nhận hàng" }, { status: 500 });
+    return NextResponse.json({ success: false, error: errorMessage(err, "Lỗi xóa điểm nhận hàng") }, { status: 500 });
   }
 }

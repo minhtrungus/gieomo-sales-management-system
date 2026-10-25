@@ -567,7 +567,7 @@ export default function AdminMessagesPage() {
                 filteredReviews.map((rev) => {
                   const prod = productMap.get(rev.product_id);
                   const prodName = prod?.name || `Sản phẩm (${rev.product_id})`;
-                  const prodThumb = prod?.thumbnail || prod?.images?.[0] || "/images/products/pounch_1.png";
+                  const prodThumb = prod?.thumbnail || prod?.images?.[0] || "/images/product-image-unavailable.svg";
 
                   return (
                     <div key={rev.review_id} className="p-5 hover:bg-[#FFFDF9] transition-colors space-y-3">

@@ -9,11 +9,11 @@ import {
   getStoredProducts,
   getActiveReferralMembers,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   type StoredMember,
   type ExtendedProduct,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { Order, OrderItem } from "@/types/database";
 
 export default function AdminPosPage() {
@@ -58,6 +58,7 @@ export default function AdminPosPage() {
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
 
   // Initialize with first product if cart empty
   useEffect(() => {
@@ -221,8 +222,8 @@ export default function AdminPosPage() {
       district: "",
       province: "TP. Hồ Chí Minh",
       payment_method: isCash ? "cod" : "banking",
-      payment_status: isCash ? "paid" : "pending",
-      order_status: isCash ? "completed" : "pending",
+      payment_status: "pending",
+      order_status: "pending",
       delivery_status: "delivered",
       subtotal: subtotal,
       discount_amount: 0,
@@ -238,7 +239,7 @@ export default function AdminPosPage() {
       customer_note: quickNote ? `[Bán sự kiện] ${quickNote}` : "Bán trực tiếp tại sự kiện",
       items: orderItemsSnapshot,
       created_at: new Date().toISOString(),
-      completed_at: isCash ? new Date().toISOString() : null,
+      completed_at: null,
       updated_at: new Date().toISOString(),
     };
 
@@ -269,6 +270,15 @@ export default function AdminPosPage() {
       }));
 
       if (isCash) {
+        const paymentResult = await confirmPaymentServerFirst(createdOrderCode, {
+          paymentMethod: "cod",
+          amount: createdFinalAmount,
+        });
+        if (!paymentResult.ok && paymentResult.kind !== "already_paid") {
+          setSubmitError(paymentResult.message);
+          return;
+        }
+        syncStoredPaymentStatusLocal(createdOrderCode, "paid");
         setLastCompletedOrder(createdOrderCode);
         resetFormForNextCustomer();
       } else {
@@ -292,12 +302,26 @@ export default function AdminPosPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "completed");
-    setLastCompletedOrder(activeQrModal.orderCode);
-    resetFormForNextCustomer();
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) return;
+    setIsConfirmingPaid(true);
+    try {
+      const result = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+      if (!result.ok) {
+        alert(result.message);
+        return;
+      }
+      syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      setLastCompletedOrder(activeQrModal.orderCode);
+      resetFormForNextCustomer();
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {
@@ -723,6 +747,7 @@ export default function AdminPosPage() {
               <button
                 type="button"
                 onClick={handleConfirmQrPaid}
+                disabled={isConfirmingPaid}
                 className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3]"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-800" />

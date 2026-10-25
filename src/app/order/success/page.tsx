@@ -13,7 +13,7 @@ import {
   getStoredSettings,
   getStoredVouchers,
   updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   updateStoredPaymentProof,
   DEFAULT_SETTINGS,
   type SiteSettings,
@@ -151,7 +151,7 @@ function OrderSuccessContent() {
           if (data?.success && Array.isArray(data.orders) && data.orders.length > 0) {
             const latest = data.orders[0];
             if (latest.payment_status === "paid") {
-              updateStoredPaymentStatus(orderCode, "paid");
+              syncStoredPaymentStatusLocal(orderCode, "paid");
               setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : latest));
 
               // Send order confirmation email upon successful payment detection

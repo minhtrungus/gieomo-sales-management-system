@@ -160,7 +160,7 @@ export async function saveNewOrder(
         referral_code: newOrder.referral_code,
         seller_id: newOrder.seller_id,
         introducer_info: newOrder.introducer_info,
-        source_type: newOrder.source_type,
+        source_type: newOrder.source_type || null,
         payment_method: newOrder.payment_method,
         items: (newOrder.items || []).map((item) => ({
           product_id: item.product_id || undefined,
@@ -412,17 +412,12 @@ export async function updateStoredOrderStatus(
   }
 }
 
-export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
+export function syncStoredPaymentStatusLocal(orderCodeOrId: string, paymentStatus: PaymentStatus): void {
   if (typeof window === "undefined") return;
   try {
     const orders = getStoredOrders();
-    let justPaidOrder: Order | null = null;
-
     const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
-        if (o.payment_status !== "paid" && paymentStatus === "paid") {
-          justPaidOrder = { ...o, payment_status: paymentStatus };
-        }
         return {
           ...o,
           payment_status: paymentStatus,
@@ -434,21 +429,6 @@ export function updateStoredPaymentStatus(orderCodeOrId: string, paymentStatus: 
 
     cachedOrders = updated;
     localStorage.setItem("gieomo_orders", JSON.stringify(updated));
-
-    // Automatic push notifications are disabled
-
-
-    // Sync payment status to Supabase
-    fetch("/api/orders", {
-      method: "PATCH",
-      headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        orderId: orderCodeOrId,
-        paymentStatus,
-      }),
-    }).catch((err) => {
-      console.warn("[updateStoredPaymentStatus] Failed to sync payment status to Supabase:", err);
-    });
 
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -659,7 +639,7 @@ export function approveStoredPayment(paymentId: string): void {
     localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
 
     if (approvedOrderCode) {
-      updateStoredPaymentStatus(approvedOrderCode, "paid");
+      syncStoredPaymentStatusLocal(approvedOrderCode, "paid");
     }
     window.dispatchEvent(new Event("gieomo_orders_updated"));
   } catch (e) {
@@ -909,45 +889,6 @@ export function deleteStoredContactMessage(id: string): void {
     }).catch((err) => console.warn("Could not delete contact message on server:", err));
   } catch (e) {
     console.error("Error deleting contact message", e);
-  }
-}
-
-// === SEPAY WEBHOOK PAYMENT CONFIRMATION HELPER ===
-
-export function confirmOrderPaymentFromWebhook(orderCode: string, amount: number, transactionId: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const orders = getStoredOrders();
-    const normalizedCode = orderCode.trim().toUpperCase();
-    const target = orders.find((o) => o.order_code.toUpperCase() === normalizedCode);
-
-    if (!target) return false;
-
-    // Update order
-    updateStoredPaymentStatus(target.order_code, "paid");
-    if (target.order_status === "pending") {
-      updateStoredOrderStatus(target.order_code, "confirmed");
-    }
-
-    // Update payment record
-    const payments = getStoredPayments();
-    const newPay: PaymentRecord = {
-      paymentId: `pay-sepay-${transactionId}`,
-      orderCode: target.order_code,
-      amount: amount,
-      paymentMethod: "banking",
-      transactionCode: `SEPAY-${transactionId}`,
-      status: "paid",
-      createdAt: new Date().toLocaleString("vi-VN"),
-    };
-    localStorage.setItem("gieomo_payments", JSON.stringify([newPay, ...payments.filter((p) => p.orderCode !== target.order_code)]));
-
-    // Automatic push notifications are disabled
-    window.dispatchEvent(new Event("gieomo_orders_updated"));
-    return true;
-  } catch (e) {
-    console.error("Error confirming payment via webhook helper", e);
-    return false;
   }
 }
 
@@ -2488,7 +2429,7 @@ export function syncCombosFromServer(force = false): void {
       if (data?.success && Array.isArray(data.combos)) {
         hasSyncedCombosWithServer = true;
         const mapped: ExtendedCombo[] = data.combos.map((sC) => {
-          const itemThumb = sC.image_url || sC.thumbnail || "/images/products/set_combo_1.jpg";
+          const itemThumb = sC.image_url || sC.thumbnail || "/images/product-image-unavailable.svg";
           return {
             combo_id: sC.combo_id,
             name: sC.name,
@@ -2497,6 +2438,7 @@ export function syncCombosFromServer(force = false): void {
             description: sC.description || "",
             thumbnail: itemThumb,
             images: [itemThumb],
+            image_status: sC.image_status || "missing",
             status: sC.status || "active",
             featured: Boolean(sC.featured),
             sort_order: Number(sC.sort_order) || 1,
@@ -2514,7 +2456,8 @@ export function syncCombosFromServer(force = false): void {
                   name: p.name || "Sản phẩm",
                   slug: p.slug || "",
                   price: Number(p.price) || 0,
-                  thumbnail: p.thumbnail || "/images/products/pounch_1.png",
+                  thumbnail: p.thumbnail || "/images/product-image-unavailable.svg",
+                  image_status: p.image_status || "missing",
                   compare_at_price: null,
                   cost_price: null,
                   status: "active" as const,

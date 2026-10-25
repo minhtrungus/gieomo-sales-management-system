@@ -13,10 +13,10 @@ import {
   getActiveReferralMembers,
   getStoredPickupPoints,
   getStoredSettings,
-  updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { Order, OrderItem, PickupPoint } from "@/types/database";
 import { ArrowLeft, Plus, Trash2, QrCode, Copy, Check, CheckCircle, ExternalLink } from "lucide-react";
 
@@ -56,6 +56,7 @@ export default function AdminCreateOrderPage() {
   const [copiedMemo, setCopiedMemo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
 
   const defaultProd = availableProducts[0] || { product_id: "prod-1", name: "Sản phẩm", price: 85000 };
 
@@ -256,11 +257,25 @@ export default function AdminCreateOrderPage() {
     }
   };
 
-  const handleConfirmQrPaid = () => {
-    if (!activeQrModal) return;
-    updateStoredPaymentStatus(activeQrModal.orderId, "paid");
-    updateStoredOrderStatus(activeQrModal.orderId, "confirmed");
-    router.push("/admin/orders");
+  const handleConfirmQrPaid = async () => {
+    if (!activeQrModal || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) return;
+    setIsConfirmingPaid(true);
+    try {
+      const result = await confirmPaymentServerFirst(activeQrModal.orderCode, {
+        amount: activeQrModal.amount,
+        referenceNumber,
+      });
+      if (!result.ok) {
+        alert(result.message);
+        return;
+      }
+      syncStoredPaymentStatusLocal(activeQrModal.orderCode, "paid");
+      router.push("/admin/orders");
+    } finally {
+      setIsConfirmingPaid(false);
+    }
   };
 
   const handleCopyMemo = (memo: string) => {
@@ -655,6 +670,7 @@ export default function AdminCreateOrderPage() {
               <button
                 type="button"
                 onClick={handleConfirmQrPaid}
+                disabled={isConfirmingPaid}
                 className="w-full py-3 px-4 rounded-full bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 border border-[#9ed4a3]"
               >
                 <CheckCircle className="w-4 h-4 text-emerald-800" />

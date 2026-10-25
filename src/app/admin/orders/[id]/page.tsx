@@ -4,11 +4,14 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
+import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDeletePanel";
+import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
+import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, DELIVERY_STATUS_LABELS } from "@/lib/constants";
 import {
   getStoredOrders,
   updateStoredOrderStatus,
-  updateStoredPaymentStatus,
+  syncStoredPaymentStatusLocal,
   updateStoredDeliveryStatus,
   updateStoredOrderNotes,
   updateStoredOrderWarehouse,
@@ -16,6 +19,7 @@ import {
   updateOrderShipper,
   type StoredMember,
 } from "@/lib/data/orderStore";
+import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
 import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
 
@@ -44,6 +48,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   // Confirmation modal state for manual payment verification
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
   const [pendingPaymentStatus, setPendingPaymentStatus] = useState<PaymentStatus | null>(null);
+  const [isConfirmingPaid, setIsConfirmingPaid] = useState(false);
+  const [paidConfirmError, setPaidConfirmError] = useState<string | null>(null);
 
   useEffect(() => {
     setMembers(getStoredMembers());
@@ -73,15 +79,33 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  const handleConfirmPaid = () => {
-    setPaymentStatus("paid");
-    setShowPaymentConfirmModal(false);
-    setPendingPaymentStatus(null);
-    if (order) {
-      updateStoredPaymentStatus(order.order_id, "paid");
+  const handleConfirmPaid = async () => {
+    if (!order || isConfirmingPaid) return;
+    const referenceNumber = window.prompt("Nhập mã giao dịch ngân hàng để đối soát:")?.trim();
+    if (!referenceNumber) {
+      setPaidConfirmError("Bắt buộc mã giao dịch ngân hàng thật để xác nhận thanh toán.");
+      return;
+    }
+    setIsConfirmingPaid(true);
+    setPaidConfirmError(null);
+    try {
+      const result = await confirmPaymentServerFirst(order.order_code, {
+        amount: Number(order.final_amount),
+        referenceNumber,
+      });
+      if (!result.ok) {
+        setPaidConfirmError(result.message);
+        return;
+      }
+      setPaymentStatus("paid");
       setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+      syncStoredPaymentStatusLocal(order.order_id, "paid");
+      setShowPaymentConfirmModal(false);
+      setPendingPaymentStatus(null);
       setIsSavedNotice(true);
       setTimeout(() => setIsSavedNotice(false), 2500);
+    } finally {
+      setIsConfirmingPaid(false);
     }
   };
 
@@ -100,7 +124,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       return;
     }
 
-    updateStoredPaymentStatus(order.order_id, paymentStatus);
     updateStoredDeliveryStatus(order.order_id, deliveryStatus);
     updateStoredOrderNotes(order.order_id, { internal_note: internalNote });
     updateStoredOrderWarehouse(order.order_id, warehouseId);
@@ -162,6 +185,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           {isSavedNotice ? <Check className="w-4 h-4 text-emerald-700" /> : null}
           {isSavedNotice ? "Đã lưu!" : "Lưu thay đổi"}
         </button>
+      </div>
+
+      <div className="flex flex-wrap justify-end gap-3">
+        <ControlledOrderDeletePanel
+          orderId={order.order_id}
+          orderCode={order.order_code}
+          finalAmount={Number(order.final_amount)}
+          orderStatus={orderStatus}
+          paymentStatus={paymentStatus}
+          deliveryStatus={deliveryStatus}
+        />
+        <DuplicateOrderReviewPanel orderId={order.order_id} orderCode={order.order_code} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -375,6 +410,32 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                           {item.variant_name_snapshot && (
                             <span className="text-gray-500 text-[11px] block">{item.variant_name_snapshot}</span>
                           )}
+                          <OrderVariantSwapAction
+                            orderId={order.order_id}
+                            orderCode={order.order_code}
+                            orderStatus={orderStatus}
+                            deliveryStatus={deliveryStatus}
+                            item={item}
+                            onApplied={(change) =>
+                              setOrder((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      items: current.items?.map((currentItem) =>
+                                        currentItem.order_item_id === change.orderItemId
+                                          ? {
+                                              ...currentItem,
+                                              variant_id: change.variantId,
+                                              variant_name_snapshot: change.variantName,
+                                              sku_snapshot: change.sku,
+                                            }
+                                          : currentItem
+                                      ),
+                                    }
+                                  : current
+                              )
+                            }
+                          />
                           <span className="text-gray-500">
                             Đơn giá:{" "}
                             <MoneyDisplay amount={item.price_snapshot ?? item.unit_price ?? 85000} /> x{" "}
@@ -662,12 +723,16 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   Sau khi xác nhận, đơn hàng sẽ được đánh dấu <strong>Đã thanh toán (Khớp VietQR)</strong> trên toàn hệ thống và lưu nhật ký đối soát.
                 </span>
               </div>
+              {paidConfirmError ? (
+                <p role="alert" className="text-xs font-bold text-red-600">{paidConfirmError}</p>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => setShowPaymentConfirmModal(false)}
+                disabled={isConfirmingPaid}
                 className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors"
               >
                 Hủy bỏ
@@ -675,6 +740,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <button
                 type="button"
                 onClick={handleConfirmPaid}
+                disabled={isConfirmingPaid}
                 className="px-5 py-2.5 rounded-full bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs shadow-xs border border-emerald-300 transition-all cursor-pointer inline-flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4 text-emerald-800" />

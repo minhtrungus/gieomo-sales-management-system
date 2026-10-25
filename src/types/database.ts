@@ -136,6 +136,7 @@ export interface Product {
   sort_order: number;
   weight_gram: number | null;
   thumbnail: string | null;
+  image_status?: "source" | "fallback_only" | "missing";
   images?: string[];
   reviews?: ProductReview[];
   created_at: string;
@@ -169,6 +170,7 @@ export interface ProductVariant {
   stock_warehouse_2?: number; // Tồn Kho 2 (Cơ Sở 2 - Thủ Đức)
   warehouse_stocks?: Record<string, number>; // Dynamic stock by warehouse_id
   image_url?: string | null; // Ảnh riêng của phân loại
+  image_status?: "source" | "fallback_only" | "missing";
   sort_order?: number;
   weight_gram: number | null;
   status: ProductStatus;
@@ -182,6 +184,7 @@ export interface ProductMedia {
   variant_id: string | null;
   media_type: string;
   url: string;
+  image_status?: "source" | "fallback_only" | "missing";
   sort_order: number;
   alt_text: string | null;
   created_at: string;
@@ -193,6 +196,7 @@ export interface Combo {
   slug: string;
   price: number;
   image_url?: string | null;
+  image_status?: "source" | "fallback_only" | "missing";
   description: string | null;
   status: ProductStatus;
   featured: boolean;

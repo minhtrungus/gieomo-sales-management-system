@@ -1,9 +1,199 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveRuntimeAsset } from "@/lib/runtimeAssetSafety";
 
 import { requireAdmin } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type ValidatedItem = {
+  product_id: string;
+  variant_id: string | null;
+  quantity: number;
+};
+
+type ValidationResult =
+  | { ok: true; rows: ValidatedItem[] }
+  | { ok: false; error: string };
+
+type ComboItemInput = {
+  product_id?: unknown;
+  variant_id?: unknown;
+  quantity?: unknown;
+  slug?: unknown;
+  name?: unknown;
+  product?: {
+    product_id?: unknown;
+    slug?: unknown;
+    name?: unknown;
+  };
+};
+
+type ComboRequestBody = {
+  combo_id?: string;
+  id?: string;
+  name?: string;
+  slug?: string;
+  price?: unknown;
+  thumbnail?: unknown;
+  image_url?: unknown;
+  description?: unknown;
+  status?: string;
+  featured?: unknown;
+  sort_order?: unknown;
+  items?: unknown;
+};
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+// Quantity phải là số nguyên dương. Không âm thầm đổi giá trị không hợp lệ
+// thành 1 — trả về null để reject 400 trước mọi write.
+function parseQuantity(raw: unknown): number | null {
+  if (typeof raw === "number") {
+    return Number.isInteger(raw) && raw > 0 ? raw : null;
+  }
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    const n = Number(raw.trim());
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
+async function resolveProductId(
+  supabase: ReturnType<typeof createAdminClient>,
+  it: ComboItemInput
+): Promise<{ ok: true; product_id: string } | { ok: false; error: string }> {
+  let pId = typeof it.product_id === "string"
+    ? it.product_id
+    : typeof it.product?.product_id === "string"
+      ? it.product.product_id
+      : "";
+  let isProdUuid = UUID_RE.test(pId);
+  const slug = typeof it.slug === "string"
+    ? it.slug
+    : typeof it.product?.slug === "string"
+      ? it.product.slug
+      : "";
+  const name = typeof it.name === "string"
+    ? it.name
+    : typeof it.product?.name === "string"
+      ? it.product.name
+      : "";
+
+  if (!isProdUuid && slug) {
+    const { data: pData } = await supabase
+      .from("products")
+      .select("product_id")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (pData) {
+      pId = pData.product_id;
+      isProdUuid = true;
+    }
+  }
+
+  if (!isProdUuid && name) {
+    const { data: pNameData } = await supabase
+      .from("products")
+      .select("product_id")
+      .ilike("name", `%${name}%`)
+      .limit(1)
+      .maybeSingle();
+    if (pNameData) {
+      pId = pNameData.product_id;
+      isProdUuid = true;
+    }
+  }
+
+  if (!isProdUuid || !pId) {
+    return { ok: false, error: "không xác định được sản phẩm (cần product_id hoặc slug hợp lệ)" };
+  }
+
+  const { data: prod, error: pErr } = await supabase
+    .from("products")
+    .select("product_id")
+    .eq("product_id", pId)
+    .maybeSingle();
+  if (pErr) {
+    return { ok: false, error: `không kiểm tra được sản phẩm (${pErr.message})` };
+  }
+  if (!prod) {
+    return { ok: false, error: "sản phẩm không tồn tại" };
+  }
+  return { ok: true, product_id: prod.product_id };
+}
+
+async function validateComboItems(
+  supabase: ReturnType<typeof createAdminClient>,
+  items: unknown[]
+): Promise<ValidationResult> {
+  const rows: ValidatedItem[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] && typeof items[i] === "object"
+      ? items[i] as ComboItemInput
+      : {};
+    const label = `Thành phần #${i + 1}`;
+
+    const quantity = parseQuantity(it.quantity);
+    if (quantity === null) {
+      return {
+        ok: false,
+        error: `${label}: quantity phải là số nguyên dương (thiếu, sai kiểu, bằng 0, âm hoặc thập phân đều bị từ chối; nhận được: ${JSON.stringify(it.quantity) ?? "undefined"})`,
+      };
+    }
+
+    const resolved = await resolveProductId(supabase, it);
+    if (!resolved.ok) {
+      return { ok: false, error: `${label}: ${resolved.error}` };
+    }
+
+    const variantId = typeof it.variant_id === "string" ? it.variant_id.trim() : "";
+    if (!variantId) {
+      const { data: activeVariants, error: activeVariantError } = await supabase
+        .from("product_variants")
+        .select("variant_id")
+        .eq("product_id", resolved.product_id)
+        .eq("status", "active")
+        .limit(1);
+      if (activeVariantError) {
+        return { ok: false, error: `${label}: không kiểm tra được phân loại hợp lệ (${activeVariantError.message})` };
+      }
+      if (!activeVariants?.length) {
+        return { ok: false, error: `${label}: sản phẩm không có phân loại đang hoạt động` };
+      }
+      rows.push({ product_id: resolved.product_id, variant_id: null, quantity });
+      continue;
+    }
+    if (!UUID_RE.test(variantId)) {
+      return { ok: false, error: `${label}: variant_id không hợp lệ` };
+    }
+
+    const { data: variant, error: vErr } = await supabase
+      .from("product_variants")
+      .select("variant_id, product_id, name")
+      .eq("variant_id", variantId)
+      .maybeSingle();
+    if (vErr) {
+      return { ok: false, error: `${label}: không kiểm tra được phân loại (${vErr.message})` };
+    }
+    if (!variant) {
+      return { ok: false, error: `${label}: phân loại sản phẩm không tồn tại` };
+    }
+    if (variant.product_id !== resolved.product_id) {
+      return { ok: false, error: `${label}: phân loại không thuộc sản phẩm đã chọn` };
+    }
+
+    rows.push({
+      product_id: resolved.product_id,
+      variant_id: variant.variant_id,
+      quantity,
+    });
+  }
+  return { ok: true, rows };
+}
 
 export async function GET() {
   try {
@@ -37,7 +227,26 @@ export async function GET() {
       return NextResponse.json({ success: false, combos: [] });
     }
 
-    return NextResponse.json({ success: true, combos: combos || [] });
+    const safeCombos = (combos || []).map((combo) => {
+      const comboAsset = resolveRuntimeAsset(combo.image_url);
+      return {
+        ...combo,
+        image_url: comboAsset.url,
+        image_status: comboAsset.status,
+        combo_items: combo.combo_items?.map((item) => {
+          const relatedProduct = Array.isArray(item.product) ? item.product[0] : item.product;
+          const productAsset = resolveRuntimeAsset(relatedProduct?.thumbnail);
+          return {
+            ...item,
+            product: relatedProduct
+              ? { ...relatedProduct, thumbnail: productAsset.url, image_status: productAsset.status }
+              : relatedProduct,
+          };
+        }),
+      };
+    });
+
+    return NextResponse.json({ success: true, combos: safeCombos });
   } catch (err: any) {
     console.error("[GET /api/combos] Exception:", err);
     return NextResponse.json({ success: false, combos: [] });
@@ -51,7 +260,7 @@ export async function POST(request: Request) {
       return authCheck.response;
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as ComboRequestBody;
     if (!body || !body.name || !body.slug) {
       return NextResponse.json(
         { success: false, error: "Tên và slug combo là bắt buộc" },
@@ -60,7 +269,27 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.combo_id);
+
+    // Validate toàn bộ thành phần TRƯỚC khi ghi bất kỳ dữ liệu nào.
+    let validatedItems: ValidatedItem[] | null = null;
+    if (body.items !== undefined) {
+      if (body.items === null || !Array.isArray(body.items)) {
+        return NextResponse.json(
+          { success: false, error: "Trường items phải là mảng" },
+          { status: 400 }
+        );
+      }
+      if (body.items.length > 0) {
+        const validation = await validateComboItems(supabase, body.items);
+        if (!validation.ok) {
+          return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+        }
+        validatedItems = validation.rows;
+      }
+      // items: [] → không đụng combo_items
+    }
+
+    const isUuid = UUID_RE.test(body.combo_id || "");
 
     // Check existing by UUID or slug
     let existingComboId: string | null = null;
@@ -81,7 +310,7 @@ export async function POST(request: Request) {
       if (data) existingComboId = data.combo_id;
     }
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name: body.name.trim(),
       slug: body.slug.trim(),
       price: Number(body.price) || 0,
@@ -93,87 +322,29 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    let savedComboId: string;
-
-    if (existingComboId) {
-      savedComboId = existingComboId;
-      const { error: updErr } = await supabase
-        .from("combos")
-        .update(payload)
-        .eq("combo_id", existingComboId);
-      if (updErr) {
-        return NextResponse.json({ success: false, error: updErr.message }, { status: 400 });
-      }
-    } else {
-      const { data: newCombo, error: insErr } = await supabase
-        .from("combos")
-        .insert(payload)
-        .select("combo_id")
-        .single();
-      if (insErr || !newCombo) {
-        return NextResponse.json(
-          { success: false, error: insErr?.message || "Lỗi tạo combo" },
-          { status: 400 }
-        );
-      }
-      savedComboId = newCombo.combo_id;
+    const { data: saved, error: saveError } = await supabase.rpc("save_combo_atomic", {
+      p: {
+        combo_id: existingComboId,
+        lookup_slug: body.slug,
+        ...payload,
+        ...(validatedItems ? { replace_items: true, items: validatedItems } : {}),
+      },
+    });
+    if (saveError || saved?.outcome !== "saved") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: saveError?.message || `Không thể lưu combo (${saved?.outcome || "invalid_result"})`,
+        },
+        { status: saveError?.message?.includes("C1:") ? 400 : saveError ? 500 : 400 }
+      );
     }
 
-    // Save combo items if provided
-    if (body.items && Array.isArray(body.items) && body.items.length > 0) {
-      await supabase.from("combo_items").delete().eq("combo_id", savedComboId);
-      
-      const itemRows = [];
-      for (const it of body.items) {
-        let pId = it.product_id || it.product?.product_id;
-        let isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId);
-        const slug = it.slug || it.product?.slug;
-        const name = it.name || it.product?.name;
-
-        if (!isProdUuid && slug) {
-          const { data: pData } = await supabase
-            .from("products")
-            .select("product_id")
-            .eq("slug", slug)
-            .maybeSingle();
-          if (pData) {
-            pId = pData.product_id;
-            isProdUuid = true;
-          }
-        }
-
-        if (!isProdUuid && name) {
-          const { data: pNameData } = await supabase
-            .from("products")
-            .select("product_id")
-            .ilike("name", `%${name}%`)
-            .limit(1)
-            .maybeSingle();
-          if (pNameData) {
-            pId = pNameData.product_id;
-            isProdUuid = true;
-          }
-        }
-
-        if (isProdUuid) {
-          itemRows.push({
-            combo_id: savedComboId,
-            product_id: pId,
-            quantity: Number(it.quantity) || 1,
-          });
-        }
-      }
-
-      if (itemRows.length > 0) {
-        await supabase.from("combo_items").insert(itemRows);
-      }
-    }
-
-    return NextResponse.json({ success: true, combo_id: savedComboId });
-  } catch (err: any) {
+    return NextResponse.json({ success: true, combo_id: saved.combo_id });
+  } catch (err: unknown) {
     console.error("[POST /api/combos] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi lưu combo" },
+      { success: false, error: errorMessage(err, "Lỗi lưu combo") },
       { status: 500 }
     );
   }
@@ -186,7 +357,7 @@ export async function PATCH(request: Request) {
       return authCheck.response;
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as ComboRequestBody;
     const { id, slug, name, price, image_url, description, status, featured, sort_order, items } = body;
 
     if (!id && !slug) {
@@ -197,6 +368,26 @@ export async function PATCH(request: Request) {
     }
 
     const supabase = createAdminClient();
+
+    // Validate toàn bộ thành phần TRƯỚC khi ghi bất kỳ dữ liệu nào.
+    let validatedItems: ValidatedItem[] | null = null;
+    if (items !== undefined) {
+      if (items === null || !Array.isArray(items)) {
+        return NextResponse.json(
+          { success: false, error: "Trường items phải là mảng" },
+          { status: 400 }
+        );
+      }
+      if (items.length > 0) {
+        const validation = await validateComboItems(supabase, items);
+        if (!validation.ok) {
+          return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+        }
+        validatedItems = validation.rows;
+      }
+      // items: [] → không đụng combo_items
+    }
+
     const isUuid = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
     // Find existing combo
@@ -222,7 +413,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Không tìm thấy combo" }, { status: 404 });
     }
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
@@ -235,70 +426,28 @@ export async function PATCH(request: Request) {
     if (featured !== undefined) payload.featured = Boolean(featured);
     if (sort_order !== undefined) payload.sort_order = Number(sort_order) || 1;
 
-    const { error: updErr } = await supabase
-      .from("combos")
-      .update(payload)
-      .eq("combo_id", existingComboId);
-
-    if (updErr) {
-      return NextResponse.json({ success: false, error: updErr.message }, { status: 400 });
+    const { data: saved, error: saveError } = await supabase.rpc("save_combo_atomic", {
+      p: {
+        combo_id: existingComboId,
+        ...payload,
+        ...(validatedItems ? { replace_items: true, items: validatedItems } : {}),
+      },
+    });
+    if (saveError || saved?.outcome !== "saved") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: saveError?.message || `Không thể cập nhật combo (${saved?.outcome || "invalid_result"})`,
+        },
+        { status: saveError?.message?.includes("C1:") ? 400 : saveError ? 500 : 400 }
+      );
     }
 
-    // Update combo items if provided
-    if (items && Array.isArray(items)) {
-      await supabase.from("combo_items").delete().eq("combo_id", existingComboId);
-
-      const itemRows = [];
-      for (const it of items) {
-        let pId = it.product_id || it.product?.product_id;
-        let isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId);
-        const itemSlug = it.slug || it.product?.slug;
-        const itemName = it.name || it.product?.name;
-
-        if (!isProdUuid && itemSlug) {
-          const { data: pData } = await supabase
-            .from("products")
-            .select("product_id")
-            .eq("slug", itemSlug)
-            .maybeSingle();
-          if (pData) {
-            pId = pData.product_id;
-            isProdUuid = true;
-          }
-        }
-
-        if (!isProdUuid && itemName) {
-          const { data: pNameData } = await supabase
-            .from("products")
-            .select("product_id")
-            .ilike("name", `%${itemName}%`)
-            .limit(1)
-            .maybeSingle();
-          if (pNameData) {
-            pId = pNameData.product_id;
-            isProdUuid = true;
-          }
-        }
-
-        if (isProdUuid) {
-          itemRows.push({
-            combo_id: existingComboId,
-            product_id: pId,
-            quantity: Number(it.quantity) || 1,
-          });
-        }
-      }
-
-      if (itemRows.length > 0) {
-        await supabase.from("combo_items").insert(itemRows);
-      }
-    }
-
-    return NextResponse.json({ success: true, combo_id: existingComboId });
-  } catch (err: any) {
+    return NextResponse.json({ success: true, combo_id: saved.combo_id });
+  } catch (err: unknown) {
     console.error("[PATCH /api/combos] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi cập nhật combo" },
+      { success: false, error: errorMessage(err, "Lỗi cập nhật combo") },
       { status: 500 }
     );
   }

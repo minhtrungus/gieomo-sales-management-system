@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Playfair+Display:ital,wght@0,700;0,900;1,600&family=Montserrat:wght@500;700;800&display=swap');
 @import "tailwindcss";
 
 /* ===========================
@@ -45,12 +44,13 @@
   --color-info-light: #EBF8FF;
 
   /* Typography */
-  --font-display: 'Boldonse', cursive;
-  --font-heading: 'Montserrat', sans-serif;
-  --font-body: 'Montserrat', sans-serif;
-  --font-sans: 'Montserrat', sans-serif;
-  --font-handwriting: var(--font-handwriting), 'Caveat', cursive;
-  --font-serif: var(--font-serif), 'Playfair Display', serif;
+  /* Offline-safe system stacks until licensed brand font binaries are supplied. */
+  --font-display: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+  --font-heading: 'Segoe UI', Arial, sans-serif;
+  --font-body: 'Segoe UI', Arial, sans-serif;
+  --font-sans: 'Segoe UI', Arial, sans-serif;
+  --font-handwriting: 'Segoe Print', 'Bradley Hand', cursive;
+  --font-serif: Georgia, 'Times New Roman', serif;
 
   /* Border Radius (Friendly & Soft) */
   --radius-sm: 0.5rem;

@@ -72,11 +72,21 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
+
+    if (
+      Object.prototype.hasOwnProperty.call(body, "paymentStatus") ||
+      Object.prototype.hasOwnProperty.call(body, "payment_status")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "paymentStatus chỉ đổi qua /api/orders/payment" },
+        { status: 400 }
+      );
+    }
+
     const {
       orderCode,
       orderId,
       orderStatus,
-      paymentStatus,
       deliveryStatus,
       delivery_status,
       internalNote,
@@ -156,9 +166,6 @@ export async function PATCH(request: Request) {
       updateData.order_status = orderStatus;
       if (orderStatus === "completed") updateData.completed_at = new Date().toISOString();
       if (orderStatus === "confirmed") updateData.confirmed_at = new Date().toISOString();
-    }
-    if (paymentStatus) {
-      updateData.payment_status = paymentStatus;
     }
     const resolvedDelivery = deliveryStatus || delivery_status;
     if (resolvedDelivery) {
