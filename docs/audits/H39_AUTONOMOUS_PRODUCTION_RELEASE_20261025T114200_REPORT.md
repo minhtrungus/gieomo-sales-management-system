@@ -215,7 +215,7 @@ The runtime intentionally had no real or copied credentials. Server-side data lo
 
 ## 12. Git commit and push
 
-The reviewed source was committed as `7c2323b7c833ffdd0b446b02f79f99a59ad18c27` on `release/h39-production-readiness-20261025`, directly above refreshed `origin/main` `0b7825ecc5c524f822d2ef5602b4fb7a48182f70`. This report is committed separately so it can durably name the source commit. Push status is recorded after the remote operation; the final user handoff is authoritative for the branch tip because a commit cannot embed its own SHA.
+The reviewed source was committed as `7c2323b7c833ffdd0b446b02f79f99a59ad18c27` on `release/h39-production-readiness-20261025`, directly above refreshed `origin/main` `0b7825ecc5c524f822d2ef5602b4fb7a48182f70`. The first audit commit was `a51e41a64445e7a4322dd071823d4b0875935da1`. The branch push to `origin/release/h39-production-readiness-20261025` succeeded and upstream tracking was configured. `main` was not pushed or modified. The final user handoff is authoritative for the branch tip because the commit containing this push-result update cannot embed its own SHA.
 
 ## 13. Supabase Production verification
 
