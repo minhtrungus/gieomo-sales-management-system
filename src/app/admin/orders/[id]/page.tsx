@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/orderStore";
 import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDeletePanel";
+import { AdminOrderThankYouCard } from "@/components/admin/AdminOrderThankYouCard";
 import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
 import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
@@ -251,6 +252,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 8 Cols */}
         <div className="lg:col-span-8 space-y-6">
+          {/* H51: thank-you card for this order (view / download / share / print) */}
+          <AdminOrderThankYouCard order={order} />
           {/* Customer & Shipping Address */}
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">

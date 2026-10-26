@@ -211,18 +211,6 @@ test("controlled deletion blocks every retained business-evidence class", { skip
         },
       },
       {
-        blocker: "idempotency_claim_present",
-        seed: async (orderId, index) => {
-          const key = `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
-          await c.query(
-            `INSERT INTO public.order_idempotency(
-               scope_key,idempotency_key,request_hash,status,order_id,response_json,completed_at
-             ) VALUES($1,$2,$3,'completed',$4,$5::jsonb,now())`,
-            [`guest:${"a".repeat(64)}`, key, "b".repeat(64), orderId, JSON.stringify({ outcome: "created" })],
-          );
-        },
-      },
-      {
         blocker: "lifecycle_effect_present",
         seed: async (orderId, index) => {
           const voucherId = (
@@ -254,6 +242,55 @@ test("controlled deletion blocks every retained business-evidence class", { skip
         `${scenario.blocker} must preserve the order`,
       );
     }
+  } finally {
+    await c.query("ROLLBACK").catch(() => undefined);
+    await c.end();
+  }
+});
+
+test("H51 — completed idempotency claim no longer blocks deletion; it is removed atomically with the order", { skip: !canRun }, async () => {
+  const c = await client();
+  await c.query("BEGIN");
+  try {
+    const seeded = await seedOrder(c, `${Date.now()}-claim`);
+    const actorId = await seedActor(c, `${Date.now()}-claim`);
+    const base = {
+      order_id: seeded.orderId,
+      reason: "Atomic-created draft order cleanup",
+      actor_member_id: actorId,
+    };
+
+    // Every order created through create_order_atomic leaves a completed
+    // claim whose order_id points at the order (ON DELETE RESTRICT). It is
+    // idempotency infrastructure, not business evidence.
+    await c.query(
+      `INSERT INTO public.order_idempotency(
+         scope_key,idempotency_key,request_hash,status,order_id,response_json,completed_at
+       ) VALUES($1,$2,$3,'completed',$4,$5::jsonb,now())`,
+      [`guest:${"a".repeat(64)}`, crypto.randomUUID(), "b".repeat(64), seeded.orderId, JSON.stringify({ outcome: "created" })],
+    );
+
+    const preview = await manage(c, { ...base, mode: "preview" });
+    assert.equal(preview.outcome, "eligible", "claim-only draft order must be deletable");
+    assert.equal(preview.relations.idempotency_claims, 1, "preview reports the removable claim count");
+
+    const stale = await manage(c, {
+      ...base, mode: "delete", confirmation: "XOA", expected_updated_at: "2000-01-01T00:00:00Z",
+    });
+    assert.equal(stale.outcome, "stale_preview", "fresh preview is still required");
+
+    const deleted = await manage(c, {
+      ...base, mode: "delete", confirmation: "XOA", expected_updated_at: preview.updated_at,
+    });
+    assert.equal(deleted.outcome, "deleted");
+    assert.equal(deleted.idempotency_claims_removed, 1);
+    assert.equal((await c.query("SELECT count(*)::int n FROM public.orders WHERE order_id=$1", [seeded.orderId])).rows[0].n, 0);
+    assert.equal((await c.query("SELECT count(*)::int n FROM public.order_idempotency WHERE order_id=$1", [seeded.orderId])).rows[0].n, 0);
+    const audit = (await c.query(
+      "SELECT after_data FROM public.audit_logs WHERE entity_type='order' AND action='order.physical_delete' AND entity_id=$1",
+      [seeded.orderId],
+    )).rows[0];
+    assert.equal(audit.after_data.idempotency_claims_removed, 1, "audit records the removed claim count");
   } finally {
     await c.query("ROLLBACK").catch(() => undefined);
     await c.end();

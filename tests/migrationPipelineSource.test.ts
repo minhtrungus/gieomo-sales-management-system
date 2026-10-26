@@ -5,29 +5,29 @@ import { spawnSync } from "node:child_process";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("migration chain is contiguous through 037", () => {
+test("migration chain is contiguous through 038", () => {
   const files = readdirSync(new URL("../supabase/migrations/", import.meta.url))
     .filter((name) => /^\d{3}_.+\.sql$/.test(name))
     .sort();
 
-  assert.equal(files.length, 37);
+  assert.equal(files.length, 38);
   assert.equal(files[0], "001_initial_schema.sql");
-  assert.equal(files.at(-1), "037_preserve_order_source_delivery_writer.sql");
+  assert.equal(files.at(-1), "038_order_deletion_idempotency_cleanup.sql");
   assert.deepEqual(
     files.map((name) => Number(name.slice(0, 3))),
-    Array.from({ length: 37 }, (_, index) => index + 1)
+    Array.from({ length: 38 }, (_, index) => index + 1)
   );
 });
 
-test("migration validator accepts the canonical chain and enforces tip 037", () => {
+test("migration validator accepts the canonical chain and enforces tip 038", () => {
   const result = spawnSync(process.execPath, ["scripts/migrations/validate-chain.mjs"], {
     cwd: new URL("..", import.meta.url),
-    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "037" },
+    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "038" },
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
   const manifest = JSON.parse(result.stdout) as { count: number; tip: string };
-  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 37, tip: "037" });
+  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 38, tip: "038" });
 });
 
 test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory", () => {
@@ -36,7 +36,7 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   const mandatoryRunner = text("scripts/postgres/run-mandatory-pg-tests.mjs");
   assert.match(workflow, /services:\s*\n\s+postgres:/);
   assert.match(workflow, /GIEOMO_PG_ISOLATED:\s*"1"/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"037"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"038"/);
   assert.match(workflow, /find supabase\/migrations[^\n]+sort/);
   assert.match(workflow, /npm run test:pg:mandatory/);
   assert.match(workflow, /node --test tests\/\*\.test\.ts/);
@@ -52,7 +52,7 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /\bschedule:/);
   assert.match(workflow, /EXPECTED_PRODUCTION_PROJECT_REF:\s*snmmiwpvlpknkinhfqsv/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"037"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"038"/);
   assert.match(workflow, /supabase db push --linked --dry-run/);
   assert.match(workflow, /environment:\s*production/);
   assert.match(workflow, /vars\.PRODUCTION_DEPLOY_ENABLED == 'true'/);
