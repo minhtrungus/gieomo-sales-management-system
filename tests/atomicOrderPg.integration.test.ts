@@ -420,9 +420,12 @@ test("PG same-key race — B chặn trên advisory lock của A; A commit → B 
 
     // B: cùng key — sẽ CHẶN trên advisory lock giao dịch của A (035 L94:
     // pg_advisory_xact_lock) chứ không phải trên unique index — mọi
-    // create_order_atomic được tuần tự hóa ngay đầu hàm.
-    // Không dựa sleep mù: chờ B được QUAN SÁT là đang chờ lock (pg_stat_activity),
-    // với trần thời gian rõ ràng; chỉ sau đó mới COMMIT A.
+    // create_order_atomic được tuần tự hóa ngay đầu v25; LOCK TABLE
+    // combo_items IN SHARE của wrapper (035 L562) không chặn vì SHARE↔SHARE
+    // tương thích với lock SHARE mà A đang giữ.
+    // Không dựa sleep mù: chờ B được QUAN SÁT là đang chờ advisory lock
+    // (pg_stat_activity wait_event_type='Lock' + pg_locks: ≥1 advisory lock
+    // CHƯA granted của B), với trần thời gian rõ ràng; chỉ sau đó mới COMMIT A.
     const bResult = (async () => {
       await clientB.query("BEGIN");
       try {
@@ -443,11 +446,22 @@ test("PG same-key race — B chặn trên advisory lock của A; A commit → B 
 
     let blockedObserved = false;
     for (let i = 0; i < 100; i++) {
+      // Bằng chứng KHẲNG CHẾN lock đang chờ là advisory: ngoài
+      // wait_event_type='Lock', pg_locks phải có ≥1 advisory lock CHƯA
+      // granted của B — đúng advisory xact lock mà A đang giữ (v25 L94).
       const w = await clientW.query(
-        "SELECT wait_event_type, state FROM pg_stat_activity WHERE pid = $1",
+        `SELECT s.wait_event_type, s.state,
+                (SELECT count(*)::int FROM pg_locks l
+                  WHERE l.pid = s.pid AND NOT l.granted AND l.locktype = 'advisory') AS advisory_waits
+           FROM pg_stat_activity s WHERE s.pid = $1`,
         [bPid]
       );
-      if (w.rows[0] && w.rows[0].state === "active" && w.rows[0].wait_event_type === "Lock") {
+      if (
+        w.rows[0] &&
+        w.rows[0].state === "active" &&
+        w.rows[0].wait_event_type === "Lock" &&
+        Number(w.rows[0].advisory_waits) > 0
+      ) {
         blockedObserved = true;
         break;
       }
