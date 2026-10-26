@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: production-migrations
@@ -33,7 +34,7 @@ concurrency:
 
 jobs:
   validate-request:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -47,6 +48,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Require successful go-live gate on the exact commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requiredCheck = "source-and-postgres";
+            const { owner, repo } = context.repo;
+            const response = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: context.sha,
+              filter: "latest",
+              per_page: 100,
+            });
+            const match = response.data.check_runs.find(
+              (check) =>
+                check.name === requiredCheck &&
+                check.app?.slug === "github-actions"
+            );
+            if (!match) {
+              core.setFailed(`Required check ${requiredCheck} is missing for ${context.sha}.`);
+              return;
+            }
+            if (match.status !== "completed" || match.conclusion !== "success") {
+              core.setFailed(
+                `Required check ${requiredCheck} is ${match.status}/${match.conclusion ?? "none"} for ${context.sha}.`
+              );
+            }
 
       - name: Fail closed on request mismatch
         shell: bash

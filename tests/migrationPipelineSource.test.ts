@@ -39,7 +39,10 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"038"/);
   assert.match(workflow, /find supabase\/migrations[^\n]+sort/);
   assert.match(workflow, /npm run test:pg:mandatory/);
-  assert.match(workflow, /node --test tests\/\*\.test\.ts/);
+  assert.match(workflow, /node --test --test-concurrency=1 tests\/\*\.test\.ts/);
+  assert.match(workflow, /npm run lint/);
+  assert.match(workflow, /playwright install --with-deps chromium/);
+  assert.match(workflow, /npm run test:e2e/);
   assert.doesNotMatch(workflow, /npm install --no-save/);
   assert.match(packageJson, /"pg":\s*"\^8\./);
   assert.match(mandatoryRunner, /MANDATORY_PG_SKIP_FAILURE/);
@@ -57,6 +60,10 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.match(workflow, /environment:\s*production/);
   assert.match(workflow, /vars\.PRODUCTION_DEPLOY_ENABLED == 'true'/);
   assert.match(workflow, /test "\$INPUT_SHA" = "\$GITHUB_SHA"/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+  assert.doesNotMatch(workflow, /startsWith\(github\.ref, 'refs\/tags\/'\)/);
+  assert.match(workflow, /checks:\s*read/);
+  assert.match(workflow, /requiredCheck = "source-and-postgres"/);
 });
 
 test("local replay harness uses unique disposable targets and guarded teardown", () => {
@@ -65,6 +72,8 @@ test("local replay harness uses unique disposable targets and guarded teardown",
   assert.match(runner, /127\.0\.0\.1/);
   assert.match(runner, /Refusing unsafe teardown target/);
   assert.match(runner, /run-mandatory-pg-tests\.mjs/);
+  assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "038"/);
+  assert.match(runner, /node --test --test-concurrency=1 @allNodeTestFiles/);
   assert.match(runner, /CANONICAL_REPLAY_PASS/);
   assert.doesNotMatch(runner, /SUPABASE_ACCESS_TOKEN|service_role_key/i);
 });
