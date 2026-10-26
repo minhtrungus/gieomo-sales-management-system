@@ -21,3 +21,9 @@ test("H29-P2 — paid orders without payment rows are shown as reconciliation ga
   assert.match(source, /Đây không phải giao dịch VietQR/);
   assert.doesNotMatch(source, /paymentId:\s*record\.order_code/);
 });
+
+test("H29-P3 — refresh is described as a database refresh, not a SePay transaction sync", () => {
+  assert.match(source, /Làm mới từ hệ thống/);
+  assert.match(source, /không tải giao dịch trực tiếp từ SePay/);
+  assert.doesNotMatch(source, />Đồng bộ giao dịch</);
+});

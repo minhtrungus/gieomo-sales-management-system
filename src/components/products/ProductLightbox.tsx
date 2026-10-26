@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X } from "lucide-react";
 
@@ -32,6 +32,11 @@ function ProductLightboxImpl({
   onClose,
 }: ProductLightboxProps) {
   const [zoom, setZoom] = useState(1);
+  const visibleThumbnails = useMemo(() => {
+    if (images.length <= 9) return images.map((src, index) => ({ src, index }));
+    const start = Math.max(0, Math.min(activeIndex - 4, images.length - 9));
+    return images.slice(start, start + 9).map((src, offset) => ({ src, index: start + offset }));
+  }, [activeIndex, images]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -162,20 +167,20 @@ function ProductLightboxImpl({
           className="z-10 w-full max-w-2xl mx-auto flex items-center justify-center gap-2 overflow-x-auto py-2 scrollbar-none"
           onClick={(e) => e.stopPropagation()}
         >
-          {images.map((img, idx) => {
-            const isActive = activeIndex === idx && !isVariantContext;
+          {visibleThumbnails.map(({ src, index }) => {
+            const isActive = activeIndex === index && !isVariantContext;
             return (
               <button
-                key={idx}
+                key={`${index}:${src}`}
                 type="button"
-                onClick={() => onNavigate(idx)}
+                onClick={() => onNavigate(index)}
                 className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer bg-white/5 ${
                   isActive
                     ? "border-emerald-400 ring-2 ring-emerald-400/50 scale-105"
                     : "border-white/30 opacity-60 hover:opacity-100 hover:border-white"
                 }`}
               >
-                <Image src={img} alt="" fill sizes="64px" className="object-contain" />
+                <Image src={src} alt="" fill sizes="64px" className="object-contain" />
               </button>
             );
           })}

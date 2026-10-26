@@ -4,7 +4,7 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import {
   getStoredOrders,
   updateStoredOrderStatus,
@@ -17,11 +17,11 @@ import {
 } from "@/lib/data/orderStore";
 import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDeletePanel";
-import { AdminOrderThankYouCard } from "@/components/admin/AdminOrderThankYouCard";
 import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
 import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
+import { AdminOrderThankYouCardDialog } from "@/components/admin/AdminOrderThankYouCardDialog";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
-import { ArrowLeft, UserCheck, Copy, Check, Building, Bike, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
+import { ArrowLeft, UserCheck, Copy, Check, Building, Bike, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle, Printer } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -50,6 +50,46 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   // Confirmation modal state for manual payment verification
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+  const [showThankYouCard, setShowThankYouCard] = useState(false);
+  const [showPaymentAdjustment, setShowPaymentAdjustment] = useState(false);
+  const [paymentAdjustmentReason, setPaymentAdjustmentReason] = useState("");
+  const [paymentAdjustmentError, setPaymentAdjustmentError] = useState<string | null>(null);
+  const [isAdjustingPayment, setIsAdjustingPayment] = useState(false);
+
+  const handleAdjustPaymentConfirmation = async () => {
+    if (!order || isAdjustingPayment) return;
+    const reason = paymentAdjustmentReason.trim();
+    if (reason.length < 8) {
+      setPaymentAdjustmentError("Vui lòng nhập lý do cụ thể, tối thiểu 8 ký tự.");
+      return;
+    }
+    setIsAdjustingPayment(true);
+    setPaymentAdjustmentError(null);
+    try {
+      const response = await fetch("/api/orders/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "adjust_confirmation",
+          orderId: order.order_id,
+          reason,
+          expectedUpdatedAt: order.updated_at,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success !== true) {
+        throw new Error(result.error || "Không thể điều chỉnh xác nhận thanh toán.");
+      }
+      setPaymentStatus("pending");
+      setOrder((current) => current ? { ...current, payment_status: "pending" } : current);
+      setShowPaymentAdjustment(false);
+      setPaymentAdjustmentReason("");
+    } catch (error) {
+      setPaymentAdjustmentError(error instanceof Error ? error.message : "Không thể điều chỉnh xác nhận thanh toán.");
+    } finally {
+      setIsAdjustingPayment(false);
+    }
+  };
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -252,8 +292,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 8 Cols */}
         <div className="lg:col-span-8 space-y-6">
-          {/* H51: thank-you card for this order (view / download / share / print) */}
-          <AdminOrderThankYouCard order={order} />
           {/* Customer & Shipping Address */}
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
@@ -552,6 +590,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
         {/* Right 4 Cols Controls */}
         <div className="lg:col-span-4 space-y-6">
+          <button type="button" onClick={() => setShowThankYouCard(true)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#9ed4a3] bg-[#EAF7ED] px-4 py-3 text-xs font-extrabold text-[#16381D] hover:bg-[#BFE9C3]">
+            <Printer className="h-4 w-4" /> Xem / In thiệp cảm ơn
+          </button>
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
               Cập nhật trạng thái
@@ -579,13 +620,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <select
                 value={paymentStatus}
                 onChange={(e) => handlePaymentStatusChange(e.target.value as PaymentStatus)}
+                disabled={paymentStatus === "paid"}
                 className="w-full p-2.5 rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
               >
                 <option value="pending">⏳ Chờ thanh toán</option>
                 <option value="paid">✅ Đã thanh toán (Khớp VietQR)</option>
-                <option value="refunded">↩️ Đã hoàn tiền</option>
-                <option value="failed">❌ Thất bại</option>
               </select>
+              {paymentStatus === "paid" && (
+                <button type="button" onClick={() => setShowPaymentAdjustment(true)} className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100">
+                  Điều chỉnh xác nhận tiền mặt
+                </button>
+              )}
+              <p className="text-[10px] leading-relaxed text-gray-500">Giao dịch ngân hàng không thể hủy xác nhận tại đây; phải xử lý đối soát hoặc hoàn tiền ngoài ngân hàng.</p>
             </div>
 
             <div className="space-y-2">
@@ -828,6 +874,27 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <Check className="w-4 h-4 text-emerald-800" />
                 <span>{isConfirmingPaid ? "Đang xác nhận..." : "Xác nhận đã nhận tiền"}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showThankYouCard && order && (
+        <AdminOrderThankYouCardDialog order={order} onClose={() => setShowThankYouCard(false)} />
+      )}
+      {showPaymentAdjustment && order && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="payment-adjustment-title">
+          <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+            <div>
+              <h2 id="payment-adjustment-title" className="font-heading text-base font-extrabold text-[#231B16]">Điều chỉnh xác nhận thanh toán</h2>
+              <p className="mt-1 text-xs leading-relaxed text-gray-600">Đơn <strong>{order.order_code}</strong> · hiện tại <strong>{PAYMENT_STATUS_LABELS[paymentStatus]}</strong>. Chỉ tiền mặt xác nhận nhầm và chưa fulfillment mới được điều chỉnh. Sổ giao dịch không bị xóa và thao tác này không hoàn tiền.</p>
+            </div>
+            <label className="block text-xs font-bold text-gray-700">Lý do bắt buộc
+              <textarea value={paymentAdjustmentReason} onChange={(event) => setPaymentAdjustmentReason(event.target.value)} rows={4} maxLength={500} className="mt-2 w-full rounded-xl border border-gray-200 p-3 text-sm font-normal outline-none focus:ring-2 focus:ring-amber-200" placeholder="Ví dụ: Xác nhận nhầm đơn test tiền mặt tại quầy" />
+            </label>
+            {paymentAdjustmentError && <p role="alert" className="text-xs font-bold text-red-700">{paymentAdjustmentError}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={isAdjustingPayment} onClick={() => { setShowPaymentAdjustment(false); setPaymentAdjustmentError(null); }} className="rounded-xl px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-50">Hủy</button>
+              <button type="button" disabled={isAdjustingPayment} onClick={handleAdjustPaymentConfirmation} className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-amber-700 disabled:opacity-50">{isAdjustingPayment ? "Đang kiểm tra..." : "Xác nhận điều chỉnh"}</button>
             </div>
           </div>
         </div>

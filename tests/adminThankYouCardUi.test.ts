@@ -2,31 +2,30 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const component = readFileSync(
-  new URL("../src/components/admin/AdminOrderThankYouCard.tsx", import.meta.url),
-  "utf8",
-);
-const adminPage = readFileSync(new URL("../src/app/admin/orders/[id]/page.tsx", import.meta.url), "utf8");
+const dialog = readFileSync(new URL("../src/components/admin/AdminOrderThankYouCardDialog.tsx", import.meta.url), "utf8");
+const listPage = readFileSync(new URL("../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+const detailPage = readFileSync(new URL("../src/app/admin/orders/[id]/page.tsx", import.meta.url), "utf8");
+const libraryPage = readFileSync(new URL("../src/app/admin/thank-you-cards/page.tsx", import.meta.url), "utf8");
 
-test("admin thank-you card reuses the customer card verbatim and is mounted for every order", () => {
-  assert.match(adminPage, /AdminOrderThankYouCard/);
-  assert.match(adminPage, /<AdminOrderThankYouCard order=\{order\} \/>/);
-  assert.match(component, /import \{ ThankYouStoryCard \} from "@\/components\/order\/ThankYouStoryCard"/);
-  assert.match(component, /<ThankYouStoryCard order=\{order\} \/>/);
-  assert.match(component, /aria-label="Thẻ cảm ơn đơn hàng"/);
-  // No new API/schema surface: the card is derived from the already-gated page's order.
-  assert.doesNotMatch(component, /fetch\(|createAdminClient|useSearchParams/);
+test("thank-you card mounts only after one order is selected", () => {
+  assert.match(listPage, /const \[thankYouOrder, setThankYouOrder\]/);
+  assert.match(listPage, /thankYouOrder && \(/);
+  assert.match(listPage, /<AdminOrderThankYouCardDialog order=\{thankYouOrder\}/);
+  assert.doesNotMatch(listPage, /filteredOrders\.map[\s\S]*<ThankYouStoryCard/);
+  assert.match(detailPage, /showThankYouCard && order && \(/);
 });
 
-test("admin print opens the print window synchronously and only renders pre-verified content", () => {
-  // window.open must be called before any await so popup blockers keep the click gesture.
-  const openIndex = component.indexOf('window.open("", "_blank"');
-  const awaitIndex = component.indexOf("await renderThankYouCard");
-  assert.ok(openIndex > -1, "print must call window.open synchronously");
-  assert.ok(awaitIndex > -1, "print must render via renderThankYouCard");
-  assert.ok(openIndex < awaitIndex, "window.open must precede the first await");
-  assert.match(component, /window\.print\(\)/);
-  assert.match(component, /if \(!printWindow\)/);
-  assert.match(component, /disabled=\{isPrinting\}/);
-  assert.match(component, /role="alert"/);
+test("preview and print are separate explicit actions", () => {
+  assert.match(dialog, /<ThankYouStoryCard order=\{order\} \/>/);
+  assert.match(dialog, /onClick=\{printCard\}/);
+  assert.match(dialog, /In thiệp này/);
+  assert.match(dialog, /window\.print\(\)/);
+  assert.doesNotMatch(dialog, /useEffect\([\s\S]{0,300}window\.print/);
+});
+
+test("independent admin card library searches orders and reuses the same dialog", () => {
+  assert.match(libraryPage, /syncOrdersFromServer\(true\)/);
+  assert.match(libraryPage, /setSelectedOrder\(order\)/);
+  assert.match(libraryPage, /<AdminOrderThankYouCardDialog order=\{selectedOrder\}/);
+  assert.doesNotMatch(libraryPage, /<ThankYouStoryCard/);
 });

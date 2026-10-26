@@ -20,6 +20,7 @@ import {
 import { isNoIntroducerValue } from "@/lib/checkout/introducer";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
+import { AdminOrderThankYouCardDialog } from "@/components/admin/AdminOrderThankYouCardDialog";
 import {
   Plus,
   Filter,
@@ -29,6 +30,7 @@ import {
   ShoppingBag,
   Sparkles,
   ChevronRight,
+  Printer,
 } from "lucide-react";
 
 type OrderTab = "all" | "my_orders" | "by_btc";
@@ -50,6 +52,7 @@ function AdminOrdersContent() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
+  const [thankYouOrder, setThankYouOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -474,6 +477,9 @@ function AdminOrdersContent() {
                 >
                   Chi tiết ➔
                 </Link>
+                <button type="button" onClick={() => setThankYouOrder(ord)} className="rounded-xl border border-[#9ed4a3] bg-[#EAF7ED] px-2.5 py-1.5 text-[10.5px] font-extrabold text-[#16381D]" aria-label={`Xem hoặc in thiệp cảm ơn ${ord.order_code}`}>
+                  <Printer className="inline h-3 w-3" /> Thiệp
+                </button>
               </div>
             </div>
           ))
@@ -503,7 +509,7 @@ function AdminOrdersContent() {
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Thanh toán</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Trạng thái</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian giao</th>
-                <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Đổi trạng thái</th>
+                <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -647,6 +653,10 @@ function AdminOrdersContent() {
                     </td>
 
                     <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                      <button type="button" onClick={() => setThankYouOrder(ord)} className="rounded-xl border border-[#9ed4a3] bg-[#EAF7ED] p-1.5 text-[#16381D] hover:bg-[#BFE9C3]" title={`Xem / in thiệp ${ord.order_code}`} aria-label={`Xem hoặc in thiệp cảm ơn ${ord.order_code}`}>
+                        <Printer className="h-3.5 w-3.5" />
+                      </button>
                       <select
                         value={ord.order_status}
                         onChange={(e) => {
@@ -667,6 +677,7 @@ function AdminOrdersContent() {
                         <option value="completed">Đã hoàn thành</option>
                         <option value="cancelled">Đã hủy đơn</option>
                       </select>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -748,6 +759,9 @@ function AdminOrdersContent() {
             </div>
           </div>
         </div>
+      )}
+      {thankYouOrder && (
+        <AdminOrderThankYouCardDialog order={thankYouOrder} onClose={() => setThankYouOrder(null)} />
       )}
     </div>
   );

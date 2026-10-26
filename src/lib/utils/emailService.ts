@@ -166,3 +166,12 @@ export function generatePaymentReceivedHtml(order: Order): string {
 </html>
   `.trim();
 }
+
+export function generatePaymentReminderHtml(order: Order): string {
+  const buyerName = escapeHtml(order.buyer_name || "bạn");
+  const orderCode = escapeHtml(order.order_code);
+  const amount = Number(order.final_amount || 0).toLocaleString("vi-VN");
+  const trackingUrl = `https://gieomo.store/track?code=${encodeURIComponent(order.order_code)}`;
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Nhắc thanh toán ${orderCode}</title></head>
+<body style="margin:0;padding:24px;background:#FFF8EE;color:#342A24;font-family:Montserrat,Arial,sans-serif"><div style="max-width:580px;margin:auto;overflow:hidden;border:1px solid #F0E5D8;border-radius:24px;background:#fff"><div style="background:#1B3622;padding:24px;text-align:center;color:#fff"><h1 style="margin:0;font-size:20px">🌱 Gieo Mơ — Mầm Mơ</h1></div><div style="padding:28px 24px"><h2 style="color:#16381D;font-size:17px">Chào ${buyerName}, đơn ${orderCode} đang chờ thanh toán</h2><p style="font-size:13px;line-height:1.65">Hệ thống chưa ghi nhận khoản thanh toán <strong>${amount}đ</strong> cho đơn hàng này. Nếu bạn đã chuyển khoản, vui lòng không chuyển thêm và liên hệ Gieo Mơ để chúng mình đối soát.</p><p style="text-align:center;margin-top:24px"><a href="${trackingUrl}" style="display:inline-block;border-radius:999px;background:#BFE9C3;padding:12px 24px;color:#16381D;text-decoration:none;font-weight:800">Kiểm tra trạng thái đơn</a></p></div><div style="border-top:1px solid #F0E5D8;background:#FFF8EE;padding:16px 24px;font-size:11px;color:#7E7068">Đây là lời nhắc thủ công từ đội ngũ Gieo Mơ. Nếu bạn đã thanh toán, hãy bỏ qua email này và gửi mã giao dịch để được kiểm tra.</div></div></body></html>`;
+}

@@ -115,6 +115,19 @@ export async function POST(request: Request) {
     }
 
     const success = data.outcome === "applied" || data.outcome === "duplicate";
+    let canonicalOrderPaymentStatus: string | null = null;
+    if (data.order_id) {
+      const { data: canonicalOrder, error: canonicalOrderError } = await supabase
+        .from("orders")
+        .select("payment_status")
+        .eq("order_id", data.order_id)
+        .maybeSingle();
+      if (canonicalOrderError) {
+        console.error("[SePay] cannot read canonical order payment status:", canonicalOrderError.message);
+      } else {
+        canonicalOrderPaymentStatus = canonicalOrder?.payment_status ?? null;
+      }
+    }
     return response(200, {
       success,
       outcome: data.outcome,
@@ -123,7 +136,10 @@ export async function POST(request: Request) {
       matched_order_code: orderCode,
       order_id: data.order_id ?? null,
       payment_id: data.payment_id ?? null,
+      // Backward-compatible: payment_status is the newly recorded payment row.
       payment_status: data.payment_status ?? null,
+      payment_record_status: data.payment_status ?? null,
+      order_payment_status: canonicalOrderPaymentStatus,
       order_status: data.order_status ?? null,
       amount_received: data.amount_received ?? amount,
       amount_expected: data.amount_expected ?? null,

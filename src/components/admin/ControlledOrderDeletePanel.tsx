@@ -104,7 +104,7 @@ export function ControlledOrderDeletePanel(props: {
               <p className="text-xs text-gray-600">Mã đơn: <strong>{props.orderCode}</strong> · Giá trị: <MoneyDisplay amount={props.finalAmount} /></p>
               <p className="text-xs text-gray-600">Đơn: {props.orderStatus} · Thanh toán: {props.paymentStatus} · Giao hàng: {props.deliveryStatus}</p>
             </div>
-            <p className="text-xs text-gray-600">Chỉ xóa vật lý bản nháp/test chưa có payment, shipment, tồn kho, voucher hay lịch sử nghiệp vụ. Khóa idempotency của chính đơn sẽ được dọn sạch cùng đơn khi xóa (H51).</p>
+            <p className="text-xs text-gray-600">Chỉ xóa vật lý bản nháp/test chưa có payment, shipment, tồn kho, voucher hay lịch sử nghiệp vụ. Khóa idempotency của chính đơn sẽ được dọn sạch cùng đơn khi xóa.</p>
             <textarea value={reason} onChange={(event) => { setReason(event.target.value); setPreview(null); }} placeholder="Lý do xóa" className="min-h-20 w-full rounded-xl border p-2 text-sm" />
             <button type="button" disabled={busy} onClick={() => request("preview")} className="rounded-xl bg-amber-100 px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">
               {busy ? "Đang kiểm tra..." : "Chạy preview — không thay đổi dữ liệu"}

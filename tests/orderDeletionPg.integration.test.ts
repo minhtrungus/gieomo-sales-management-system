@@ -274,6 +274,31 @@ test("H51 — completed idempotency claim no longer blocks deletion; it is remov
     assert.equal(preview.outcome, "eligible", "claim-only draft order must be deletable");
     assert.equal(preview.relations.idempotency_claims, 1, "preview reports the removable claim count");
 
+    // A downstream audit failure must roll back both the order deletion and
+    // the idempotency-claim cleanup performed by the same RPC transaction.
+    await c.query(
+      `CREATE OR REPLACE FUNCTION pg_temp.fail_delete_audit() RETURNS trigger LANGUAGE plpgsql AS
+       $$BEGIN RAISE EXCEPTION 'delete-audit-fault'; END$$`,
+    );
+    await c.query(
+      `CREATE TRIGGER fail_delete_audit BEFORE INSERT ON public.audit_logs
+       FOR EACH ROW EXECUTE FUNCTION pg_temp.fail_delete_audit()`,
+    );
+    await c.query("SAVEPOINT before_faulted_delete");
+    await assert.rejects(
+      manage(c, {
+        ...base,
+        mode: "delete",
+        confirmation: "XOA",
+        expected_updated_at: preview.updated_at,
+      }),
+      /delete-audit-fault/,
+    );
+    await c.query("ROLLBACK TO SAVEPOINT before_faulted_delete");
+    assert.equal((await c.query("SELECT count(*)::int n FROM public.orders WHERE order_id=$1", [seeded.orderId])).rows[0].n, 1);
+    assert.equal((await c.query("SELECT count(*)::int n FROM public.order_idempotency WHERE order_id=$1", [seeded.orderId])).rows[0].n, 1);
+    await c.query("DROP TRIGGER fail_delete_audit ON public.audit_logs");
+
     const stale = await manage(c, {
       ...base, mode: "delete", confirmation: "XOA", expected_updated_at: "2000-01-01T00:00:00Z",
     });

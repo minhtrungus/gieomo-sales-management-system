@@ -102,6 +102,7 @@ export default function AdminPaymentsPage() {
   const [viewingProof, setViewingProof] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [paymentReadError, setPaymentReadError] = useState<string | null>(null);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
   const loadData = () => {
     setOrders(getStoredOrders());
@@ -131,19 +132,23 @@ export default function AdminPaymentsPage() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await syncOrdersFromServer(true);
-    loadData();
+    setRefreshMessage(null);
     try {
+      await syncOrdersFromServer(true);
+      loadData();
       const result = await fetchRecordedPayments();
       setPayments(result.payments);
       setMissingLedger(result.missingLedger);
       setPaymentReadError(null);
+      setRefreshMessage("Đã tải lại trạng thái đơn và sổ giao dịch từ database của hệ thống.");
     } catch {
       setPayments([]);
       setMissingLedger([]);
       setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
+      setRefreshMessage(null);
+    } finally {
+      setIsRefreshing(false);
     }
-    setTimeout(() => setIsRefreshing(false), 500);
   };
 
   const handleApprove = async () => {
@@ -285,9 +290,15 @@ export default function AdminPaymentsPage() {
           className="px-4 py-2.5 rounded-full bg-white hover:bg-emerald-50 text-emerald-950 font-bold text-xs flex items-center gap-2 shadow-xs transition-all border border-[#F0E5D8] active:scale-95 cursor-pointer self-start sm:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-700" : "text-gray-500"}`} />
-          <span>{isRefreshing ? "Đang đồng bộ..." : "Đồng bộ giao dịch"}</span>
+          <span>{isRefreshing ? "Đang tải lại..." : "Làm mới từ hệ thống"}</span>
         </button>
       </div>
+
+      {refreshMessage && (
+        <p className="text-xs font-medium text-emerald-800" role="status">
+          {refreshMessage} Thao tác này không tải giao dịch trực tiếp từ SePay.
+        </p>
+      )}
 
       {paymentReadError && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">

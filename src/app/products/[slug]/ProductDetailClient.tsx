@@ -39,11 +39,6 @@ export function ProductDetailClient({
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
-  // Prefetch large-variant của ảnh đang xem khi người dùng có intent (hover/touch)
-  // — click phóng to sau đó khớp cache, không còn fetch + decode mới trong lần
-  // tương tác (batch INP-LIGHTBOX).
-  const [isGalleryPrefetchArmed, setIsGalleryPrefetchArmed] = useState(false);
-
   useEffect(() => {
     let isMounted = true;
 
@@ -156,7 +151,7 @@ export function ProductDetailClient({
     return base;
   }, [product]);
 
-  // Ảnh đang hiển thị trong gallery (dùng chung cho prefetch + lightbox)
+  // Ảnh đang hiển thị trong gallery và lightbox.
   const activeGalleryImage = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
 
   // When variant changes, auto-switch to its image if available
@@ -336,8 +331,6 @@ export function ProductDetailClient({
             )}
             <div 
               onClick={() => setIsLightboxOpen(true)}
-              onPointerEnter={() => setIsGalleryPrefetchArmed(true)}
-              onTouchStart={() => setIsGalleryPrefetchArmed(true)}
               className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none cursor-zoom-in"
               title="Nhấp để phóng to ảnh xem chi tiết các mẫu"
             >
@@ -366,20 +359,6 @@ export function ProductDetailClient({
                   </div>
                 );
               })()}
-
-              {/* Hidden prefetch của variant lớn dùng cho lightbox (armed khi hover/touch) */}
-              {isGalleryPrefetchArmed && activeGalleryImage && product && (
-                <div className="hidden relative" aria-hidden="true">
-                  <Image
-                    src={activeGalleryImage}
-                    alt=""
-                    fill
-                    sizes="min(100vw, 64rem)"
-                    loading="eager"
-                    priority
-                  />
-                </div>
-              )}
 
               {/* Hover Zoom Badge */}
               <div className="absolute top-3 right-3 z-30 px-2.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-xs flex items-center gap-1.5 transition-all shadow-md">

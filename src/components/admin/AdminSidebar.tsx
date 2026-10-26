@@ -15,16 +15,20 @@ import {
   BarChart3,
   Settings,
   Scale,
+  Printer,
   LogOut,
   X,
   Warehouse,
   Bell,
   MessageSquare,
+  Sparkles,
+  Mail,
   ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
+import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -34,6 +38,7 @@ interface AdminSidebarProps {
 function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const settings = useSiteSettings();
   const { unreadCount } = useNotifications();
   const [session, setSession] = useState<AdminSession | null>(null);
 
@@ -64,11 +69,13 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/dashboard", label: "Tổng quan (Dashboard)", icon: LayoutDashboard },
     { href: "/admin/notifications", label: "Hộp thư thông báo", icon: Bell, badge: unreadCount },
     { href: "/admin/orders", label: "Tất cả đơn hàng", icon: ShoppingBag },
+    { href: "/admin/thank-you-cards", label: "Thiệp cảm ơn", icon: Printer },
     { href: "/admin/products", label: "Sản phẩm", icon: Boxes },
     { href: "/admin/combos", label: "Set Combo", icon: Package },
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
     { href: "/admin/customers", label: "Khách hàng", icon: Users },
     { href: "/admin/payments", label: "Xác nhận thanh toán", icon: CreditCard },
+    { href: "/admin/payment-reminders", label: "Nhắc thanh toán", icon: Mail },
     { href: "/admin/reconciliation", label: "Đối soát 3 chiều", icon: Scale },
     { href: "/admin/messages", label: "Tin nhắn & Đánh giá", icon: MessageSquare },
     { href: "/admin/vouchers", label: "Mã giảm giá", icon: Ticket },

@@ -144,6 +144,39 @@ export async function POST(request: Request) {
       );
     }
 
+    if (action === "adjust_confirmation") {
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+      if (reason.length < 8 || reason.length > 500) {
+        return NextResponse.json({ success: false, error: "Lý do phải có từ 8 đến 500 ký tự" }, { status: 400 });
+      }
+      if (!expectedUpdatedAt) {
+        return NextResponse.json({ success: false, error: "Thiếu phiên bản đơn hàng để chống cập nhật đồng thời" }, { status: 400 });
+      }
+      const { data: result, error } = await supabase.rpc("adjust_payment_confirmation_atomic", {
+        p: {
+          order_id: order.order_id,
+          reason,
+          expected_updated_at: expectedUpdatedAt,
+          actor_member_id: authCheck.user.memberId,
+        },
+      });
+      if (error) {
+        console.error("[POST /api/orders/payment] adjust_payment_confirmation_atomic failed:", error.message);
+        return NextResponse.json({ success: false, error: "Không thể điều chỉnh; toàn bộ thay đổi đã rollback" }, { status: 500 });
+      }
+      if (result?.outcome === "adjusted") {
+        return NextResponse.json({ success: true, ...result });
+      }
+      const status = result?.outcome === "not_found" ? 404 : result?.outcome === "version_conflict" ? 409 : 422;
+      return NextResponse.json({
+        success: false,
+        outcome: result?.outcome ?? "invalid_result",
+        needsReview: result?.needs_review === true,
+        error: result?.message || "Đơn hoặc lịch sử thanh toán không cho phép điều chỉnh",
+      }, { status });
+    }
+
     return NextResponse.json({ success: false, error: "Hành động không hợp lệ" }, { status: 400 });
   } catch (error) {
     console.error("[POST /api/orders/payment] exception:", error);

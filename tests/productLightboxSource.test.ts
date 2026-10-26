@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
  *    zoom state nội bộ → zoom/close không re-render cả trang chi tiết.
  * 2. Lightbox không được yêu cầu variant "100vw" quá lớn — sizes phải khớp
  *    hộp hiển thị max-w-5xl (min(100vw, 64rem)).
- * 3. Gallery phải arm prefetch variant lớn khi người dùng có intent
- *    (pointerenter/touchstart) để click phóng to khớp cache.
+ * 3. Gallery không được set state/prefetch ảnh lớn trên hover trước click.
+ * 4. Lightbox chỉ mount một cửa sổ thumbnail, không tải cả gallery dài.
  */
 
 const read = (path: string): string =>
@@ -35,12 +35,10 @@ test("INP-L2 — lightbox không request variant 100vw, sizes khớp hộp max-w
   assert.doesNotMatch(images[0], /sizes="100vw"/);
 });
 
-test("INP-L3 — gallery arm prefetch variant lớn trên user intent hover/touch", () => {
-  assert.match(DETAIL, /onPointerEnter=\{\(\) => setIsGalleryPrefetchArmed\(true\)\}/);
-  assert.match(DETAIL, /onTouchStart=\{\(\) => setIsGalleryPrefetchArmed\(true\)\}/);
-  assert.match(DETAIL, /isGalleryPrefetchArmed && activeGalleryImage/);
-  // prefetch phải dùng cùng một sizes với lightbox để cache hit
-  assert.match(DETAIL, /sizes="min\(100vw, 64rem\)"/);
+test("INP-L3 — gallery không re-render toàn trang hoặc eager-load ảnh lớn trên hover", () => {
+  assert.doesNotMatch(DETAIL, /isGalleryPrefetchArmed/);
+  assert.doesNotMatch(DETAIL, /setIsGalleryPrefetchArmed/);
+  assert.doesNotMatch(DETAIL, /loading="eager"/);
 });
 
 test("INP-L4 — mở lightbox giữ nguyên hành vi: một luồng state, không side-effect lạ", () => {
@@ -49,4 +47,11 @@ test("INP-L4 — mở lightbox giữ nguyên hành vi: một luồng state, khô
   assert.match(DETAIL, /onClose=\{\(\) => setIsLightboxOpen\(false\)\}/);
   assert.doesNotMatch(LIGHTBOX, /router\.|fetch\(|window\.location/);
   assert.match(LIGHTBOX, /e\.key === "Escape"/);
+});
+
+test("INP-L5 — lightbox dài chỉ render tối đa chín thumbnail quanh ảnh đang xem", () => {
+  assert.match(LIGHTBOX, /images\.length <= 9/);
+  assert.match(LIGHTBOX, /images\.slice\(start, start \+ 9\)/);
+  assert.match(LIGHTBOX, /visibleThumbnails\.map/);
+  assert.doesNotMatch(LIGHTBOX, /\{images\.map\(\(img, idx\)/);
 });
