@@ -139,3 +139,11 @@ BEGIN
   RETURN jsonb_build_object('outcome', 'deleted', 'eligible', true, 'order_id', v_order_id, 'order_code', v_order.order_code, 'idempotency_claims_removed', v_claims);
 END;
 $$;
+
+-- H52 review: re-assert the 034 ACL contract after replacing the function.
+-- CREATE OR REPLACE preserves existing privileges, so this is not strictly
+-- required, but migrations 032/034 both re-assert the fail-closed grant
+-- explicitly; 038 follows the same convention. Only this function is
+-- replaced here; mark_duplicate_order_atomic ACLs are untouched.
+REVOKE ALL ON FUNCTION public.manage_order_deletion_atomic(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.manage_order_deletion_atomic(jsonb) TO service_role;
