@@ -298,22 +298,28 @@ test("PG same-key sequential — claim đã COMMIT: replay (replayed=true); clai
 });
 
 // PG same-key race — ĐỒNG THỜI THẬT, ĐỊNH ĐOẠT ĐƯỢC (không phụ thuộc
-// "ai claim trước"): A claim key (INSERT order_idempotency 'in_progress'
-// trong tx CHƯA commit) → B chạy CÙNG key và PHẢI bị chặn trên unique
-// index của claim (chứng minh bằng pg_stat_activity: B ở trạng thái
-// wait_event_type='Lock' TRƯỚC khi A commit — quan sát, không sleep mù).
-// A COMMIT → INSERT của B vấp unique violation 23505 → v25 KHÔNG có
-// handler cho 23505 (migrate 035 L155: INSERT trần) → lỗi surfaced
-// fail-closed cho client (KHÔNG tự biến thành replay). Contract kỳ vọng:
-//   1) A: claim + tạo đơn, 'replayed': false, trong tx chưa commit.
-//   2) B (chưa commit của A): SELECT FOR UPDATE không thấy row → tới
-//      INSERT → block trên unique index.
-//   3) A commit → claim row 'completed' (claim + hoàn tất cùng 1 tx).
-//   4) B: 23505 surfaced, tx B abort → không có đơn thứ hai.
-//   5) Retry cùng key (tx mới): SELECT thấy row 'completed' → replay,
-//      cùng order_id với A, replayed=true.
-// Invariant: ĐÚNG 1 đơn committed cho cùng key.
-test("PG same-key race — B chặn trên claim CHƯA commit; A commit → B 23505 fail-closed; đúng 1 đơn committed; retry replay", async (t) => {
+// "ai claim trước"): toàn bộ create_order_atomic được TUẦN TỰ HÓA bởi
+// advisory lock giao dịch pg_advisory_xact_lock(71420261014) ngay đầu
+// hàm (migrate 035 L94-94). Contract đã được CI xác nhận (run
+// 40273316281) và đọc trực tiếp từ migration source:
+//   1) A: BEGIN → RPC (claim 'in_progress' + tạo đơn, 'replayed': false)
+//      → tx GIỮ MỞ (chưa commit) — giữ advisory lock + claim.
+//   2) B: cùng key → CHẶN trên advisory lock của A (chứng minh bằng
+//      pg_stat_activity: wait_event_type='Lock' TRƯỚC khi A commit —
+//      quan sát, không sleep mù).
+//   3) A COMMIT → advisory lock nhả → B vào được: SELECT FOR UPDATE thấy
+//      claim 'completed' của A → REPLAY thành công (không 23505 — đường
+//      unhandled-unique-violation không thể xảy ra cho cùng key vì mọi
+//      request đã bị tuần tự hóa bởi advisory lock).
+//   4) Invariant: ĐÚNG 1 đơn committed cho cùng key; ledger 'completed'
+//      trỏ tới đơn của A; replay của B và retry sau đó cùng order_id,
+//      replayed=true.
+// (Lịch sử: bản H50L Promise.all cũ assert a.order_id === b.order_id với
+// B ROLLBACK — nếu B thắng advisory lock và rollback, claim của B biến
+// mất nên A tự tạo đơn riêng — đúng như CI run 40266756402 ghi nhận;
+// và bản H50R từng assert B phải dính 23505 — bị CI run 40273316281
+// bác bỏ vì B thực tế replay thành công.)
+test("PG same-key race — B chặn trên advisory lock của A; A commit → B replay cùng đơn (replayed=true); đúng 1 đơn committed; retry replay", async (t) => {
   if (!canRun) {
     t.skip(skipReason);
     return;
@@ -400,6 +406,7 @@ test("PG same-key race — B chặn trên claim CHƯA commit; A commit → B 235
     ]);
     const a = aRes.rows[0].r as { outcome: string; replayed?: boolean; order_id: string };
     assert.equal(a.outcome, "created", "A phải tạo được đơn trong tx chưa commit");
+    assert.equal(Boolean(a.replayed), false, "A là người claim đầu → 'replayed': false");
 
     // Bằng chứng claim của A tồn tại trong tx CHƯA commit của A (status
     // 'completed' chỉ nhìn thấy từ chính tx của A vì claim+hoàn tất cùng tx).
@@ -411,7 +418,9 @@ test("PG same-key race — B chặn trên claim CHƯA commit; A commit → B 235
     assert.equal(claimRes.rows[0].status, "completed");
     assert.equal(claimRes.rows[0].order_id, a.order_id);
 
-    // B: cùng key — sẽ block tại INSERT claim (unique index) cho tới khi A commit.
+    // B: cùng key — sẽ CHẶN trên advisory lock giao dịch của A (035 L94:
+    // pg_advisory_xact_lock) chứ không phải trên unique index — mọi
+    // create_order_atomic được tuần tự hóa ngay đầu hàm.
     // Không dựa sleep mù: chờ B được QUAN SÁT là đang chờ lock (pg_stat_activity),
     // với trần thời gian rõ ràng; chỉ sau đó mới COMMIT A.
     const bResult = (async () => {
@@ -447,15 +456,20 @@ test("PG same-key race — B chặn trên claim CHƯA commit; A commit → B 235
     assert.equal(
       blockedObserved,
       true,
-      "B phải được quan sát đang CHỜ LOCK (pg_stat_activity) trước khi A commit — nếu không, đồng bộ race không deterministic"
+      "B phải được quan sát đang CHỜ LOCK (pg_stat_activity — advisory lock của A) trước khi A commit — nếu không, đồng bộ race không deterministic"
     );
 
     await clientA.query("COMMIT");
     const b = await bResult;
 
-    // Contract hiện tại: 23505 KHÔNG được handler → surfaced fail-closed.
-    assert.equal(b.ok, false, "B phải fail-closed khi claim đã commit bởi A (không có handler 23505 trong v25)");
-    assert.equal((b as any).code, "23505", `B phải dính unique violation 23505 (actual: ${(b as any).code} — ${(b as any).message})`);
+    // Contract thật (CI run 40273316281 xác nhận + migration 035 L94):
+    // sau khi A commit, advisory lock nhả → B vào được → thấy claim
+    // 'completed' của A → REPLAY thành công. KHÔNG có 23505.
+    assert.equal(b.ok, true, "B phải replay thành công sau khi A commit (tuần tự hóa bởi advisory lock)");
+    const bOut = (b as any).out as { outcome: string; replayed?: boolean; order_id: string };
+    assert.equal(bOut.outcome, "created");
+    assert.equal(bOut.order_id, a.order_id, "B phải trả về ĐÚNG order của A (replay)");
+    assert.equal(Boolean(bOut.replayed), true, "B phải là replay (replayed=true)");
 
     // Invariant: ĐÚNG 1 đơn committed cho cùng key; ledger 'completed' trỏ tới đơn của A.
     const committedRes = await clientA.query(
