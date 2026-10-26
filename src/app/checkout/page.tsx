@@ -13,7 +13,6 @@ import { Select } from "@/components/ui/Select";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/schemas";
 import {
   cacheServerCreatedOrder,
-  getStoredPickupPoints,
   getStoredVouchers,
   getStoredSettings,
   getActiveReferralMembers,
@@ -24,7 +23,7 @@ import {
   type StoredMember,
   DEFAULT_SETTINGS,
 } from "@/lib/data/orderStore";
-import type { Order, OrderItem, PickupPoint, Voucher } from "@/types/database";
+import type { Order, Voucher } from "@/types/database";
 import { computePricing, isVoucherApplicable } from "@/lib/pricing";
 import { decideCheckoutSubmitAction } from "@/lib/checkout/checkoutSubmitAction";
 import { beginCreateOrderAttempt } from "@/lib/checkout/createOrderAttempt";
@@ -60,7 +59,7 @@ function CheckoutContent() {
   }, [validateCart]);
 
   useEffect(() => {
-    setSiteSettings(getStoredSettings());
+    queueMicrotask(() => setSiteSettings(getStoredSettings()));
     const handleSettingsUpdate = () => setSiteSettings(getStoredSettings());
     window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
     return () => window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
@@ -102,14 +101,16 @@ function CheckoutContent() {
     const vParam = searchParams.get("voucher");
     if (vParam) {
       const code = vParam.toUpperCase();
-      setFormData((prev) => ({ ...prev, voucher_code: code }));
-      setVoucherApplied(code);
+      queueMicrotask(() => {
+        setFormData((prev) => ({ ...prev, voucher_code: code }));
+        setVoucherApplied(code);
+      });
     }
   }, [searchParams]);
 
   useEffect(() => {
     const members = getActiveReferralMembers();
-    setActiveMembers(members);
+    queueMicrotask(() => setActiveMembers(members));
 
     // Capture referral code from URL (ref, refby, referrer, gioithieu), localStorage, or cookie
     const refParam =
@@ -135,14 +136,18 @@ function CheckoutContent() {
       );
 
       if (matched) {
-        setSelectedMember(matched);
-        setFormData((prev) => ({
-          ...prev,
-          introducer_info: `${matched.fullName} (${matched.referralCode})`,
-        }));
+        queueMicrotask(() => {
+          setSelectedMember(matched);
+          setFormData((prev) => ({
+            ...prev,
+            introducer_info: `${matched.fullName} (${matched.referralCode})`,
+          }));
+        });
       } else {
-        setMemberSearchQuery(clean);
-        setFormData((prev) => ({ ...prev, introducer_info: clean }));
+        queueMicrotask(() => {
+          setMemberSearchQuery(clean);
+          setFormData((prev) => ({ ...prev, introducer_info: clean }));
+        });
       }
     }
 
@@ -175,7 +180,7 @@ function CheckoutContent() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
 
   useEffect(() => {
-    setVouchers(getStoredVouchers());
+    queueMicrotask(() => setVouchers(getStoredVouchers()));
     const handleVouchersUpdate = () => setVouchers(getStoredVouchers());
     window.addEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
     return () => window.removeEventListener("gieomo_vouchers_updated", handleVouchersUpdate);
@@ -544,8 +549,8 @@ function CheckoutContent() {
           `/order/success?code=${serverOrderCode}&payment=${paymentMethod}&amount=${serverFinalAmount}${tokenQuery}`
         );
         return;
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err : new Error("Unknown checkout error");
         if (attempt < MAX_IDEM_RETRIES) {
           await delayMs(400 * attempt);
           continue;
@@ -686,7 +691,7 @@ function CheckoutContent() {
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setDeliveryType(option.id as any)}
+                    onClick={() => setDeliveryType(option.id as "home_delivery" | "member_delivery")}
                     className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                       deliveryType === option.id
                         ? "bg-soft-green/40 border-emerald-600 ring-2 ring-emerald-600/20"

@@ -200,7 +200,7 @@ test("R2 — lỗi schema/query payments → THROW 'Không thể tải dữ li�
 //      → phân biệt "không có payment record" với "không query được"
 // ============================================================
 test("R3 — payments trống thật sự → không throw, verdict PAYMENT_MISMATCH/UNPAID tính đúng", async () => {
-  const db = seedDb({ withPayment: false });
+  seedDb({ withPayment: false });
 
   const res = await getReconciliationDataServer();
 

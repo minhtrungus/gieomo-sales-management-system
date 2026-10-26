@@ -13,7 +13,6 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  QrCode,
   Eye,
   X,
   Phone,
@@ -27,7 +26,7 @@ import {
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import type { Order } from "@/types/database";
 
 export default function SaleDashboardPage() {
@@ -39,21 +38,6 @@ export default function SaleDashboardPage() {
 
   useEffect(() => {
     syncOrdersFromServer(true);
-    const s = getAdminSession();
-    setSession(s);
-    const allOrders = getStoredOrders();
-
-    if (s) {
-      const myOrders = allOrders.filter(
-        (o) =>
-          (s.referralCode && o.referral_code?.toLowerCase() === s.referralCode.toLowerCase()) ||
-          (s.memberId && o.seller_id === s.memberId) ||
-          (s.memberId && o.created_by_member_id === s.memberId) ||
-          (s.referralCode && o.introducer_info?.toLowerCase().includes(s.referralCode.toLowerCase()))
-      );
-      setOrders(myOrders);
-    }
-
     const handleUpdate = () => {
       const currentSession = getAdminSession();
       setSession(currentSession);
@@ -71,6 +55,8 @@ export default function SaleDashboardPage() {
         setOrders(filtered);
       }
     };
+
+    queueMicrotask(handleUpdate);
 
     touchMemberActive();
     const heartbeatInterval = setInterval(() => touchMemberActive(), 45000);

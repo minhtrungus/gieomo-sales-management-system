@@ -8,22 +8,18 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { saveNewProduct } from "@/lib/data/orderStore";
-import { uploadAsset, uploadAssetsParallel } from "@/lib/services/uploadService";
+import { uploadAssetsParallel } from "@/lib/services/uploadService";
+import type { ExtendedProduct } from "@/lib/data/mockData";
 import { generateSku } from "@/lib/utils/skuGenerator";
 import {
   ArrowLeft,
-  Plus,
-  Trash2,
   X,
   Upload,
   Loader2,
   Star,
-  Info,
   Link as LinkIcon,
-  ImageIcon,
-  Sparkles,
 } from "lucide-react";
-import { BulkVariantGenerator } from "@/components/admin/BulkVariantGenerator";
+import { BulkVariantGenerator, type VariantItem } from "@/components/admin/BulkVariantGenerator";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
@@ -51,17 +47,16 @@ export default function AdminNewProductPage() {
   // Unified Media Images: images[0] is the main cover (thumbnail), rest are gallery images
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [, setUploadError] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
-  const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
   // Form submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Variants list with initial stock 0 (must be stocked via warehouse inflow receipt)
-  const [variants, setVariants] = useState([
+  const [variants, setVariants] = useState<VariantItem[]>([
     { name: "Mặc định", sku: "GM-SP-01", stock: 0, imageUrl: "" },
   ]);
 
@@ -89,35 +84,6 @@ export default function AdminNewProductPage() {
     );
   };
 
-  const handleAddVariant = () => {
-    setVariants((prev) => {
-      const nextIdx = prev.length;
-      const vName = `Phân loại ${nextIdx + 1}`;
-      return [
-        ...prev,
-        {
-          name: vName,
-          sku: generateSku(name, vName, nextIdx),
-          stock: 20,
-          imageUrl: "",
-        },
-      ];
-    });
-  };
-
-  const handleRegenerateAllSkus = () => {
-    setVariants((prev) =>
-      prev.map((v, i) => ({
-        ...v,
-        sku: generateSku(name, v.name, i),
-      }))
-    );
-  };
-
-  const handleRemoveVariant = (index: number) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index));
-  };
-
   // Upload multiple images concurrently with automatic client-side compression
   const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -134,7 +100,8 @@ export default function AdminNewProductPage() {
       if (errors.length > 0) {
         setUploadError(`Có ${errors.length} ảnh gặp sự cố: ${errors.join("; ")}`);
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       setUploadError(err?.message || "Lỗi tải ảnh");
     } finally {
       setIsUploading(false);
@@ -189,10 +156,9 @@ export default function AdminNewProductPage() {
     const mainThumbnail = images[0] || "/images/products/pounch_1.png";
     const allImages = images.length > 0 ? images : [mainThumbnail];
 
-    const newProd = {
+    const newProd: ExtendedProduct = {
       product_id: prodId,
       category_id: null,
-      category: null,
       name: name.trim(),
       slug: cleanSlug,
       short_description: shortDescription.trim(),
@@ -204,6 +170,7 @@ export default function AdminNewProductPage() {
       status: status as "active" | "draft",
       sort_order: 1,
       thumbnail: mainThumbnail,
+      weight_gram: null,
       images: allImages,
       impact_story: descImpact.trim() || undefined,
       variants: variants.map((v, i) => {
@@ -216,13 +183,13 @@ export default function AdminNewProductPage() {
           name: v.name?.trim() || "Mặc định",
           sku: cleanSku,
           stock: v.stock !== undefined ? Number(v.stock) : 0,
-          stock_warehouse_1: (v as any).stock_warehouse_1 !== undefined ? Number((v as any).stock_warehouse_1) : Number(v.stock || 0),
-          stock_warehouse_2: (v as any).stock_warehouse_2 !== undefined ? Number((v as any).stock_warehouse_2) : 0,
+          stock_warehouse_1: v.stock_warehouse_1 !== undefined ? Number(v.stock_warehouse_1) : Number(v.stock || 0),
+          stock_warehouse_2: v.stock_warehouse_2 !== undefined ? Number(v.stock_warehouse_2) : 0,
           price: null,
           compare_at_price: null,
           cost_price: null,
           weight_gram: 100,
-          image_url: (v.imageUrl || (v as any).image_url)?.trim() || null,
+          image_url: (v.imageUrl || v.image_url)?.trim() || null,
           status: "active" as const,
           sort_order: i + 1,
           created_at: new Date().toISOString(),
@@ -233,14 +200,15 @@ export default function AdminNewProductPage() {
     };
 
     try {
-      const result = await saveNewProduct(newProd as any);
+      const result = await saveNewProduct(newProd);
       if (!result.success) {
         setSubmitError(result.error || "Không thể lưu sản phẩm vào hệ thống!");
         setIsSubmitting(false);
         return;
       }
       router.push("/admin/products");
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       setSubmitError(err?.message || "Đã xảy ra sự cố khi lưu sản phẩm.");
       setIsSubmitting(false);
     }
@@ -416,7 +384,7 @@ export default function AdminNewProductPage() {
             productName={name}
             galleryImages={images}
             variants={variants}
-            onVariantsChange={(newVars) => setVariants(newVars as any)}
+            onVariantsChange={setVariants}
           />
         </div>
 

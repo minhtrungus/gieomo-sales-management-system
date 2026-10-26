@@ -115,8 +115,6 @@ export function parseProductDescription(
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const lower = trimmed.toLowerCase();
-
     const sizeMatch = trimmed.match(/^(?:[-*•]\s*)?(?:kích thước|size)\s*[:：]\s*(.*)$/i);
     const materialMatch = trimmed.match(/^(?:[-*•]\s*)?(?:chất liệu|vải)\s*[:：]\s*(.*)$/i);
     const impactMatch = trimmed.match(/^(?:[-*•]\s*)?(?:ý nghĩa|mục đích gây quỹ)\s*[:：]\s*(.*)$/i);

@@ -93,7 +93,7 @@ function makeOrder(i: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function seedOrders(orders: Array<Record<string, unknown>>, extra: Record<string, any[]> = {}): FakeOrderDb {
+function seedOrders(orders: Array<Record<string, unknown>>, extra: Record<string, Array<Record<string, unknown>>> = {}): FakeOrderDb {
   const db = createFakeOrderDb({
     products: [],
     product_variants: [],

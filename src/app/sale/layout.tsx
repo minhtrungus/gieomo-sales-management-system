@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SaleSidebar } from "@/components/sale/SaleSidebar";
 import { SaleHeader } from "@/components/sale/SaleHeader";
-import { isAdminAuthenticated, getAdminSession, touchMemberActive } from "@/lib/data/orderStore";
+import { isAdminAuthenticated, touchMemberActive } from "@/lib/data/orderStore";
 
 export default function SaleLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function SaleLayout({ children }: { children: React.ReactNode }) 
     }
 
     touchMemberActive();
-    setIsAuthChecked(true);
+    queueMicrotask(() => setIsAuthChecked(true));
 
     const heartbeatInterval = setInterval(() => touchMemberActive(), 20000);
     const onFocus = () => touchMemberActive();

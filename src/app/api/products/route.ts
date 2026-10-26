@@ -23,7 +23,8 @@ export async function GET(request: Request) {
 
     const products = await getProductsServer(includeDrafts);
     return NextResponse.json({ success: true, products });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[GET /api/products] Error:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi truy vấn sản phẩm" },
@@ -53,7 +54,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(result);
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[POST /api/products] Error:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi lưu sản phẩm" },
@@ -95,7 +97,8 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[PATCH /api/products] Error:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi cập nhật sản phẩm" },
@@ -126,7 +129,8 @@ export async function DELETE(request: Request) {
     // Batch 2G.2: thất bại phải là HTTP non-200 (trước đây luôn 200 dù
     // success:false — caller hiện tại không đọc body nên an toàn).
     return NextResponse.json(res, { status: res.success ? 200 : 500 });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[DELETE /api/products] Error:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi xóa sản phẩm" },

@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Scale,
   RefreshCw,
   Search,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
   Clock,
-  ArrowRight,
   TrendingDown,
   TrendingUp,
   PackageCheck,
@@ -20,12 +18,9 @@ import {
   HelpCircle,
   Eye,
   X,
-  Download,
-  Filter,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import type {
   ReconciliationRecord,
@@ -52,7 +47,7 @@ export default function AdminReconciliationPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "action_required" | ReconciliationStatus>("all");
   const [selectedRecord, setSelectedRecord] = useState<ReconciliationRecord | null>(null);
-  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateRange] = useState({ start: "", end: "" });
 
   // Debounce search query to prevent hammering the server on every keystroke
   useEffect(() => {
@@ -112,7 +107,8 @@ export default function AdminReconciliationPage() {
         setRecords(Array.isArray(data?.records) ? data.records : []);
         setSummary(data?.summary || null);
         setTotalCount(Number(data?.totalCount) || 0);
-      } catch (err: any) {
+      } catch (caught: unknown) {
+        const err = caught as { message?: string } | null;
         // Abort (bởi begin() mới hoặc unmount) — không phải lỗi hiển thị.
         if (req.signal.aborted) return;
         if (!req.isCurrent()) return;
@@ -134,8 +130,10 @@ export default function AdminReconciliationPage() {
   // setOffset(0) đồng bộ state UI; fetchData(0) chạy ngay với offset đúng
   // (không tạo request thừa với offset cũ như cách 2-effect trước 3C.1).
   useEffect(() => {
-    setOffset(0);
-    fetchData(0);
+    queueMicrotask(() => {
+      setOffset(0);
+      void fetchData(0);
+    });
   }, [fetchData]);
 
   // Đổi trang → fetch với offset cụ thể (trực tiếp, không qua effect

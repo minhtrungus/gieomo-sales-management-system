@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
@@ -29,8 +29,10 @@ export default function AdminDashboardPage() {
     syncOrdersFromServer(true);
     syncProductsFromServer(true);
     syncCombosFromServer(true);
-    setOrders(getStoredOrders());
-    setProducts(getStoredProducts());
+    queueMicrotask(() => {
+      setOrders(getStoredOrders());
+      setProducts(getStoredProducts());
+    });
 
     const handleOrdersUpdate = () => setOrders(getStoredOrders());
     const handleProdUpdate = () => setProducts(getStoredProducts());
@@ -50,7 +52,7 @@ export default function AdminDashboardPage() {
     .reduce((sum, o) => sum + (o.final_amount || 0), 0);
   const pendingOrdersCount = orders.filter((o) => o.order_status === "pending").length;
 
-  const lowStockItem = useMemo(() => {
+  const lowStockItem = (() => {
     for (const p of products) {
       const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? (p.stock || 0);
       const isNumbered = (p.variants?.length || 0) > 4;
@@ -70,7 +72,7 @@ export default function AdminDashboardPage() {
       }
     }
     return null;
-  }, [products]);
+  })();
 
   const stats = [
     {

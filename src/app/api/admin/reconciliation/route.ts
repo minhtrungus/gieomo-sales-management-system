@@ -43,7 +43,8 @@ export async function GET(request: Request) {
       records: data.records,
       totalCount: data.total_count,
     });
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    const error = caught as { message?: string } | null;
     console.error("[GET /api/admin/reconciliation] Error:", error);
     return NextResponse.json(
       {

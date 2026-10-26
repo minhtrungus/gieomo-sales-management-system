@@ -4,7 +4,7 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
-import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, DELIVERY_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import {
   getStoredOrders,
   updateStoredOrderStatus,
@@ -20,7 +20,7 @@ import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDe
 import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
 import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
-import { ArrowLeft, CheckCircle, Clock, Truck, FileText, UserCheck, Copy, Check, Building, Bike, Phone, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
+import { ArrowLeft, UserCheck, Copy, Check, Building, Bike, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -49,26 +49,26 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   // Confirmation modal state for manual payment verification
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
-  const [pendingPaymentStatus, setPendingPaymentStatus] = useState<PaymentStatus | null>(null);
 
   useEffect(() => {
-    setMembers(getStoredMembers());
-    const stored = getStoredOrders();
-    const found = stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) || null;
-    if (found) {
-      setOrder(found);
-      setOrderStatus(found.order_status);
-      setPaymentStatus(found.payment_status);
-      setDeliveryStatus(found.delivery_status || "not_ready");
-      setInternalNote(found.internal_note || "");
-      setAssignedShipperId(found.assigned_shipper_id || "");
-    }
+    queueMicrotask(() => {
+      setMembers(getStoredMembers());
+      const stored = getStoredOrders();
+      const found = stored.find((o) => o.order_id === resolvedParams.id || o.order_code === resolvedParams.id) || null;
+      if (found) {
+        setOrder(found);
+        setOrderStatus(found.order_status);
+        setPaymentStatus(found.payment_status);
+        setDeliveryStatus(found.delivery_status || "not_ready");
+        setInternalNote(found.internal_note || "");
+        setAssignedShipperId(found.assigned_shipper_id || "");
+      }
+    });
   }, [resolvedParams.id]);
 
   // Handle changing payment status with explicit confirmation for 'paid'
   const handlePaymentStatusChange = (newStatus: PaymentStatus) => {
     if (newStatus === "paid" && paymentStatus !== "paid") {
-      setPendingPaymentStatus("paid");
       setShowPaymentConfirmModal(true);
     } else {
       setPaymentStatus(newStatus);
@@ -104,7 +104,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         );
         syncStoredPaymentStatusLocal(order.order_code, "paid");
         setShowPaymentConfirmModal(false);
-        setPendingPaymentStatus(null);
         setIsSavedNotice(true);
         setTimeout(() => setIsSavedNotice(false), 2500);
         return;
@@ -671,7 +670,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                         <button
                           type="button"
                           onClick={() => {
-                            setPendingPaymentStatus("paid");
                             setShowPaymentConfirmModal(true);
                           }}
                           className="flex-1 py-2 px-3 rounded-xl bg-soft-green hover:bg-emerald-300 text-emerald-950 font-extrabold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer border border-emerald-300 shadow-2xs transition-all"

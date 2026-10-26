@@ -8,7 +8,8 @@ export async function GET() {
   try {
     const settings = await getSystemSettingsServer();
     return NextResponse.json({ success: true, settings });
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    const error = caught as { message?: string } | null;
     return NextResponse.json(
       { success: false, error: error?.message || "Failed to load settings" },
       { status: 500 }
@@ -35,7 +36,8 @@ export async function POST(request: Request) {
 
     const updated = await getSystemSettingsServer();
     return NextResponse.json({ success: true, settings: updated });
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    const error = caught as { message?: string } | null;
     return NextResponse.json(
       { success: false, error: error?.message || "Failed to parse request" },
       { status: 400 }

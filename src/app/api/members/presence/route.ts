@@ -40,7 +40,8 @@ export async function GET(request: Request) {
       { success: true, presence },
       { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
     );
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    const error = caught as { message?: string } | null;
     return NextResponse.json({ success: false, presence: {}, error: error?.message }, { status: 500 });
   }
 }
@@ -131,7 +132,8 @@ export async function POST(request: Request) {
       { success: true, presence },
       { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
     );
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    const error = caught as { message?: string } | null;
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
 }

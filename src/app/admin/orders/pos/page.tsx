@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, QrCode, Banknote, CheckCircle, RefreshCw, Copy, Check, Sparkles } from "lucide-react";
-import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
+import { ArrowLeft, Plus, Trash2, QrCode, Banknote, CheckCircle, Copy, Check, Sparkles } from "lucide-react";
 import {
   saveNewOrder,
   getStoredProducts,
@@ -23,9 +22,11 @@ export default function AdminPosPage() {
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
-    setProducts(getStoredProducts().filter((p) => p.status === "active"));
-    setMembers(getActiveReferralMembers());
-    setSettings(getStoredSettings());
+    queueMicrotask(() => {
+      setProducts(getStoredProducts().filter((p) => p.status === "active"));
+      setMembers(getActiveReferralMembers());
+      setSettings(getStoredSettings());
+    });
   }, []);
 
   // Quick info
@@ -75,7 +76,7 @@ export default function AdminPosPage() {
     if (products.length > 0 && cartItems.length === 0) {
       const firstProd = products[0];
       const firstVar = firstProd.variants?.[0];
-      setCartItems([
+      queueMicrotask(() => setCartItems([
         {
           productId: firstProd.product_id,
           variantId: firstVar?.variant_id || "",
@@ -84,9 +85,9 @@ export default function AdminPosPage() {
           price: firstProd.price,
           quantity: 1,
         },
-      ]);
+      ]));
     }
-  }, [products]);
+  }, [products, cartItems.length]);
 
   const subtotal = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);

@@ -15,17 +15,23 @@ import {
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Toast } from "@/components/ui/Toast";
-import { Plus, Sparkles, CheckCircle2 } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 
 interface ResolvedComboItem {
   product_id?: string;
   name: string;
   quantity: number;
   price: number;
-  thumbnail?: string;
+  thumbnail?: string | null;
 }
+
+type ComboItemInput = NonNullable<ExtendedCombo["items"]>[number] & {
+  slug?: string;
+  name?: string;
+  price?: number;
+};
 
 // Fallback pricing for signature catalog items when item snapshot or product is missing
 const CATALOG_FALLBACK_PRICES: Record<string, { name: string; price: number }> = {
@@ -55,7 +61,7 @@ function resolveComboItems(
 ): ResolvedComboItem[] {
   // 1. If combo has explicit items defined
   if (combo.items && combo.items.length > 0) {
-    return combo.items.map((it: any) => {
+    return combo.items.map((it: ComboItemInput) => {
       const pId = it.product_id || it.product?.product_id;
       const pSlug = it.slug || it.product?.slug;
       const pName = it.name || it.product?.name;
@@ -146,8 +152,10 @@ export default function CombosPage() {
   useEffect(() => {
     syncCombosFromServer(true);
     syncProductsFromServer(true);
-    setCombos(getStoredCombos().filter((c) => c.status === "active"));
-    setAvailableProducts(getStoredProducts());
+    queueMicrotask(() => {
+      setCombos(getStoredCombos().filter((c) => c.status === "active"));
+      setAvailableProducts(getStoredProducts());
+    });
 
     const handleUpdate = () => {
       setCombos(getStoredCombos().filter((c) => c.status === "active"));

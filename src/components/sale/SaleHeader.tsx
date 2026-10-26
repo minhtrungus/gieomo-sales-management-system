@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Copy, Check, ExternalLink, ShieldAlert } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getAdminSession, type AdminSession } from "@/lib/data/orderStore";
@@ -11,7 +11,6 @@ interface SaleHeaderProps {
 
 export function SaleHeader({ onToggleSidebar }: SaleHeaderProps) {
   const [session, setSession] = useState<AdminSession | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     const updateSession = () => setSession(getAdminSession());
@@ -19,15 +18,6 @@ export function SaleHeader({ onToggleSidebar }: SaleHeaderProps) {
     window.addEventListener("gieomo_admin_auth_changed", updateSession);
     return () => window.removeEventListener("gieomo_admin_auth_changed", updateSession);
   }, []);
-
-  const handleCopyReferralLink = () => {
-    if (!session?.referralCode) return;
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
-    const refLink = `${origin}/?ref=${session.referralCode}`;
-    navigator.clipboard.writeText(refLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
 
   return (
     <header className="h-14 bg-white border-b border-gray-100 flex lg:hidden items-center justify-between px-4 sticky top-0 z-30 shadow-xs">

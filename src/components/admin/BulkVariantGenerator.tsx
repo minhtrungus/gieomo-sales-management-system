@@ -12,8 +12,6 @@ import {
   List,
   Upload,
   Loader2,
-  Check,
-  Info,
   SlidersHorizontal,
   ChevronDown,
   ChevronUp
@@ -221,7 +219,8 @@ export function BulkVariantGenerator({
       } else {
         alert(res.error || "Tải ảnh thất bại");
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       alert(err?.message || "Lỗi tải ảnh");
     } finally {
       setUploadingIdx(null);

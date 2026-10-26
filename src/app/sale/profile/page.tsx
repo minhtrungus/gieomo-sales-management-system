@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react";
 import {
-  UserCheck,
   KeyRound,
   ShieldCheck,
   Phone,
   Mail,
-  Copy,
   Check,
   AlertCircle,
   Eye,
@@ -26,7 +24,6 @@ import { Input } from "@/components/ui/Input";
 export default function SaleProfilePage() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [member, setMember] = useState<StoredMember | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Change password states
@@ -41,21 +38,16 @@ export default function SaleProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const s = getAdminSession();
-    setSession(s);
-    if (s?.email) {
-      const allMembers = getStoredMembers();
-      const matched = allMembers.find((m) => m.email.toLowerCase() === s.email.toLowerCase());
-      if (matched) setMember(matched);
-    }
+    queueMicrotask(() => {
+      const s = getAdminSession();
+      setSession(s);
+      if (s?.email) {
+        const allMembers = getStoredMembers();
+        const matched = allMembers.find((m) => m.email.toLowerCase() === s.email.toLowerCase());
+        if (matched) setMember(matched);
+      }
+    });
   }, []);
-
-  const handleCopyCode = () => {
-    if (!session?.referralCode) return;
-    navigator.clipboard.writeText(session.referralCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
 
   const handleCopyLink = () => {
     const code = session?.referralCode || member?.referralCode;

@@ -23,17 +23,19 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const [removedAlert, setRemovedAlert] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      const res = validateCart();
-      if (res && res.removedCount > 0) {
-        setRemovedAlert(true);
+    queueMicrotask(() => {
+      if (isOpen) {
+        const res = validateCart();
+        if (res && res.removedCount > 0) {
+          setRemovedAlert(true);
+        }
+        const vouchers = getStoredVouchers().filter((v) => v.status === "active");
+        const found = vouchers.find((v) => v.discount_type === "freeship" && (v.min_order_value || 0) > 0);
+        setFreeshipVoucher(found || null);
+      } else {
+        setRemovedAlert(false);
       }
-      const vouchers = getStoredVouchers().filter((v) => v.status === "active");
-      const found = vouchers.find((v) => v.discount_type === "freeship" && (v.min_order_value || 0) > 0);
-      setFreeshipVoucher(found || null);
-    } else {
-      setRemovedAlert(false);
-    }
+    });
   }, [isOpen, validateCart]);
 
   if (!isOpen) return null;

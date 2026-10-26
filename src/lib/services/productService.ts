@@ -1,12 +1,43 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtendedProduct } from "@/lib/data/mockData";
-import type { ProductVariant } from "@/types/database";
+import type { Product, ProductCategory, ProductVariant } from "@/types/database";
 import { sortProductVariants } from "@/lib/productVariantOrder";
 import {
   LOCAL_ASSET_UNAVAILABLE,
   resolveRuntimeAsset,
   type RuntimeAssetStatus,
 } from "@/lib/runtimeAssetSafety";
+
+type ProductMediaRow = { url?: unknown; sort_order?: unknown };
+type ProductRow = Product & {
+  product_categories?: ProductCategory | ProductCategory[] | null;
+  category?: ProductCategory | ProductCategory[] | null;
+  product_variants?: ProductVariant[] | null;
+  variants?: ProductVariant[] | null;
+  product_media?: ProductMediaRow[] | null;
+  media?: ProductMediaRow[] | null;
+};
+
+type ProductUpsertPayload = {
+  name: string;
+  slug: string;
+  short_description: string | null;
+  description: string | null;
+  price: number;
+  compare_at_price: number | null;
+  cost_price: number | null;
+  status: Product["status"];
+  featured: boolean;
+  sort_order: number;
+  weight_gram: number;
+  thumbnail: string | null;
+  category_id: string | null;
+  updated_at: string;
+};
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 function resolveProductImageSet(rawMedia: unknown, thumbnail: unknown): {
   thumbnail: string;
@@ -81,7 +112,8 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
       query = query.eq("status", "active");
     }
 
-    let { data, error } = await query;
+    const { data: primaryData, error } = await query;
+    let productRows: ProductRow[] = primaryData || [];
     if (error) {
       console.warn("[getProductsServer] primary-query-fallback", { code: error.code || "unknown" });
       try {
@@ -118,10 +150,10 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
           throw new Error("Không thể tải danh sách sản phẩm.");
         }
 
-        data = rawProds.map((p: any) => ({
+        productRows = rawProds.map((p: ProductRow) => ({
           ...p,
-          product_variants: (allVariants || []).filter((v: any) => v.product_id === p.product_id),
-          product_media: (allMedia || []).filter((m: any) => m.product_id === p.product_id),
+          product_variants: (allVariants || []).filter((variant: ProductVariant) => variant.product_id === p.product_id),
+          product_media: (allMedia || []).filter((media: { product_id: string }) => media.product_id === p.product_id),
         }));
       } catch (fallbackEx) {
         if (fallbackEx instanceof Error && fallbackEx.message === "Không thể tải danh sách sản phẩm.") {
@@ -132,11 +164,11 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
       }
     }
 
-    if (!data || data.length === 0) {
+    if (productRows.length === 0) {
       return [];
     }
 
-    return (data as any[]).map((p) => {
+    return productRows.map((p) => {
       // Map media to images array
       const rawMedia = p.product_media || p.media || [];
       const imageSet = resolveProductImageSet(rawMedia, p.thumbnail);
@@ -144,7 +176,7 @@ export async function getProductsServer(includeDrafts = true): Promise<ExtendedP
       // Map variants with warehouse calculations
       const rawVariants = p.product_variants || p.variants || [];
       const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
-      const variants: ProductVariant[] = variantsList.map((v: any) => {
+      const variants: ProductVariant[] = variantsList.map((v: ProductVariant) => {
         const stock = v.stock ?? 0;
         const wh1 = Math.ceil(stock * 0.7);
         const wh2 = stock - wh1;
@@ -252,12 +284,13 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
         .maybeSingle();
 
       if (p) {
-        const rawMedia = (p as any).product_media || (p as any).media || [];
-        const imageSet = resolveProductImageSet(rawMedia, p.thumbnail);
+        const product: ProductRow = p;
+        const rawMedia = product.product_media || product.media || [];
+        const imageSet = resolveProductImageSet(rawMedia, product.thumbnail);
 
-        const rawVariants = (p as any).product_variants || (p as any).variants || [];
+        const rawVariants = product.product_variants || product.variants || [];
         const variantsList = sortProductVariants(Array.isArray(rawVariants) ? rawVariants : []);
-        const variants: ProductVariant[] = variantsList.map((v: any) => {
+        const variants: ProductVariant[] = variantsList.map((v: ProductVariant) => {
           const stock = v.stock ?? 0;
           const wh1 = Math.ceil(stock * 0.7);
           const wh2 = stock - wh1;
@@ -278,30 +311,30 @@ export async function getProductBySlugServer(slug: string): Promise<ExtendedProd
           };
         });
 
-        const rawCategory = (p as any).product_categories || (p as any).category;
+        const rawCategory = product.product_categories || product.category;
         const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
 
         return {
-          product_id: p.product_id,
-          category_id: p.category_id,
-          name: p.name,
-          slug: p.slug,
-          short_description: p.short_description,
-          description: p.description,
-          price: Number(p.price) || 0,
-          compare_at_price: p.compare_at_price ? Number(p.compare_at_price) : null,
-          cost_price: p.cost_price ? Number(p.cost_price) : null,
-          status: p.status || "draft",
-          featured: Boolean(p.featured),
-          sort_order: p.sort_order || 1,
-          weight_gram: p.weight_gram || 100,
+          product_id: product.product_id,
+          category_id: product.category_id,
+          name: product.name,
+          slug: product.slug,
+          short_description: product.short_description,
+          description: product.description,
+          price: Number(product.price) || 0,
+          compare_at_price: product.compare_at_price ? Number(product.compare_at_price) : null,
+          cost_price: product.cost_price ? Number(product.cost_price) : null,
+          status: product.status || "draft",
+          featured: Boolean(product.featured),
+          sort_order: product.sort_order || 1,
+          weight_gram: product.weight_gram || 100,
           thumbnail: imageSet.thumbnail,
           image_status: imageSet.status,
           images: imageSet.images,
           category: category || undefined,
           variants,
-          created_at: p.created_at,
-          updated_at: p.updated_at,
+          created_at: product.created_at,
+          updated_at: product.updated_at,
         };
       }
     } catch {
@@ -344,9 +377,9 @@ export async function toggleProductStatusServer(
     }
 
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[toggleProductStatusServer] Exception:", err);
-    return { success: false, error: err?.message || "Lỗi cập nhật trạng thái" };
+    return { success: false, error: errorMessage(err, "Lỗi cập nhật trạng thái") };
   }
 }
 
@@ -379,9 +412,9 @@ export async function toggleProductFeaturedServer(
     }
 
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[toggleProductFeaturedServer] Exception:", err);
-    return { success: false, error: err?.message || "Lỗi cập nhật nổi bật" };
+    return { success: false, error: errorMessage(err, "Lỗi cập nhật nổi bật") };
   }
 }
 
@@ -418,7 +451,7 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
     }
 
     // Ensure prices are valid non-negative numbers or null to satisfy PostgreSQL check constraints
-    const sanitizePrice = (val: any): number | null => {
+    const sanitizePrice = (val: unknown): number | null => {
       if (val === null || val === undefined || val === "") return null;
       const num = Number(val);
       if (isNaN(num)) return null;
@@ -429,7 +462,7 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
     const sanitizedCompareAt = sanitizePrice(product.compare_at_price);
     const sanitizedCost = sanitizePrice(product.cost_price);
 
-    const productPayload: any = {
+    const productPayload: ProductUpsertPayload = {
       name: product.name?.trim() || "Sản phẩm Mầm Mơ",
       slug: product.slug?.trim() || `prod-${Date.now()}`,
       short_description: product.short_description || null,
@@ -563,7 +596,7 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
           compare_at_price: sanitizePrice(v.compare_at_price),
           cost_price: sanitizePrice(v.cost_price),
           weight_gram: sanitizePrice(v.weight_gram) ?? 100,
-          image_url: v.image_url || (v as any).imageUrl || null,
+          image_url: v.image_url || v.imageUrl || null,
           status: v.status || "active",
           sort_order: v.sort_order || i + 1,
           updated_at: new Date().toISOString(),
@@ -626,9 +659,9 @@ export async function upsertProductServer(product: ExtendedProduct): Promise<{
     }
 
     return { success: true, product_id: savedProductId };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[upsertProductServer] Exception:", err);
-    return { success: false, error: err?.message || "Lỗi lưu sản phẩm vào database" };
+    return { success: false, error: errorMessage(err, "Lỗi lưu sản phẩm vào database") };
   }
 }
 
@@ -718,8 +751,8 @@ export async function deleteProductServer(identifier: string, slug?: string): Pr
     }
 
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[deleteProductServer] Exception:", err);
-    return { success: false, error: err?.message || "Lỗi xóa sản phẩm" };
+    return { success: false, error: errorMessage(err, "Lỗi xóa sản phẩm") };
   }
 }

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ success: true, messages: data || [] });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/contact/messages] Exception:", err);
     return NextResponse.json({ success: true, messages: [] });
   }
@@ -52,7 +52,7 @@ export async function PATCH(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       status,
       updated_at: new Date().toISOString(),
     };
@@ -71,7 +71,8 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[PATCH /api/contact/messages] Exception:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi cập nhật tin nhắn" },
@@ -110,7 +111,8 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[DELETE /api/contact/messages] Exception:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi xóa tin nhắn" },

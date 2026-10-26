@@ -274,7 +274,7 @@ function localOrder(code: string): Order {
 }
 function variantStock(vId: string): number {
   const prod = getStoredProducts().find((p) => p.product_id === "p1");
-  const v = prod?.variants?.find((x: any) => x.variant_id === vId);
+  const v = prod?.variants?.find((x) => x.variant_id === vId);
   return Number(v?.stock);
 }
 const lastPatchBody = (): Record<string, unknown> => {
@@ -504,11 +504,22 @@ const journalSize = (): number => {
 };
 
 /** Đọc stock THÔ từ storage (bỏ module cache) — dùng cho assertions trước recovery. */
+type RawProduct = {
+  product_id?: string;
+  variants?: Array<{
+    variant_id?: string;
+    stock?: number;
+    stock_warehouse_1?: number;
+    warehouse_stocks?: Record<string, number>;
+    local_cancel_restored_orders?: string[];
+  }>;
+};
+
 function rawVariantStock(vId: string): number {
-  const prods = JSON.parse(storage.get("gieomo_products") as string) as any[];
+  const prods = JSON.parse(storage.get("gieomo_products") as string) as RawProduct[];
   const v = prods
     .find((p) => p.product_id === "p1")
-    ?.variants?.find((x: any) => x.variant_id === vId);
+    ?.variants?.find((x) => x.variant_id === vId);
   return Number(v?.stock);
 }
 
@@ -539,9 +550,11 @@ function seedCrashState(opts: {
   );
 
   if (opts.alreadyRestored) {
-    const prods = JSON.parse(storage.get("gieomo_products") as string) as any[];
+    const prods = JSON.parse(storage.get("gieomo_products") as string) as RawProduct[];
     const prod = prods.find((p) => p.product_id === "p1");
-    const v = prod.variants.find((x: any) => x.variant_id === opts.variantId);
+    assert.ok(prod?.variants);
+    const v = prod.variants.find((x) => x.variant_id === opts.variantId);
+    assert.ok(v);
     v.stock = (v.stock || 0) + opts.qty;
     v.stock_warehouse_1 = (v.stock_warehouse_1 || 0) + opts.qty;
     v.warehouse_stocks = { ...(v.warehouse_stocks || {}), "wh-1": ((v.warehouse_stocks || {})["wh-1"] || 0) + opts.qty };

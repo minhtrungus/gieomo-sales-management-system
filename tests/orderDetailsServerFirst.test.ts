@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { readFileSync } from "node:fs";
-import { createFakeOrderDb } from "./helpers/fakeOrderDb.ts";
+import { createFakeOrderDb, type FakeOrderDb } from "./helpers/fakeOrderDb.ts";
 
 // Entire suite uses an in-memory DB and browser stubs; no external services.
 const root = new URL("../src/", import.meta.url).href;
@@ -28,7 +28,15 @@ export async function load(url, c, next) {
 }`;
 register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 const { PATCH } = await import("../src/app/api/orders/route.ts");
-const g = globalThis as any;
+type TestGlobal = {
+  window: unknown;
+  localStorage: unknown;
+  dispatchEvent: (event?: unknown) => boolean;
+  fetch: typeof fetch;
+  __n2Db: FakeOrderDb;
+  __n2Deny: boolean;
+};
+const g = globalThis as unknown as TestGlobal;
 const storage = new Map<string, string>();
 g.window = globalThis;
 g.localStorage = {
@@ -40,10 +48,11 @@ let events = 0;
 g.dispatchEvent = () => { events++; return true; };
 let release: (() => void) | null = null;
 let failure: "http" | "network" | "body" | "json" | null = null;
-let lastBody: any;
-g.fetch = async (url: string, init?: RequestInit) => {
+let lastBody: Record<string, unknown> | null = null;
+g.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input);
   if (init?.method === "PATCH") {
-    lastBody = JSON.parse(String(init.body));
+    lastBody = JSON.parse(String(init.body)) as Record<string, unknown>;
     if (release) await new Promise<void>((resolve) => { release = resolve; });
     if (failure === "network") throw new Error("Offline");
     if (failure === "http") return Response.json({ success: false, error: "DB unavailable" }, { status: 503 });
@@ -126,6 +135,7 @@ test("N2 wrappers await server: clear note retains tags; assign/unassign shipper
   await seed();
   assert.equal((await store.updateStoredOrderNotes(ID, { internal_note: "" })).success, true);
   assert.equal(local().internal_note, `${RECEIPT} | ${AUDIT}`);
+  assert.ok(lastBody);
   assert.equal(lastBody.internalNote, "");
   assert.equal((await store.updateOrderShipper("GM-N2", SHIPPER, "Shipper")).success, true);
   await sync(); assert.equal(local().assigned_shipper_id, SHIPPER);
@@ -165,7 +175,9 @@ test("N2 DB failure returns 500 and does not write either field", async () => {
   const res = await patch({ internalNote: "Mới", assignedShipperId: SHIPPER });
   assert.equal(res.status, 500);
   assert.equal(db.tables.orders[0].assigned_shipper_id, null);
-  assert.match(db.tables.orders[0].internal_note, /Cũ/);
+  const note = db.tables.orders[0].internal_note;
+  assert.ok(typeof note === "string");
+  assert.match(note, /Cũ/);
 });
 
 test("N2 authorization and field validation reject entire request", async () => {
@@ -188,9 +200,11 @@ test("N2 missing order is an error for note and shipper", async () => {
 test("N2 proof-only PATCH preserves ordinary note while replacing receipt", async () => {
   const db = await seed();
   assert.equal((await patch({ paymentProof: "https://test.invalid/replacement.png" })).status, 200);
-  assert.match(db.tables.orders[0].internal_note, /^Cũ/);
-  assert.match(db.tables.orders[0].internal_note, /replacement\.png/);
-  assert.ok(db.tables.orders[0].internal_note.includes(AUDIT));
+  const note = db.tables.orders[0].internal_note;
+  assert.ok(typeof note === "string");
+  assert.match(note, /^Cũ/);
+  assert.match(note, /replacement\.png/);
+  assert.ok(note.includes(AUDIT));
 });
 
 test("N2 unsupported warehouse never writes cache or sends a request", async () => {

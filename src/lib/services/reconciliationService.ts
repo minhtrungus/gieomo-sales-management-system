@@ -1,9 +1,73 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+type CatalogVariantRow = {
+  variant_id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+  price: number | null;
+  stock: number;
+};
+
+type CatalogProductRow = { product_id: string; name: string; status: string };
+
+type PaymentRow = {
+  payment_id: string;
+  order_id: string;
+  amount: number;
+  payment_method: string;
+  payment_status?: string | null;
+  status?: string | null;
+  transaction_code?: string | null;
+  created_at: string;
+};
+
+type LightweightOrderItem = {
+  order_item_id: string;
+  product_id?: string | null;
+  variant_id?: string | null;
+  combo_id?: string | null;
+  quantity: number;
+  variant_name_snapshot?: string | null;
+  item_name_snapshot?: string | null;
+  sku_snapshot?: string | null;
+  unit_price?: number | null;
+  subtotal?: number | null;
+};
+
+type LightweightOrder = {
+  order_id: string;
+  order_code: string;
+  created_at: string;
+  order_status: string;
+  payment_status: string;
+  delivery_status: string;
+  receiver_name: string;
+  receiver_phone: string;
+  subtotal: number;
+  shipping_fee: number;
+  voucher_discount: number;
+  final_amount: number;
+  customer_note?: string | null;
+  internal_note?: string | null;
+  order_items?: LightweightOrderItem[] | null;
+};
+
+type DetailedOrderItem = LightweightOrderItem & {
+  item_name_snapshot?: string | null;
+};
+
+type DetailedOrder = {
+  order_id: string;
+  shipping_address_snapshot?: string | null;
+  customers?: { email?: string | null } | null;
+  order_items?: DetailedOrderItem[] | null;
+};
+
 // In-memory catalog cache for 3-way reconciliation (TTL 30s)
 let catalogMemoryCache: {
-  variants: any[];
-  products: any[];
+  variants: CatalogVariantRow[];
+  products: CatalogProductRow[];
   timestamp: number;
 } | null = null;
 const CATALOG_CACHE_TTL_MS = 30_000;
@@ -52,7 +116,7 @@ function clampPagination(limit?: number, offset?: number): { limit: number; offs
  */
 function enrichRecordWithDetails(
   rec: ReconciliationRecord,
-  detail: any | undefined
+  detail: DetailedOrder | undefined
 ): ReconciliationRecord {
   if (!detail) {
     // Race hiếm: order bị xóa giữa Phase A và Phase B — giữ record
@@ -60,7 +124,7 @@ function enrichRecordWithDetails(
     return rec;
   }
   const invByItemId = new Map(rec.items.map((i) => [i.order_item_id, i]));
-  const fullItems: ReconciliationItemBreakdown[] = (detail.order_items || []).map((it: any) => {
+  const fullItems: ReconciliationItemBreakdown[] = (detail.order_items || []).map((it) => {
     const inv = invByItemId.get(it.order_item_id);
     return {
       order_item_id: it.order_item_id,
@@ -87,7 +151,7 @@ function enrichRecordWithDetails(
   return {
     ...rec,
     shipping_address: detail.shipping_address_snapshot ?? rec.shipping_address ?? null,
-    customer_email: (detail.customers as any)?.email || null,
+    customer_email: detail.customers?.email || null,
     items: fullItems,
     items_count: fullItems.length,
   };
@@ -292,8 +356,9 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   // 2. Phase A — fetch payments theo CHUNKS (Batch 3C): mỗi lần tối đa
   //    PAYMENTS_CHUNK_SIZE IDs — tránh URL overflow của `.in()` PostgREST
   //    khi số orders lớn. Chunk đầu lỗi → throw ngay (không nuốt).
-  const orderIds = rawOrders.map((o) => o.order_id);
-  const rawPayments: any[] = [];
+  const orderRows: LightweightOrder[] = rawOrders;
+  const orderIds = orderRows.map((order) => order.order_id);
+  const rawPayments: PaymentRow[] = [];
   for (let i = 0; i < orderIds.length; i += PAYMENTS_CHUNK_SIZE) {
     const batchIds = orderIds.slice(i, i + PAYMENTS_CHUNK_SIZE);
     // Hotfix P1-F6: CHỈ select cột có căn cứ trong schema 001
@@ -316,7 +381,7 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   }
 
   // Map payments by order_id
-  const paymentsByOrderId = new Map<string, any[]>();
+  const paymentsByOrderId = new Map<string, PaymentRow[]>();
   for (const pay of rawPayments) {
     const existing = paymentsByOrderId.get(pay.order_id) || [];
     existing.push(pay);
@@ -397,8 +462,8 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   }
 
   // 3. Fetch catalog variants and products with in-memory caching (TTL 30s) and parallel fetching
-  let catalogVariants: any[] = [];
-  let catalogProducts: any[] = [];
+  let catalogVariants: CatalogVariantRow[] = [];
+  let catalogProducts: CatalogProductRow[] = [];
 
   if (catalogMemoryCache && Date.now() - catalogMemoryCache.timestamp < CATALOG_CACHE_TTL_MS) {
     catalogVariants = catalogMemoryCache.variants;
@@ -439,18 +504,18 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     };
   }
 
-  const variantMap = new Map<string, any>();
+  const variantMap = new Map<string, CatalogVariantRow>();
   catalogVariants.forEach((v) => variantMap.set(v.variant_id, v));
 
-  const productMap = new Map<string, any>();
+  const productMap = new Map<string, CatalogProductRow>();
   catalogProducts.forEach((p) => productMap.set(p.product_id, p));
 
   // 4. Run 3-Way Reconciliation on each order
   const reconciledRecords: ReconciliationRecord[] = [];
 
-  for (const o of rawOrders) {
+  for (const o of orderRows) {
     const orderFinalAmount = Number(o.final_amount) || 0;
-    const orderItems: any[] = o.order_items || [];
+    const orderItems: LightweightOrderItem[] = o.order_items || [];
     const relatedPayments = paymentsByOrderId.get(o.order_id) || [];
 
     // Calculate paid amount
@@ -785,8 +850,8 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
       throw new Error("Không thể tải dữ liệu chi tiết đối soát");
     }
 
-    const detailById = new Map<string, any>(
-      (detailedOrders as any[]).map((d) => [d.order_id, d])
+    const detailById = new Map<string, DetailedOrder>(
+      (detailedOrders as DetailedOrder[]).map((detail) => [detail.order_id, detail])
     );
     records = pageSlice.map((rec) =>
       enrichRecordWithDetails(rec, detailById.get(rec.order_id))

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { Users, Phone, Mail, ShoppingBag } from "lucide-react";
 import { getStoredOrders } from "@/lib/data/orderStore";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 
@@ -102,7 +101,7 @@ export default function AdminCustomersPage() {
   };
 
   useEffect(() => {
-    loadCustomers();
+    queueMicrotask(() => void loadCustomers());
     window.addEventListener("gieomo_orders_updated", loadCustomers);
     return () => window.removeEventListener("gieomo_orders_updated", loadCustomers);
   }, []);

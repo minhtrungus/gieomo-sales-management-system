@@ -10,7 +10,7 @@ export default function AdminReportsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    setOrders(getStoredOrders());
+    queueMicrotask(() => setOrders(getStoredOrders()));
     const handleUpdate = () => setOrders(getStoredOrders());
     window.addEventListener("gieomo_orders_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);

@@ -2,7 +2,6 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Suspense, useState, useEffect, useMemo, useTransition, useRef } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -17,8 +16,8 @@ import {
   DEFAULT_SETTINGS,
   type SiteSettings,
 } from "@/lib/data/orderStore";
-import type { Order, Voucher } from "@/types/database";
-import { Copy, Check, ExternalLink, Download, Share2, Sparkles, Gift, Maximize2, X, ZoomIn } from "lucide-react";
+import type { Order } from "@/types/database";
+import { Copy, Check, ExternalLink, Download, Maximize2, X } from "lucide-react";
 import { ThankYouStoryCard } from "@/components/order/ThankYouStoryCard";
 import { resolvePaymentFlowState } from "@/lib/payment/paymentFlowState";
 import { resolveCanonicalSuccessOrder } from "@/lib/payment/orderSuccessContract";
@@ -98,8 +97,6 @@ function OrderSuccessContent() {
   }, []);
 
   // Social Share Card states
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const shareQuote = "Tôi vừa cùng Mầm Mơ gieo một giấc mơ cho trẻ em khó khăn 🌱";
 
   useEffect(() => {
     const handleUpdate = () => setSettings(getStoredSettings());

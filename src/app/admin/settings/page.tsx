@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Upload, QrCode, Check, Share2, ExternalLink } from "lucide-react";
+import { Upload, QrCode, Share2, ExternalLink } from "lucide-react";
 import { getStoredSettings, saveStoredSettings, getStoredAdminPassword, saveAdminPassword } from "@/lib/data/orderStore";
 import { uploadAsset } from "@/lib/services/uploadService";
 
@@ -34,7 +34,7 @@ export default function AdminSettingsPage() {
   const [activePalette, setActivePalette] = useState("soft-green");
   const [coverTheme, setCoverTheme] = useState("emerald");
   const [announcementText, setAnnouncementText] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -66,26 +66,28 @@ export default function AdminSettingsPage() {
 
   // Load from store & server DB
   useEffect(() => {
-    const s = getStoredSettings();
-    setSiteName(s.siteName);
-    setContactPhone(s.contactPhone);
-    setContactEmail(s.contactEmail);
-    if (s.officeAddress) setOfficeAddress(s.officeAddress);
-    setFlatShippingFee(String(s.flatShippingFee));
-    setFreeShippingThreshold(String(s.freeShippingThreshold));
-    setBankNumber(s.bankNumber);
-    setBankHolder(s.bankHolder);
-    setBankName(s.bankName);
-    setQrMode(s.qrMode);
-    setQrImageUrl(s.qrImageUrl);
-    setActivePalette(s.activePalette);
-    setCoverTheme(s.coverTheme);
-    if (s.announcementText !== undefined) setAnnouncementText(s.announcementText);
-    if (s.facebookUrl !== undefined) setFacebookUrl(s.facebookUrl);
-    if (s.tiktokUrl !== undefined) setTiktokUrl(s.tiktokUrl);
-    if (s.instagramUrl !== undefined) setInstagramUrl(s.instagramUrl);
-    if (s.zaloUrl !== undefined) setZaloUrl(s.zaloUrl);
-    if (s.youtubeUrl !== undefined) setYoutubeUrl(s.youtubeUrl);
+    queueMicrotask(() => {
+      const s = getStoredSettings();
+      setSiteName(s.siteName);
+      setContactPhone(s.contactPhone);
+      setContactEmail(s.contactEmail);
+      if (s.officeAddress) setOfficeAddress(s.officeAddress);
+      setFlatShippingFee(String(s.flatShippingFee));
+      setFreeShippingThreshold(String(s.freeShippingThreshold));
+      setBankNumber(s.bankNumber);
+      setBankHolder(s.bankHolder);
+      setBankName(s.bankName);
+      setQrMode(s.qrMode);
+      setQrImageUrl(s.qrImageUrl);
+      setActivePalette(s.activePalette);
+      setCoverTheme(s.coverTheme);
+      if (s.announcementText !== undefined) setAnnouncementText(s.announcementText);
+      if (s.facebookUrl !== undefined) setFacebookUrl(s.facebookUrl);
+      if (s.tiktokUrl !== undefined) setTiktokUrl(s.tiktokUrl);
+      if (s.instagramUrl !== undefined) setInstagramUrl(s.instagramUrl);
+      if (s.zaloUrl !== undefined) setZaloUrl(s.zaloUrl);
+      if (s.youtubeUrl !== undefined) setYoutubeUrl(s.youtubeUrl);
+    });
 
     // Fetch fresh from Supabase via API
     fetch("/api/settings")

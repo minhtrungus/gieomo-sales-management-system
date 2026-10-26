@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapPin, Plus, Edit3, Trash2, Phone, Clock, User, X, Check } from "lucide-react";
+import { MapPin, Plus, Edit3, Trash2, Phone, Clock, User, X } from "lucide-react";
 import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import { getStoredPickupPoints, saveStoredPickupPoint, deleteStoredPickupPoint } from "@/lib/data/orderStore";
 import type { PickupPoint } from "@/types/database";
@@ -29,7 +29,7 @@ export default function AdminPickupPointsPage() {
   };
 
   useEffect(() => {
-    loadPoints();
+    queueMicrotask(loadPoints);
     window.addEventListener("gieomo_pickup_points_updated", loadPoints);
     return () => window.removeEventListener("gieomo_pickup_points_updated", loadPoints);
   }, []);
@@ -317,7 +317,7 @@ export default function AdminPickupPointsPage() {
                 <label className="font-bold text-[#342A24] block">Trạng thái điểm nhận</label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as any }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as PickupPoint["status"] }))}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:border-[#BFE9C3] bg-white"
                 >
                   <option value="active">Đang mở (Hiển thị trên form checkout)</option>

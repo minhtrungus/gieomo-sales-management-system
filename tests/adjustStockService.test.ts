@@ -33,13 +33,14 @@ const {
 } = await import("../src/lib/services/inventoryAdjustService.ts");
 
 type RpcCall = { name: string; args: Record<string, unknown> };
+type RpcError = { code?: string; message?: string; details?: string };
 
 function makeSupabase(
-  impl: (name: string, args: Record<string, unknown>) => { data: unknown; error?: any },
+  impl: (name: string, args: Record<string, unknown>) => { data: unknown; error?: RpcError | null },
   calls: RpcCall[] = []
 ) {
   return {
-    async rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: any }> {
+    async rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: RpcError | null }> {
       calls.push({ name, args });
       const r = impl(name, args);
       return { data: r.data, error: r.error ?? null };
@@ -293,7 +294,7 @@ test("M10a — HTTP 200 outcome applied → ok=true với result", async () => {
     new Response(
       JSON.stringify({ success: true, outcome: "applied", stockBefore: 10, stockAfter: 13 }),
       { status: 200, headers: { "Content-Type": "application/json" } }
-    )) as any;
+    )) as typeof fetch;
   try {
     const r = await postAdjustStock({
       variantId: V1,
@@ -318,7 +319,7 @@ test("M10b — HTTP 409 insufficient_stock → ok=false với message (không fa
     new Response(
       JSON.stringify({ success: false, outcome: "insufficient_stock", error: "Tồn kho không đủ" }),
       { status: 409, headers: { "Content-Type": "application/json" } }
-    )) as any;
+    )) as typeof fetch;
   try {
     const r = await postAdjustStock({
       variantId: V1,
@@ -339,7 +340,7 @@ test("M10c — HTTP 409 idempotency_mismatch → ok=false", async () => {
     new Response(
       JSON.stringify({ success: false, outcome: "idempotency_mismatch", error: "key đã dùng" }),
       { status: 409, headers: { "Content-Type": "application/json" } }
-    )) as any;
+    )) as typeof fetch;
   try {
     const r = await postAdjustStock({
       variantId: V2,
@@ -357,7 +358,7 @@ test("M10d — fetch throw (timeout) → throw để caller GIỮ key retry", as
   const origFetch = globalThis.fetch;
   globalThis.fetch = (async () => {
     throw new TypeError("fetch failed");
-  }) as any;
+  }) as typeof fetch;
   try {
     await assert.rejects(
       () =>
@@ -380,7 +381,7 @@ test("M10e — HTTP 200 outcome duplicate → ok=true, duplicate (idempotent)", 
     new Response(
       JSON.stringify({ success: true, outcome: "duplicate", alreadyApplied: true }),
       { status: 200, headers: { "Content-Type": "application/json" } }
-    )) as any;
+    )) as typeof fetch;
   try {
     const r = await postAdjustStock({
       variantId: V1,
@@ -405,7 +406,7 @@ test("M10f — HTTP 503 rpc_unavailable → ok=false", async () => {
     new Response(
       JSON.stringify({ success: false, outcome: "rpc_unavailable", error: "cần apply migration 019" }),
       { status: 503, headers: { "Content-Type": "application/json" } }
-    )) as any;
+    )) as typeof fetch;
   try {
     const r = await postAdjustStock({
       variantId: V1,

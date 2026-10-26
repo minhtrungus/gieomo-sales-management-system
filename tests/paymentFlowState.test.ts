@@ -19,7 +19,7 @@ import { resolvePaymentFlowState } from "../src/lib/payment/paymentFlowState.ts"
  */
 
 function order(payment_method: string | null, payment_status: string) {
-  return { payment_method, payment_status } as any;
+  return { payment_method, payment_status } as Parameters<typeof resolvePaymentFlowState>[0];
 }
 
 test("A1 — Query giả mạo payment=cod trên đơn banking pending: KHÔNG paid, VẪN banking", () => {

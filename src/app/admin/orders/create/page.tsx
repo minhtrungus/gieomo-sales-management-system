@@ -18,8 +18,8 @@ import {
   type StoredMember,
 } from "@/lib/data/orderStore";
 import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
-import type { Order, OrderItem, PickupPoint } from "@/types/database";
-import { ArrowLeft, Plus, Trash2, QrCode, Copy, Check, CheckCircle, ExternalLink } from "lucide-react";
+import type { Order, OrderItem, PickupPoint, DeliveryType, PaymentMethod } from "@/types/database";
+import { ArrowLeft, Plus, Trash2, Copy, Check, CheckCircle } from "lucide-react";
 
 export default function AdminCreateOrderPage() {
   const router = useRouter();
@@ -29,10 +29,12 @@ export default function AdminCreateOrderPage() {
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
-    setAvailableProducts(getStoredProducts());
-    setMembers(getActiveReferralMembers());
-    setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
-    setSettings(getStoredSettings());
+    queueMicrotask(() => {
+      setAvailableProducts(getStoredProducts());
+      setMembers(getActiveReferralMembers());
+      setPickupPoints(getStoredPickupPoints().filter((p) => p.status === "active"));
+      setSettings(getStoredSettings());
+    });
   }, []);
 
   const [customerName, setCustomerName] = useState("");
@@ -40,11 +42,11 @@ export default function AdminCreateOrderPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [sourceType, setSourceType] = useState("admin_manual");
   const [memberId, setMemberId] = useState("");
-  const [deliveryType, setDeliveryType] = useState("home_delivery");
-  const [pickupPointId, setPickupPointId] = useState("");
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("home_delivery");
+  const [pickupPointId] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
   const [province, setProvince] = useState("TP. Hồ Chí Minh");
-  const [paymentMethod, setPaymentMethod] = useState("banking");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("banking");
   const [customerNote, setCustomerNote] = useState("");
 
   // QR Modal
@@ -197,7 +199,7 @@ export default function AdminCreateOrderPage() {
         buyer_email: customerEmail || "",
         recipient_name: customerName || "Khách đặt hộ",
         recipient_phone: customerPhone || "",
-        delivery_type: deliveryType as any,
+        delivery_type: deliveryType,
         address_detail:
           deliveryType === "home_delivery"
             ? addressDetail || "Địa chỉ giao hàng"
@@ -206,7 +208,7 @@ export default function AdminCreateOrderPage() {
             : "Điểm hẹn nhận hàng",
         district: "",
         province: province,
-        payment_method: paymentMethod as any,
+        payment_method: paymentMethod,
         payment_status: "pending",
         order_status: "pending",
         delivery_status: "not_ready",
@@ -523,7 +525,7 @@ export default function AdminCreateOrderPage() {
               <Select
                 label="Hình thức giao"
                 value={deliveryType}
-                onChange={(e) => setDeliveryType(e.target.value)}
+                onChange={(e) => setDeliveryType(e.target.value as DeliveryType)}
                 options={[
                   { value: "home_delivery", label: "Giao tận nơi (15.000đ)" },
                   { value: "member_delivery", label: "Nhận qua thành viên Mầm Mơ (0đ)" },
@@ -533,7 +535,7 @@ export default function AdminCreateOrderPage() {
               <Select
                 label="Phương thức thanh toán"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                 options={[
                   { value: "banking", label: "Chuyển khoản Ngân hàng (VietQR)" },
                 ]}

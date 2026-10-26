@@ -13,6 +13,16 @@ export const dynamic = "force-dynamic";
 const WAREHOUSES_KEY = "inventory_warehouses";
 const INFLOW_LOGS_KEY = "inventory_inflow_logs";
 const TRANSFER_LOGS_KEY = "inventory_transfer_logs";
+type AdminSupabaseClient = ReturnType<typeof createAdminClient>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordId(value: Record<string, unknown>, primary: string, legacy: string): string {
+  if (typeof value[primary] === "string") return value[primary];
+  return typeof value[legacy] === "string" ? value[legacy] : "";
+}
 
 const DEFAULT_WAREHOUSES: Warehouse[] = [
   {
@@ -35,7 +45,7 @@ const DEFAULT_WAREHOUSES: Warehouse[] = [
   },
 ];
 
-async function getConfigJson<T>(supabase: any, key: string, fallback: T): Promise<T> {
+async function getConfigJson<T>(supabase: AdminSupabaseClient, key: string, fallback: T): Promise<T> {
   try {
     const { data } = await supabase
       .from("system_configs")
@@ -53,7 +63,7 @@ async function getConfigJson<T>(supabase: any, key: string, fallback: T): Promis
   return fallback;
 }
 
-async function setConfigJson<T>(supabase: any, key: string, value: T): Promise<void> {
+async function setConfigJson<T>(supabase: AdminSupabaseClient, key: string, value: T): Promise<void> {
   try {
     await supabase.from("system_configs").upsert(
       {
@@ -89,7 +99,7 @@ export async function GET(request: Request) {
       inflowLogs,
       transferLogs,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/inventory] Exception:", err);
     return NextResponse.json({
       success: true,
@@ -107,7 +117,11 @@ export async function POST(request: Request) {
       return authCheck.response;
     }
 
-    const body = await request.json();
+    const parsedBody: unknown = await request.json();
+    if (!isRecord(parsedBody)) {
+      return NextResponse.json({ success: false, error: "Dữ liệu kho không hợp lệ" }, { status: 400 });
+    }
+    const body = parsedBody;
     const { action, warehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog } = body;
 
     const supabase = createAdminClient();
@@ -127,16 +141,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    if (action === "addInflow" && newInflowLog) {
+    if (action === "addInflow" && isRecord(newInflowLog)) {
       const currentLogs = await getConfigJson<InflowLog[]>(supabase, INFLOW_LOGS_KEY, []);
-      const updatedLogs = [newInflowLog, ...currentLogs.filter((l) => (l.logId || (l as any).inflow_id) !== (newInflowLog.logId || (newInflowLog as any).inflow_id))];
+      const newId = recordId(newInflowLog, "logId", "inflow_id");
+      const updatedLogs = [
+        newInflowLog,
+        ...currentLogs.filter((log) => {
+          const record: Record<string, unknown> = { ...log };
+          return recordId(record, "logId", "inflow_id") !== newId;
+        }),
+      ];
       await setConfigJson(supabase, INFLOW_LOGS_KEY, updatedLogs);
       return NextResponse.json({ success: true });
     }
 
-    if (action === "addTransfer" && newTransferLog) {
+    if (action === "addTransfer" && isRecord(newTransferLog)) {
       const currentLogs = await getConfigJson<TransferLog[]>(supabase, TRANSFER_LOGS_KEY, []);
-      const updatedLogs = [newTransferLog, ...currentLogs.filter((l) => (l.logId || (l as any).transfer_id) !== (newTransferLog.logId || (newTransferLog as any).transfer_id))];
+      const newId = recordId(newTransferLog, "logId", "transfer_id");
+      const updatedLogs = [
+        newTransferLog,
+        ...currentLogs.filter((log) => {
+          const record: Record<string, unknown> = { ...log };
+          return recordId(record, "logId", "transfer_id") !== newId;
+        }),
+      ];
       await setConfigJson(supabase, TRANSFER_LOGS_KEY, updatedLogs);
       return NextResponse.json({ success: true });
     }
@@ -197,8 +225,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: false, error: "Hành động kho không hợp lệ" }, { status: 400 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/inventory] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi xử lý kho" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Lỗi xử lý kho" },
+      { status: 500 },
+    );
   }
 }

@@ -41,7 +41,16 @@ export async function load(url, context, nextLoad) {
 register(`data:text/javascript,${encodeURIComponent(loader)}`, import.meta.url);
 
 const { POST } = await import("../src/app/api/orders/route.ts");
-const globalState = globalThis as any;
+type OrderV2Call = {
+  input: { idempotency_key?: unknown };
+  identity: { memberId?: unknown };
+};
+type TestGlobal = typeof globalThis & {
+  __orderV2Call: OrderV2Call | null;
+  __orderV2Result: unknown;
+};
+
+const globalState = globalThis as TestGlobal;
 const KEY = "00000000-0000-4000-8000-000000000902";
 
 beforeEach(() => {
@@ -57,6 +66,17 @@ function request(body: Record<string, unknown> = {}, key = KEY): Promise<Respons
   }));
 }
 
+async function responseBody(response: Response): Promise<Record<string, unknown>> {
+  const body: unknown = await response.json();
+  assert.ok(body && typeof body === "object" && !Array.isArray(body));
+  return body as Record<string, unknown>;
+}
+
+function orderCall(): OrderV2Call {
+  assert.ok(globalState.__orderV2Call);
+  return globalState.__orderV2Call;
+}
+
 test("V2 route maps created result and forwards header identity", async () => {
   globalState.__orderV2Result = {
     success: true, orderId: "o1", orderCode: "GM-001", finalAmount: 100000,
@@ -64,11 +84,11 @@ test("V2 route maps created result and forwards header identity", async () => {
   };
   const response = await request();
   assert.equal(response.status, 200);
-  const body = await response.json() as any;
+  const body = await responseBody(response);
   assert.equal(body.success, true);
   assert.equal(body.idempotency, "created");
-  assert.equal(globalState.__orderV2Call.input.idempotency_key, KEY);
-  assert.equal(globalState.__orderV2Call.identity.memberId, "00000000-0000-4000-8000-000000000901");
+  assert.equal(orderCall().input.idempotency_key, KEY);
+  assert.equal(orderCall().identity.memberId, "00000000-0000-4000-8000-000000000901");
 });
 
 test("V2 route maps replay as successful canonical response", async () => {
@@ -78,7 +98,7 @@ test("V2 route maps replay as successful canonical response", async () => {
   };
   const response = await request();
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as any).idempotency, "replayed");
+  assert.equal((await responseBody(response)).idempotency, "replayed");
 });
 
 for (const [outcome, status] of [["processing", 409], ["hash_mismatch", 409], ["failed_terminal", 400]] as const) {
@@ -86,7 +106,7 @@ for (const [outcome, status] of [["processing", 409], ["hash_mismatch", 409], ["
     globalState.__orderV2Result = { success: false, idempotency: outcome, error: outcome };
     const response = await request();
     assert.equal(response.status, status);
-    assert.equal((await response.json() as any).idempotency, outcome);
+    assert.equal((await responseBody(response)).idempotency, outcome);
   });
 }
 
@@ -94,12 +114,12 @@ test("V2 route fails closed on unknown writer result", async () => {
   globalState.__orderV2Result = { success: false, error: "unknown" };
   const response = await request();
   assert.equal(response.status, 400);
-  assert.equal((await response.json() as any).success, false);
+  assert.equal((await responseBody(response)).success, false);
 });
 
 test("BLOCKER-3 — keyless POST chuyển key rỗng nguyên trạng sang V2 (V2 từ chối tường minh)", async () => {
   await request({}, "");
-  assert.equal(globalState.__orderV2Call.input.idempotency_key, "");
+  assert.equal(orderCall().input.idempotency_key, "");
 });
 
 test("BLOCKER-3 — no header + body.idempotency_key được route chuyển qua V2", async () => {
@@ -108,7 +128,7 @@ test("BLOCKER-3 — no header + body.idempotency_key được route chuyển qua
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ items: [{ product_id: "p1", quantity: 1 }], idempotency_key: KEY }),
   }));
-  assert.equal(globalState.__orderV2Call.input.idempotency_key, KEY);
+  assert.equal(orderCall().input.idempotency_key, KEY);
 });
 
 test("BLOCKER-3 — writer báo failed_terminal keyless → route 400 tường minh", async () => {
@@ -117,7 +137,7 @@ test("BLOCKER-3 — writer báo failed_terminal keyless → route 400 tường m
   };
   const response = await request({}, "");
   assert.equal(response.status, 400);
-  const body = await response.json() as any;
+  const body = await responseBody(response);
   assert.equal(body.idempotency, "failed_terminal");
   assert.match(String(body.error), /Khóa gửi đơn không hợp lệ/);
 });

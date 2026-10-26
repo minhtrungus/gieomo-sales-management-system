@@ -1,5 +1,5 @@
-const { createClient } = require("@supabase/supabase-js");
-const fs = require("fs");
+import { createClient } from "@supabase/supabase-js";
+import fs from "node:fs";
 
 const env = fs.readFileSync(".env.local", "utf8");
 const url = env.match(/NEXT_PUBLIC_SUPABASE_URL=(.*)/)[1].trim();

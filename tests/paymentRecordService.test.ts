@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { recordPaymentOnce } from "../src/lib/services/paymentRecordService.ts";
+import {
+  recordPaymentOnce,
+  type PaymentDbError,
+  type PaymentInsertRow,
+} from "../src/lib/services/paymentRecordService.ts";
 
 /**
  * Batch 2E — unit/mock tests cho recordPaymentOnce().
@@ -26,11 +30,11 @@ import { recordPaymentOnce } from "../src/lib/services/paymentRecordService.ts";
  *   P8  race: 2 lần gọi cùng vượt SELECT, insert thua 23505 → "P8 ..."
  */
 
-type InsertRow = Record<string, any>;
+type InsertRow = PaymentInsertRow;
 
 interface FakeDbOpts {
-  selectResult?: { data: any; error: any };
-  insertResult?: { data: any; error: any };
+  selectResult?: { data: { payment_id: string } | null; error: PaymentDbError | null };
+  insertResult?: { data: unknown; error: PaymentDbError | null };
   /** Bảng giả lập payments đã có sẵn (để SELECT thấy duplicate). */
   existingPayments?: InsertRow[];
 }
@@ -44,11 +48,16 @@ function makeDb(opts: FakeDbOpts = {}) {
     from(table: string) {
       if (table !== "payments") throw new Error(`unexpected table: ${table}`);
       return {
-        select(_cols: string) {
+        select(columns: string) {
+          void columns;
           return {
-            eq(_c1: string, _v1: unknown) {
+            eq(columnOne: string, valueOne: unknown) {
+              void columnOne;
+              void valueOne;
               return {
-                eq(_c2: string, _v2: unknown) {
+                eq(columnTwo: string, valueTwo: unknown) {
+                  void columnTwo;
+                  void valueTwo;
                   return {
                     async maybeSingle() {
                       if (opts.selectResult) return opts.selectResult;
@@ -63,13 +72,7 @@ function makeDb(opts: FakeDbOpts = {}) {
         },
         insert(rows: InsertRow[]) {
           insertCalls.push(rows);
-          return {
-            then(resolve: (v: any) => any, reject: (e: any) => any) {
-              return Promise.resolve(
-                opts.insertResult ?? { data: null, error: null }
-              ).then(resolve, reject);
-            },
-          };
+          return Promise.resolve(opts.insertResult ?? { data: null, error: null });
         },
       };
     },

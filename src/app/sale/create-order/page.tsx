@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import {
   saveNewOrder,
   getStoredProducts,
@@ -19,20 +17,15 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  QrCode,
   Copy,
   Check,
   CheckCircle,
-  ExternalLink,
-  Sparkles,
   UserCheck,
-  Truck,
   CreditCard,
   UserPlus,
 } from "lucide-react";
 
 function SaleCreateOrderForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const queryProductId = searchParams.get("productId");
   const [session, setSession] = useState<AdminSession | null>(null);
@@ -40,10 +33,12 @@ function SaleCreateOrderForm() {
   const [settings, setSettings] = useState(getStoredSettings());
 
   useEffect(() => {
-    const s = getAdminSession();
-    setSession(s);
-    setAvailableProducts(getStoredProducts());
-    setSettings(getStoredSettings());
+    queueMicrotask(() => {
+      const s = getAdminSession();
+      setSession(s);
+      setAvailableProducts(getStoredProducts());
+      setSettings(getStoredSettings());
+    });
 
     const handleSettingsUpdate = () => setSettings(getStoredSettings());
     window.addEventListener("gieomo_settings_updated", handleSettingsUpdate);
@@ -51,25 +46,6 @@ function SaleCreateOrderForm() {
       window.removeEventListener("gieomo_settings_updated", handleSettingsUpdate);
     };
   }, []);
-
-  useEffect(() => {
-    if (queryProductId && availableProducts.length > 0) {
-      const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
-      if (targetProd) {
-        const firstVar = targetProd.variants?.[0];
-        setOrderItems([
-          {
-            productId: targetProd.product_id,
-            variantId: firstVar?.variant_id,
-            name: targetProd.name,
-            variantName: firstVar?.name,
-            price: firstVar?.price || targetProd.price,
-            quantity: 1,
-          },
-        ]);
-      }
-    }
-  }, [queryProductId, availableProducts]);
 
   // Buyer Information
   const [buyerName, setBuyerName] = useState("");
@@ -121,6 +97,25 @@ function SaleCreateOrderForm() {
       quantity: 1,
     },
   ]);
+
+  useEffect(() => {
+    if (queryProductId && availableProducts.length > 0) {
+      const targetProd = availableProducts.find((p) => p.product_id === queryProductId);
+      if (targetProd) {
+        const firstVar = targetProd.variants?.[0];
+        queueMicrotask(() => setOrderItems([
+          {
+            productId: targetProd.product_id,
+            variantId: firstVar?.variant_id,
+            name: targetProd.name,
+            variantName: firstVar?.name,
+            price: firstVar?.price || targetProd.price,
+            quantity: 1,
+          },
+        ]));
+      }
+    }
+  }, [queryProductId, availableProducts]);
 
   const handleAddItem = () => {
     if (availableProducts.length === 0) return;

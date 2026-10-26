@@ -43,6 +43,28 @@ export type PaymentConfirmOutcome =
 
 const PAYMENT_ENDPOINT = "/api/orders/payment";
 
+type PaymentResponse = {
+  success?: boolean;
+  paymentStatus?: string;
+  orderStatus?: string;
+  isAlreadyPaid?: boolean;
+  outcome?: string;
+  error?: string;
+};
+
+function isPaymentResponse(value: unknown): value is PaymentResponse {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    (record.success === undefined || typeof record.success === "boolean") &&
+    (record.paymentStatus === undefined || typeof record.paymentStatus === "string") &&
+    (record.orderStatus === undefined || typeof record.orderStatus === "string") &&
+    (record.isAlreadyPaid === undefined || typeof record.isAlreadyPaid === "boolean") &&
+    (record.outcome === undefined || typeof record.outcome === "string") &&
+    (record.error === undefined || typeof record.error === "string")
+  );
+}
+
 /**
  * Payment evidence required by the atomic server contract. A payment event
  * records money received; it does not let the client choose order lifecycle.
@@ -119,9 +141,10 @@ export async function confirmPaymentServerFirst(
       }),
     });
 
-    let data: any = null;
+    let data: PaymentResponse | null = null;
     try {
-      data = await res.json();
+      const parsed: unknown = await res.json();
+      data = isPaymentResponse(parsed) ? parsed : null;
     } catch {
       data = null;
     }
@@ -178,11 +201,13 @@ export async function confirmPaymentServerFirst(
       kind: "invalid_response",
       message: "Phản hồi không hợp lệ từ máy chủ — vui lòng thử lại.",
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
       kind: "network_error",
-      message: "Lỗi kết nối — vui lòng thử lại." + (err?.message ? ` (${err.message})` : ""),
+      message:
+        "Lỗi kết nối — vui lòng thử lại." +
+        (err instanceof Error && err.message ? ` (${err.message})` : ""),
     };
   } finally {
     inFlight.delete(key);

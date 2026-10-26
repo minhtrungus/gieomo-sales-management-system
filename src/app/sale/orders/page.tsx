@@ -5,24 +5,14 @@ import Link from "next/link";
 import {
   Search,
   Filter,
-  ShoppingBag,
-  ExternalLink,
-  ChevronRight,
-  Package,
   Phone,
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
   Eye,
   X,
-  CreditCard,
 } from "lucide-react";
 import {
   getAdminSession,
   getStoredOrders,
   updateStoredDeliveryStatus,
-  updateStoredOrderStatus,
   type AdminSession,
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -38,21 +28,6 @@ export default function SaleOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    const s = getAdminSession();
-    setSession(s);
-    const all = getStoredOrders();
-
-    if (s) {
-      const myOrders = all.filter(
-        (o) =>
-          (s.referralCode && o.referral_code?.toLowerCase() === s.referralCode.toLowerCase()) ||
-          (s.memberId && o.seller_id === s.memberId) ||
-          (s.memberId && o.created_by_member_id === s.memberId) ||
-          (s.memberId && o.assigned_shipper_id === s.memberId)
-      );
-      setOrders(myOrders);
-    }
-
     const handleUpdate = () => {
       const currentSession = getAdminSession();
       setSession(currentSession);
@@ -69,6 +44,8 @@ export default function SaleOrdersPage() {
         setOrders(filtered);
       }
     };
+
+    queueMicrotask(handleUpdate);
 
     window.addEventListener("gieomo_orders_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);

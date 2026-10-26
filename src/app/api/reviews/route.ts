@@ -5,11 +5,43 @@ import { requireAdmin, getAuthenticatedUser } from "@/lib/auth/serverAuth";
 export const dynamic = "force-dynamic";
 
 const CONFIG_KEY = "global_product_reviews";
+type AdminSupabaseClient = ReturnType<typeof createAdminClient>;
+
+type ReviewRecord = {
+  review_id: string;
+  id?: string;
+  product_id: string;
+  product_slug?: string | null;
+  author_name: string;
+  phone_masked?: string | null;
+  rating: number;
+  comment: string;
+  images: string[];
+  is_verified_buyer: boolean;
+  status?: "approved" | "hidden" | "pending";
+  created_at: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isReviewRecord(value: unknown): value is ReviewRecord {
+  return (
+    isRecord(value) &&
+    typeof value.review_id === "string" &&
+    typeof value.product_id === "string" &&
+    typeof value.author_name === "string" &&
+    typeof value.rating === "number" &&
+    typeof value.comment === "string" &&
+    typeof value.created_at === "string"
+  );
+}
 
 /**
  * Helper to fetch backup reviews from system_configs if product_reviews table is not yet created.
  */
-async function getReviewsFromConfig(supabase: any): Promise<any[]> {
+async function getReviewsFromConfig(supabase: AdminSupabaseClient): Promise<ReviewRecord[]> {
   try {
     const { data } = await supabase
       .from("system_configs")
@@ -19,7 +51,7 @@ async function getReviewsFromConfig(supabase: any): Promise<any[]> {
 
     if (data?.config_value) {
       const parsed = JSON.parse(data.config_value);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.filter(isReviewRecord);
     }
   } catch (err) {
     console.warn("[getReviewsFromConfig] Error parsing config reviews:", err);
@@ -30,7 +62,7 @@ async function getReviewsFromConfig(supabase: any): Promise<any[]> {
 /**
  * Helper to save backup reviews into system_configs.
  */
-async function saveReviewsToConfig(supabase: any, reviews: any[]): Promise<void> {
+async function saveReviewsToConfig(supabase: AdminSupabaseClient, reviews: ReviewRecord[]): Promise<void> {
   try {
     await supabase.from("system_configs").upsert(
       {
@@ -61,7 +93,7 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
 
     // 1. Try querying native product_reviews table first
-    let dbReviews: any[] = [];
+    let dbReviews: ReviewRecord[] = [];
     try {
       let query = supabase
         .from("product_reviews")
@@ -81,7 +113,7 @@ export async function GET(request: Request) {
 
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
-        dbReviews = data.map((r) => ({
+        dbReviews = data.map((r: ReviewRecord) => ({
           review_id: r.review_id,
           product_id: r.product_id,
           product_slug: r.product_slug,
@@ -111,7 +143,7 @@ export async function GET(request: Request) {
     }
 
     // 3. Merge both sources (dedup by review_id)
-    const combinedMap = new Map<string, any>();
+    const combinedMap = new Map<string, ReviewRecord>();
     for (const r of filteredConfig) {
       combinedMap.set(r.review_id, r);
     }
@@ -124,7 +156,7 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({ success: true, reviews: merged });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/reviews] Exception:", err);
     return NextResponse.json({ success: true, reviews: [] });
   }
@@ -132,7 +164,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body: unknown = await request.json();
+    if (!isRecord(body)) {
+      return NextResponse.json({ success: false, error: "Dữ liệu đánh giá không hợp lệ" }, { status: 400 });
+    }
     const {
       product_id,
       product_slug,
@@ -143,7 +178,13 @@ export async function POST(request: Request) {
       images = [],
     } = body;
 
-    if (!product_id || !author_name?.trim() || !comment?.trim()) {
+    if (
+      (typeof product_id !== "string" && typeof product_id !== "number") ||
+      typeof author_name !== "string" ||
+      !author_name.trim() ||
+      typeof comment !== "string" ||
+      !comment.trim()
+    ) {
       return NextResponse.json(
         { success: false, error: "Thiếu thông tin đánh giá (product_id, author_name, comment)" },
         { status: 400 }
@@ -161,7 +202,7 @@ export async function POST(request: Request) {
     const isVerifiedBuyer = isAdmin ? Boolean(body.is_verified_buyer) : false;
     const reviewStatus = "approved";
 
-    const newRecord = {
+    const newRecord: ReviewRecord = {
       review_id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       product_id: String(product_id),
       product_slug: product_slug ? String(product_slug) : null,
@@ -169,7 +210,9 @@ export async function POST(request: Request) {
       phone_masked: phone_masked ? String(phone_masked).slice(0, 20) : null,
       rating: numericRating,
       comment: comment.trim().slice(0, 1000),
-      images: Array.isArray(images) ? images.slice(0, 5) : [],
+      images: Array.isArray(images)
+        ? images.filter((image): image is string => typeof image === "string").slice(0, 5)
+        : [],
       is_verified_buyer: isVerifiedBuyer,
       status: reviewStatus,
       created_at: new Date().toISOString(),
@@ -207,10 +250,10 @@ export async function POST(request: Request) {
       success: true,
       review: newRecord,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/reviews] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi lưu đánh giá" },
+      { success: false, error: err instanceof Error ? err.message : "Lỗi lưu đánh giá" },
       { status: 500 }
     );
   }
@@ -253,10 +296,10 @@ export async function DELETE(request: Request) {
     await saveReviewsToConfig(supabase, updated);
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[DELETE /api/reviews] Exception:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi xóa đánh giá" },
+      { success: false, error: err instanceof Error ? err.message : "Lỗi xóa đánh giá" },
       { status: 500 }
     );
   }

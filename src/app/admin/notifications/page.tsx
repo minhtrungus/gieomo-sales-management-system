@@ -14,7 +14,6 @@ import {
   Trash2,
   Star,
   RotateCw,
-  Search,
   ChevronLeft,
   ChevronRight,
   ShoppingBag,
@@ -25,11 +24,8 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
-  Sparkles,
   ExternalLink,
   X,
-  Filter,
-  Eye,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 

@@ -22,9 +22,11 @@ export function useSiteSettings(): SiteSettings {
       }
     };
 
-    const current = getStoredSettings();
-    setSettings(current);
-    updateFavicon(current.faviconPreview);
+    queueMicrotask(() => {
+      const current = getStoredSettings();
+      setSettings(current);
+      updateFavicon(current.faviconPreview);
+    });
     syncSettingsFromServer();
 
     const handleUpdate = () => {

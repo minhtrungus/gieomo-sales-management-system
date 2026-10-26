@@ -9,10 +9,10 @@ import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProductReviews } from "@/components/products/ProductReviews";
 import { ProductLightbox } from "@/components/products/ProductLightbox";
-import type { ExtendedProduct } from "@/lib/data/mockData";
+import type { ExtendedProduct, ExtendedProductVariant } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal, Image as ImageIcon, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -34,7 +34,7 @@ export function ProductDetailClient({
 
   const [product, setProduct] = useState<ExtendedProduct | null>(initialProduct ?? null);
   const [isLoading, setIsLoading] = useState<boolean>(!initialProduct);
-  const [selectedVariant, setSelectedVariant] = useState<any>(initialProduct?.variants?.[0] ?? null);
+  const [selectedVariant, setSelectedVariant] = useState<ExtendedProductVariant | null>(initialProduct?.variants?.[0] ?? null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -82,10 +82,10 @@ export function ProductDetailClient({
       if (isMounted) {
         if (found) {
           setProduct(found);
-          setSelectedVariant((prev: any) => {
-            const inStockVariant = found?.variants?.find((v: any) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found?.variants?.[0] ?? null;
+          setSelectedVariant((prev) => {
+            const inStockVariant = found?.variants?.find((v) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found?.variants?.[0] ?? null;
             if (!prev) return inStockVariant;
-            const matchPrev = found?.variants?.find((v: any) => v.variant_id === prev.variant_id);
+            const matchPrev = found?.variants?.find((v) => v.variant_id === prev.variant_id);
             if (matchPrev && (matchPrev.stock === undefined || matchPrev.stock === null || Number(matchPrev.stock) > 0)) return matchPrev;
             return matchPrev ?? inStockVariant;
           });
@@ -108,10 +108,10 @@ export function ProductDetailClient({
       );
       if (found) {
         setProduct(found);
-        setSelectedVariant((prev: any) => {
-          const inStockVariant = found.variants?.find((v: any) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found.variants?.[0] ?? null;
+        setSelectedVariant((prev) => {
+          const inStockVariant = found.variants?.find((v) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)) ?? found.variants?.[0] ?? null;
           if (!prev) return inStockVariant;
-          const matchPrev = found.variants?.find((v: any) => v.variant_id === prev.variant_id);
+          const matchPrev = found.variants?.find((v) => v.variant_id === prev.variant_id);
           if (matchPrev && (matchPrev.stock === undefined || matchPrev.stock === null || Number(matchPrev.stock) > 0)) return matchPrev;
           return matchPrev ?? inStockVariant;
         });
@@ -160,8 +160,9 @@ export function ProductDetailClient({
   const activeGalleryImage = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
 
   // When variant changes, auto-switch to its image if available
-  const handleVariantSelect = (v: any) => {
+  const handleVariantSelect = (v: ExtendedProductVariant) => {
     setSelectedVariant(v);
+    setQuantity(1);
     if (v.image_url) {
       const idx = displayImages.indexOf(v.image_url);
       if (idx >= 0) {
@@ -184,12 +185,12 @@ export function ProductDetailClient({
   const isNumberedMode = useMemo(() => {
     if (!product?.variants || product.variants.length < 5) return false;
     return product.variants.some((v) => /#?\d+/.test(v.name));
-  }, [product?.variants]);
+  }, [product]);
 
   const availableNumberedCount = useMemo(() => {
     if (!product?.variants) return 0;
     return product.variants.filter((v) => (v.stock === undefined || v.stock === null ? true : Number(v.stock) > 0)).length;
-  }, [product?.variants]);
+  }, [product]);
 
   const currentStock = useMemo(() => {
     if (!product) return 0;
@@ -216,11 +217,6 @@ export function ProductDetailClient({
     if (!product) return [];
     return buildProductSpecRows(product, parsedInfo, currentStock);
   }, [product, parsedInfo, currentStock]);
-
-  // Reset quantity when variant changes to prevent stale values exceeding stock
-  useEffect(() => {
-    setQuantity((prev) => Math.min(prev, currentStock || 1, 1));
-  }, [selectedVariant?.variant_id, currentStock]);
 
   const handleAddToCart = () => {
     if (!product || isOutOfStock || isAdding) return;
@@ -701,7 +697,7 @@ export function ProductDetailClient({
 
                 <div className="rounded-2xl border border-gray-200/90 overflow-hidden bg-white shadow-2xs">
                   <div className="divide-y divide-gray-100 text-xs sm:text-sm">
-                    {specRows.map((row: any, idx: number) => (
+                    {specRows.map((row, idx) => (
                       <div
                         key={row.label}
                         className={`flex items-start transition-colors ${

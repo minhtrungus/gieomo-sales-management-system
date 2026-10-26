@@ -754,8 +754,10 @@ export default function AdminMembersPage() {
   useEffect(() => {
     syncMembersFromServer(true);
     syncOrdersFromServer(true);
-    setOrders(getStoredOrders());
-    setMembers(getStoredMembers());
+    queueMicrotask(() => {
+      setOrders(getStoredOrders());
+      setMembers(getStoredMembers());
+    });
 
     // Fetch latest online presence from server immediately & poll every 10s
     syncPresenceFromServer();

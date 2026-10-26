@@ -82,7 +82,7 @@ g.fetch = (async (url: string, init?: RequestInit) => {
   return { ok: false, status: 401, json: async () => ({ success: false }) } as StubResponse;
 }) as unknown as typeof fetch;
 
-const { syncStoredPaymentStatusLocal, getStoredOrders } = await import("../src/lib/data/orderStore.ts");
+const { syncStoredPaymentStatusLocal } = await import("../src/lib/data/orderStore.ts");
 
 test("OF1 — polling server-paid: syncStoredPaymentStatusLocal cập nhật local, KHÔNG PATCH", () => {
   storage.clear();

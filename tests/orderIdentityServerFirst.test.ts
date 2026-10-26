@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { register } from "node:module";
+import type { Order } from "../src/types/database.ts";
 
 /**
  * Batch 3A.2 — định danh đơn SERVER-CANONICAL + payment contract mở rộng.
@@ -144,7 +145,7 @@ const baseOrder = () => ({
   created_at: new Date().toISOString(),
   completed_at: null,
   updated_at: new Date().toISOString(),
-}) as any;
+}) as Order;
 
 const posts = () => fetchCalls.filter((c) => c.method === "POST" && c.url === "/api/orders");
 const patches = () => fetchCalls.filter((c) => c.method === "PATCH");
@@ -315,7 +316,7 @@ test("SI6 — syncStoredOrderStatusLocal local-only: cập nhật order_status, 
 
   assert.equal(patches().length, 0, "sync local-only không gửi PATCH thừa");
   const after = getStoredOrders();
-  const target = after.find((o: any) => o.order_code === targetCode) as any;
+  const target = after.find((o) => o.order_code === targetCode);
   assert.ok(target, "phải tìm thấy đơn sau khi sync");
   assert.equal(target.order_status, "completed");
   assert.ok(target.completed_at, "completed_at được set local");
@@ -327,9 +328,11 @@ test("SI7 — confirmPaymentServerFirst forwards immutable payment evidence", as
   );
   resetPaymentConfirmInFlight();
 
-  let capturedBody: any = null;
+  let capturedBody: Record<string, unknown> = {};
   const fetchImpl = (async (_url: string, init?: RequestInit) => {
-    capturedBody = JSON.parse(String(init?.body));
+    const parsed: unknown = JSON.parse(String(init?.body));
+    assert.ok(parsed && typeof parsed === "object" && !Array.isArray(parsed));
+    capturedBody = parsed as Record<string, unknown>;
     return {
       ok: true,
       status: 200,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
@@ -27,23 +27,13 @@ import {
   Copy,
   Check,
   ShoppingBag,
-  Users,
-  UserCheck,
-  ExternalLink,
   Sparkles,
-  PackagePlus,
-  Eye,
-  Clock,
-  CheckCircle2,
   ChevronRight,
-  TrendingUp,
-  RefreshCw,
 } from "lucide-react";
 
 type OrderTab = "all" | "my_orders" | "by_btc";
 
 function AdminOrdersContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -60,22 +50,25 @@ function AdminOrdersContent() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
-  const [copiedRefLink, setCopiedRefLink] = useState(false);
 
   useEffect(() => {
-    if (queryTab && (queryTab === "all" || queryTab === "my_orders" || queryTab === "by_btc")) {
-      setActiveTab(queryTab);
-    }
-    if (queryMember) {
-      setSelectedBtcRef(queryMember);
-      setActiveTab("by_btc");
-    }
+    queueMicrotask(() => {
+      if (queryTab && (queryTab === "all" || queryTab === "my_orders" || queryTab === "by_btc")) {
+        setActiveTab(queryTab);
+      }
+      if (queryMember) {
+        setSelectedBtcRef(queryMember);
+        setActiveTab("by_btc");
+      }
+    });
   }, [queryTab, queryMember]);
 
   useEffect(() => {
-    setOrders(getStoredOrders());
-    setMembers(getStoredMembers());
-    setSession(getAdminSession());
+    queueMicrotask(() => {
+      setOrders(getStoredOrders());
+      setMembers(getStoredMembers());
+      setSession(getAdminSession());
+    });
     syncOrdersFromServer(true);
     syncMembersFromServer(true);
 
@@ -115,17 +108,6 @@ function AdminOrdersContent() {
     navigator.clipboard.writeText(fullText);
     setCopiedAddressId(ord.order_id);
     setTimeout(() => setCopiedAddressId(null), 2000);
-  };
-
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://gieomo.store";
-  const myRefCode = session?.referralCode || "";
-  const myRefUrl = myRefCode ? `${origin}/?ref=${myRefCode}` : "";
-
-  const handleCopyMyRefLink = () => {
-    if (!myRefUrl) return;
-    navigator.clipboard.writeText(myRefUrl);
-    setCopiedRefLink(true);
-    setTimeout(() => setCopiedRefLink(false), 2000);
   };
 
   const [pendingStatusChange, setPendingStatusChange] = useState<{
@@ -197,49 +179,12 @@ function AdminOrdersContent() {
     return orders.filter((ord) => isOrderOfMember(ord, session));
   }, [orders, session, isOrderOfMember]);
 
-  const myRevenue = useMemo(() => {
-    return myOrders
-      .filter((o) => o.order_status !== "cancelled")
-      .reduce((sum, o) => sum + (o.final_amount || 0), 0);
-  }, [myOrders]);
-
-  const myCompletedCount = useMemo(() => {
-    return myOrders.filter((o) => o.order_status === "completed").length;
-  }, [myOrders]);
-
-  const myPendingCount = useMemo(() => {
-    return myOrders.filter(
-      (o) => o.order_status !== "completed" && o.order_status !== "cancelled"
-    ).length;
-  }, [myOrders]);
-
   // 2. BTC members list and their individual stats
   const btcMembers = useMemo(() => {
     return members.filter(
       (m) => m.status === "active" && !(m.fullName ?? "").includes("Trưởng ban cũ")
     );
   }, [members]);
-
-  const btcStats = useMemo(() => {
-    return btcMembers.map((m) => {
-      const mOrders = orders.filter((ord) => isOrderOfMember(ord, m));
-      const completedCount = mOrders.filter((o) => o.order_status === "completed").length;
-      const pendingCount = mOrders.filter(
-        (o) => o.order_status !== "completed" && o.order_status !== "cancelled"
-      ).length;
-      const revenue = mOrders
-        .filter((o) => o.order_status !== "cancelled")
-        .reduce((sum, o) => sum + (o.final_amount || 0), 0);
-      return {
-        member: m,
-        orders: mOrders,
-        totalOrders: mOrders.length,
-        completedCount,
-        pendingCount,
-        revenue,
-      };
-    });
-  }, [btcMembers, orders, isOrderOfMember]);
 
   // Base list depending on activeTab
   const baseTabOrders = useMemo(() => {
@@ -289,14 +234,6 @@ function AdminOrdersContent() {
       return true;
     });
   }, [baseTabOrders, statusFilter, introducerFilter, activeTab, searchQuery]);
-
-  const selectedMemberObj = useMemo(() => {
-    if (!selectedBtcRef || selectedBtcRef === "all") return null;
-    return (
-      btcMembers.find((m) => m.referralCode?.toLowerCase() === selectedBtcRef.toLowerCase()) ||
-      null
-    );
-  }, [selectedBtcRef, btcMembers]);
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);

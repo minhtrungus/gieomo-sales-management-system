@@ -14,9 +14,8 @@ import {
   type ExtendedProduct,
 } from "@/lib/data/orderStore";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { Badge } from "@/components/ui/Badge";
 import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
-import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Sparkles, Image as ImageIcon, PackageCheck, Check, Upload, Loader2 } from "lucide-react";
+import { Plus, Edit3, Trash2, X, Gift, AlertTriangle, Image as ImageIcon, PackageCheck, Check, Upload, Loader2 } from "lucide-react";
 import { uploadAsset } from "@/lib/services/uploadService";
 import {
   getComboAvailabilityLabel,
@@ -29,6 +28,21 @@ interface ComboItemSelection {
   product_id: string;
   variant_id: string | null;
   quantity: number;
+}
+
+type ComboItemInput = NonNullable<ExtendedCombo["items"]>[number] & {
+  slug?: string;
+  name?: string;
+  price?: number;
+};
+
+interface ResolvedAdminComboItem {
+  product_id: string;
+  variant_id: string | null;
+  name: string;
+  quantity: number;
+  price: number;
+  product?: ExtendedProduct;
 }
 
 const COMBO_IMAGE_PRESETS = [
@@ -62,9 +76,12 @@ function normalizeText(str: string): string {
     .trim();
 }
 
-function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: ExtendedProduct[]) {
+function resolveAdminComboItems(
+  combo: ExtendedCombo,
+  availableProducts: ExtendedProduct[]
+): ResolvedAdminComboItem[] {
   if (combo.items && combo.items.length > 0) {
-    return combo.items.map((it: any) => {
+    return combo.items.map((it: ComboItemInput) => {
       const pId = it.product_id || it.product?.product_id;
       const pSlug = it.slug || it.product?.slug;
       const pName = it.name || it.product?.name;
@@ -77,7 +94,7 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
       const qty = Math.max(1, Number(it.quantity) || 1);
       const unitPrice = found?.price ?? it.product?.price ?? it.price ?? 40000;
       return {
-        product_id: found?.product_id || pId,
+        product_id: found?.product_id || pId || "",
         variant_id: it.variant_id ?? null,
         name: found?.name || pName || "Sản phẩm",
         quantity: qty,
@@ -92,7 +109,7 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
   if (!cleanedDesc) return [];
 
   const parts = cleanedDesc.split(/[+,]/);
-  const items: any[] = [];
+  const items: ResolvedAdminComboItem[] = [];
   for (const part of parts) {
     const raw = part.trim();
     if (!raw) continue;
@@ -118,7 +135,7 @@ function resolveAdminComboItems(combo: ExtendedCombo, availableProducts: Extende
     }
 
     items.push({
-      product_id: foundProd?.product_id,
+      product_id: foundProd?.product_id || "",
       variant_id: null,
       name: foundProd?.name || itemName,
       quantity: qty,
@@ -134,8 +151,10 @@ export default function AdminCombosPage() {
   const [availableProducts, setAvailableProducts] = useState(getStoredProducts());
 
   useEffect(() => {
-    setCombos(getStoredCombos());
-    setAvailableProducts(getStoredProducts());
+    queueMicrotask(() => {
+      setCombos(getStoredCombos());
+      setAvailableProducts(getStoredProducts());
+    });
     syncCombosFromServer(true);
     syncProductsFromServer(true);
 
@@ -202,7 +221,8 @@ export default function AdminCombosPage() {
       } else {
         alert(`Lỗi tải ảnh: ${res.error || "Không thể tải lên"}`);
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       alert(`Lỗi kết nối khi tải ảnh: ${err?.message || "Lỗi không xác định"}`);
     } finally {
       setLoading(false);
@@ -256,7 +276,7 @@ export default function AdminCombosPage() {
     const resolved = resolveAdminComboItems(cb, availableProducts);
     if (resolved.length > 0) {
       setEditComboItems(
-        resolved.map((it: any) => ({
+        resolved.map((it) => ({
           product_id: it.product_id || availableProducts[0]?.product_id || "prod-1",
           // Giữ nguyên mapping hiện có (kể cả null của component chưa map) —
           // không tự gán variant khi thiếu dữ liệu.
@@ -321,7 +341,7 @@ export default function AdminCombosPage() {
   const getComboRetailTotal = (cb: ExtendedCombo) => {
     const items = resolveAdminComboItems(cb, availableProducts);
     if (items.length === 0) return cb.price;
-    return items.reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
+    return items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
   };
 
   // Add Combo Submit
@@ -373,7 +393,7 @@ export default function AdminCombosPage() {
       images: [thumbnail],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      items: mappedItems as any,
+      items: mappedItems,
     };
 
     const result = await saveNewCombo(newCb);
@@ -630,7 +650,7 @@ export default function AdminCombosPage() {
                 <div className="p-2 rounded-xl bg-[#FFFDF9] border border-[#F5EFE6] space-y-1">
                   <div className="text-[10px] font-bold text-[#7E7068]">Sản phẩm thành phần:</div>
                   <div className="flex flex-wrap gap-1">
-                    {items.map((it: any, idx: number) => (
+                    {items.map((it, idx) => (
                       <span key={idx} className="px-2 py-0.5 rounded-lg bg-white border border-[#F0E5D8] font-medium text-[#342A24] text-[10px]">
                         {it.name} <strong className="text-[#2D6338]">×{it.quantity}</strong>
                       </span>
@@ -795,7 +815,7 @@ export default function AdminCombosPage() {
 
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap items-center gap-1.5 py-1">
-                          {items.map((it: any, idx: number) => (
+                          {items.map((it, idx) => (
                             <span key={idx} className="inline-flex items-center gap-1">
                               <span className="px-2 py-0.5 rounded-lg bg-[#FFF8EE] border border-[#F0E5D8] font-semibold text-[#342A24] text-[11px] flex items-center gap-1">
                                 <span>{it.name}</span>
@@ -1022,7 +1042,7 @@ export default function AdminCombosPage() {
                   <label className="font-bold text-[#342A24] block">Trạng thái mở bán *</label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}
+                    onChange={(e) => setStatus(e.target.value as ExtendedCombo["status"])}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold text-[#342A24] bg-white"
                   >
                     <option value="active">Đang mở bán (Active)</option>
@@ -1084,8 +1104,6 @@ export default function AdminCombosPage() {
                   <div className="space-y-2">
                     {comboItems.map((item, index) => {
                       const currentProd = availableProducts.find((p) => p.product_id === item.product_id);
-                      const prodStock = getProductTotalStock(currentProd);
-
                       return (
                         <div key={index} className="flex items-center gap-2 bg-[#FFF8EE] p-2.5 rounded-2xl border border-[#F0E5D8]">
                           <span className="w-5 h-5 rounded-full bg-[#BFE9C3] text-[#16381D] font-extrabold flex items-center justify-center text-[10px] shrink-0">
@@ -1374,7 +1392,7 @@ export default function AdminCombosPage() {
                   <label className="font-bold text-[#342A24] block">Trạng thái xuất bản *</label>
                   <select
                     value={editingCombo.status || "active"}
-                    onChange={(e) => setEditingCombo({ ...editingCombo, status: e.target.value as any })}
+                    onChange={(e) => setEditingCombo({ ...editingCombo, status: e.target.value as ExtendedCombo["status"] })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] font-bold text-[#342A24] bg-white"
                   >
                     <option value="active">Đang mở bán (Active)</option>

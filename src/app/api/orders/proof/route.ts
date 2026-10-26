@@ -114,7 +114,8 @@ export async function POST(request: Request) {
     // c. Customer phone exact normalized match (NO includes / startsWith / endsWith)
     const normalizedInputPhone = phone.replace(/\D/g, "").trim();
     const normalizedReceiverPhone = (order.receiver_phone || "").replace(/\D/g, "").trim();
-    const normalizedBuyerPhone = ((order.customers as any)?.phone || "").replace(/\D/g, "").trim();
+    const customer = Array.isArray(order.customers) ? order.customers[0] : order.customers;
+    const normalizedBuyerPhone = (customer?.phone || "").replace(/\D/g, "").trim();
 
     const isPhoneMatched = Boolean(
       normalizedInputPhone &&
@@ -249,7 +250,8 @@ export async function POST(request: Request) {
       orderCode: order.order_code,
       paymentProof: uploadedUrl,
     });
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[POST /api/orders/proof] Exception:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Lỗi máy chủ khi xử lý biên lai" },

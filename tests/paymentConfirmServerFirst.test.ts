@@ -55,14 +55,21 @@ const {
 // ===========================================================================
 
 type StubResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+type FetchCall = { url: string; body: Record<string, unknown> };
+
+function parseRequestBody(body: BodyInit | null | undefined): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(String(body));
+  assert.ok(typeof parsed === "object" && parsed !== null && !Array.isArray(parsed));
+  return parsed as Record<string, unknown>;
+}
 
 function okJson(status: number, body: unknown): StubResponse {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function makeFetch(calls: { url: string; body: any }[], responder: () => Promise<StubResponse> | StubResponse): typeof fetch {
+function makeFetch(calls: FetchCall[], responder: () => Promise<StubResponse> | StubResponse): typeof fetch {
   const fn = async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    calls.push({ url: String(url), body: parseRequestBody(init?.body) });
     return responder();
   };
   return fn as unknown as typeof fetch;
@@ -72,7 +79,7 @@ const ORDER_CODE = "GM-TEST-001";
 
 test("T1 — server xác nhận thành công → ok, paymentStatus paid, orderStatus confirmed", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () =>
     okJson(200, {
       success: true,
@@ -87,8 +94,8 @@ test("T1 — server xác nhận thành công → ok, paymentStatus paid, orderSt
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
 
   assert.equal(result.ok, true);
-  assert.equal((result as any).paymentStatus, "paid");
-  assert.equal((result as any).orderStatus, "confirmed");
+  assert.equal(result.paymentStatus, "paid");
+  assert.equal(result.orderStatus, "confirmed");
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "/api/orders/payment");
   assert.equal(calls[0].body.action, "confirm");
@@ -98,49 +105,49 @@ test("T1 — server xác nhận thành công → ok, paymentStatus paid, orderSt
 test("T2 — 401/403 → auth_error, không paid, giữ nguyên trạng thái", async () => {
   resetPaymentConfirmInFlight();
   for (const status of [401, 403]) {
-    const calls: any[] = [];
+    const calls: FetchCall[] = [];
     const fetchImpl = makeFetch(calls, () =>
       okJson(status, { success: false, error: status === 401 ? "Yêu cầu đăng nhập (401)" : "Không có quyền (403)" })
     );
     const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
     assert.equal(result.ok, false);
-    assert.equal((result as any).kind, "auth_error");
-    assert.equal((result as any).paymentStatusIsPaid ?? false, false);
+    assert.equal(result.kind, "auth_error");
+    assert.equal(result.paymentStatusIsPaid ?? false, false);
   }
 });
 
 test("T3 — 5xx → http_error, không paid", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () => okJson(500, { success: false, error: "Lỗi cập nhật trạng thái thanh toán" }));
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "http_error");
-  assert.equal((result as any).paymentStatusIsPaid ?? false, false);
+  assert.equal(result.kind, "http_error");
+  assert.equal(result.paymentStatusIsPaid ?? false, false);
 });
 
 test("T3b — 409 state_changed → http_error, không paid", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () =>
     okJson(409, { success: false, outcome: "state_changed", error: "Trạng thái đơn đã thay đổi", currentStatus: "shipping", paymentRecorded: true })
   );
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "http_error");
-  assert.equal((result as any).paymentStatusIsPaid ?? false, false);
+  assert.equal(result.kind, "http_error");
+  assert.equal(result.paymentStatusIsPaid ?? false, false);
 });
 
 test("T4 — network rejection → network_error; retry sau đó in-flight sạch, không duplicate", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   // Lần 1: fetch ném lỗi mạng.
   const failingFetch = (async () => {
     throw new TypeError("fetch failed");
   }) as unknown as typeof fetch;
   const r1 = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, failingFetch);
   assert.equal(r1.ok, false);
-  assert.equal((r1 as any).kind, "network_error");
+  assert.equal(r1.kind, "network_error");
   // in-flight đã được nhả → retry được phép.
   assert.equal(isPaymentConfirmInFlight(ORDER_CODE), false);
 
@@ -150,31 +157,31 @@ test("T4 — network rejection → network_error; retry sau đó in-flight sạc
   );
   const r2 = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, retryFetch);
   assert.equal(r2.ok, false);
-  assert.equal((r2 as any).kind, "already_paid");
-  assert.equal((r2 as any).paymentStatusIsPaid, true);
+  assert.equal(r2.kind, "already_paid");
+  assert.equal(r2.paymentStatusIsPaid, true);
   // Server-side dedup do recordPaymentOnce + unique constraint 018 xử lý —
   // helper chỉ đảm bảo không gửi trùng request đồng thời (xem T7).
 });
 
 test("T5 — 2xx success=false (đơn không ở trạng thái pending) → business_error, không paid", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () =>
     okJson(200, { success: false, error: "Đơn hàng không ở trạng thái pending, không thể xác nhận thanh toán." })
   );
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "business_error");
-  assert.equal((result as any).paymentStatusIsPaid ?? false, false);
+  assert.equal(result.kind, "business_error");
+  assert.equal(result.paymentStatusIsPaid ?? false, false);
 });
 
 test("T5b — 2xx body thiếu contract (không success/outcome) → invalid_response, không báo thành công giả", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () => okJson(200, { unexpected: "shape" }));
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "invalid_response");
+  assert.equal(result.kind, "invalid_response");
 });
 
 test("T5c — 2xx json() ném (malformed) → invalid_response, không paid", async () => {
@@ -186,16 +193,16 @@ test("T5c — 2xx json() ném (malformed) → invalid_response, không paid", as
       throw new SyntaxError("Unexpected token");
     },
   };
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () => malformed);
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "invalid_response");
+  assert.equal(result.kind, "invalid_response");
 });
 
 test("T6 — đơn cancelled → lưu review event, không đánh paid và không hồi sinh", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () =>
     okJson(409, {
       success: false,
@@ -211,22 +218,22 @@ test("T6 — đơn cancelled → lưu review event, không đánh paid và khôn
   );
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "order_cancelled");
+  assert.equal(result.kind, "order_cancelled");
   // Server ĐÃ set payment_status=paid (trace) → caller chỉ đồng bộ local paid,
   // GIỮ nguyên order_status=cancelled (helper không trả ok → không đổi order).
-  assert.equal((result as any).paymentStatusIsPaid, false);
+  assert.equal(result.paymentStatusIsPaid, false);
 });
 
 test("T7 — double-click/in-flight → in_flight, chỉ 1 request được gửi", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   let release: (v: StubResponse) => void = () => {};
   const gate = new Promise<StubResponse>((resolve) => {
     release = resolve;
   });
   // fetch treo cho tới khi release — mô phỏng request đang trong flight.
   const slowFetch = (async (_url: string, _init?: RequestInit) => {
-    calls.push({ url: String(_url), body: JSON.parse(String((_init as any)?.body)) });
+    calls.push({ url: String(_url), body: parseRequestBody(_init?.body) });
     return gate;
   }) as unknown as typeof fetch;
 
@@ -234,7 +241,7 @@ test("T7 — double-click/in-flight → in_flight, chỉ 1 request được gử
   // Trong lúc p1 còn flight, gọi thứ hai → in_flight, KHÔNG gửi request nữa.
   const r2 = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, slowFetch);
   assert.equal(r2.ok, false);
-  assert.equal((r2 as any).kind, "in_flight");
+  assert.equal(r2.kind, "in_flight");
   assert.equal(calls.length, 1, "chỉ 1 request được gửi khi có in-flight");
 
   // Nhả p1 → thành công, in-flight được dọn.
@@ -247,14 +254,14 @@ test("T7 — double-click/in-flight → in_flight, chỉ 1 request được gử
 
 test("T8 — webhook/payment đã ghi nhận trước đó → already_paid, idempotent, không nhân đôi", async () => {
   resetPaymentConfirmInFlight();
-  const calls: any[] = [];
+  const calls: FetchCall[] = [];
   const fetchImpl = makeFetch(calls, () =>
     okJson(200, { success: false, error: "Đơn hàng này đã được xác nhận thanh toán trước đó.", isAlreadyPaid: true })
   );
   const result = await confirmPaymentServerFirst(ORDER_CODE, { amount: 100, referenceNumber: "BANK-REF-123" }, fetchImpl);
   assert.equal(result.ok, false);
-  assert.equal((result as any).kind, "already_paid");
-  assert.equal((result as any).paymentStatusIsPaid, true);
+  assert.equal(result.kind, "already_paid");
+  assert.equal(result.paymentStatusIsPaid, true);
   // Caller chỉ đồng bộ local paid (idempotent) — record dedup do
   // recordPaymentOnce (paymentRecordService tests P1-P8) + constraint 018.
 });
@@ -311,7 +318,7 @@ function seedOrder(orderCode: string, paymentStatus: "pending" | "paid" | "faile
       payment_status: paymentStatus,
       final_amount: 100000,
     },
-  ] as any[];
+  ];
   storage.set("gieomo_orders", JSON.stringify(orders));
 }
 
@@ -331,12 +338,12 @@ test("T9a — approveStoredPayment local-only: cập nhật paid LOCAL, KHÔNG f
 
   // Local đã paid.
   const orders = getStoredOrders();
-  const target = orders.find((o: any) => o.order_code === "GM-APPROVE-1");
+  const target = orders.find((order) => order.order_code === "GM-APPROVE-1");
   assert.ok(target, "order phải tồn tại trong cache local");
   assert.equal(target!.payment_status, "paid");
   // Payment record local đã paid.
   const pays = getStoredPayments();
-  assert.equal(pays.find((p: any) => p.paymentId === "pay-1")?.status, "paid");
+  assert.equal(pays.find((payment) => payment.paymentId === "pay-1")?.status, "paid");
   // KHÔNG có PATCH /api/orders nào được gửi (local-only — server đã confirm trước).
   const patches = fetchCalls.filter((c) => c.method === "PATCH" && c.url.startsWith("/api/orders"));
   assert.equal(patches.length, 0, "approveStoredPayment không được fire-and-forget PATCH");
@@ -353,7 +360,7 @@ test("T9b — syncStoredPaymentStatusLocal local-only: KHÔNG fetch PATCH", asyn
 });
 
 test("T9c — confirmOrderPaymentFromWebhook đã bị xóa (dead code, unsafe mark-paid path)", async () => {
-  const orderStore: any = await import("../src/lib/data/orderStore.ts");
+  const orderStore: Record<string, unknown> = await import("../src/lib/data/orderStore.ts");
   assert.equal(
     typeof orderStore.confirmOrderPaymentFromWebhook,
     "undefined",

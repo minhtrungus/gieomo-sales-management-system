@@ -79,7 +79,8 @@ function createAdjustHandler(deps: Deps) {
           error = res.message ?? "server fail";
           return;
         }
-      } catch (err: any) {
+      } catch (caught: unknown) {
+        const err = caught as { message?: string } | null;
         // Timeout/network — kết quả không xác định: không mutate local, GIỮ key
         error = err?.message ?? "network";
         return;
@@ -196,7 +197,7 @@ test("H5 — server xác nhận thất bại (ok=false) → không local, GIỮ 
   let localCalls = 0;
   let calls = 0;
   const h = createAdjustHandler({
-    postAdjustStock: async (p) => {
+    postAdjustStock: async () => {
       calls += 1;
       if (calls === 1) return { ok: false, message: "Tồn kho không đủ" };
       return { ok: true, result: { status: "applied" } };

@@ -7,17 +7,13 @@ import {
   MessageSquare,
   Mail,
   Phone,
-  Clock,
   Check,
   Reply,
-  Search,
   Filter,
   Star,
   Trash2,
   CheckCircle,
   ExternalLink,
-  ShieldCheck,
-  Image as ImageIcon,
   AlertTriangle,
   X,
 } from "lucide-react";
@@ -88,7 +84,7 @@ export default function AdminMessagesPage() {
   };
 
   useEffect(() => {
-    loadData();
+    queueMicrotask(() => void loadData());
     const handleMsgUpdate = () => setMessages(getStoredContactMessages());
     const handleRevUpdate = () => setReviews(getStoredReviews());
     const handleProdUpdate = () => setProducts(getStoredProducts());
@@ -152,7 +148,6 @@ export default function AdminMessagesPage() {
   }, [messages, searchQuery, statusFilter]);
 
   const unreadCount = messages.filter((m) => m.status === "unread").length;
-  const repliedCount = messages.filter((m) => m.status === "replied").length;
 
   // Product Reviews Helpers
   const productMap = useMemo(() => {
@@ -283,7 +278,7 @@ export default function AdminMessagesPage() {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setStatusFilter(tab.id as any)}
+                  onClick={() => setStatusFilter(tab.id as "all" | "unread" | "read" | "replied")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     statusFilter === tab.id
                       ? "bg-[#2D6338] text-white"
@@ -388,7 +383,7 @@ export default function AdminMessagesPage() {
                       <select
                         value={selectedMessage.status}
                         onChange={(e) =>
-                          handleStatusChange(selectedMessage.id, e.target.value as any)
+                          handleStatusChange(selectedMessage.id, e.target.value as "unread" | "read" | "replied")
                         }
                         className="p-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 bg-white outline-none focus:border-[#2D6338]"
                       >
@@ -533,7 +528,7 @@ export default function AdminMessagesPage() {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setReviewRatingFilter(tab.id as any)}
+                  onClick={() => setReviewRatingFilter(tab.id as "all" | "5" | "4" | "3" | "low" | "with_image")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     reviewRatingFilter === tab.id
                       ? "bg-[#2D6338] text-white"

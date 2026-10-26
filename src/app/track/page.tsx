@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CUSTOMER_TIMELINE_STEPS, ORDER_STATUS_LABELS } from "@/lib/constants";
 import { getStoredOrders } from "@/lib/data/orderStore";
-import type { Order } from "@/types/database";
+import type { Order, OrderItem } from "@/types/database";
 
 function removeVietnameseTones(str: string): string {
   return str
@@ -48,7 +47,8 @@ function TrackContent() {
   const [savedProfile, setSavedProfile] = useState<{ name: string; phone: string } | null>(null);
 
   useEffect(() => {
-    try {
+    queueMicrotask(() => {
+      try {
       const allOrders = getStoredOrders();
       const profileRaw = localStorage.getItem("gieomo_customer_profile");
       const myCodesRaw = localStorage.getItem("gieomo_my_order_codes");
@@ -77,18 +77,31 @@ function TrackContent() {
       }
       setDeviceOrders(localOrders);
 
-      // If URL has code, search directly
-      if (initialCode) {
-        performSearchByCode(initialCode, allOrders);
+      } catch (e) {
+        console.error("Error reading device history", e);
       }
-    } catch (e) {
-      console.error("Error reading device history", e);
-    }
-  }, [initialCode]);
+    });
+  }, []);
 
-  const mapServerOrder = (srv: any): Order => ({
-    order_id: srv.order_id,
-    order_code: srv.order_code,
+  type ServerOrderItem = Partial<OrderItem> & {
+    product_name?: string;
+    variant_name?: string;
+    price?: number;
+    unit_price?: number;
+  };
+  type ServerOrder = Partial<Order> & {
+    receiver_name?: string;
+    receiver_phone?: string;
+    shipping_address_snapshot?: string;
+    voucher_discount?: number;
+    customers?: { full_name?: string; phone?: string; email?: string };
+    items?: ServerOrderItem[];
+    order_items?: ServerOrderItem[];
+  };
+
+  const mapServerOrder = useCallback((srv: ServerOrder): Order => ({
+    order_id: srv.order_id || "",
+    order_code: srv.order_code || "",
     buyer_name: srv.buyer_name || srv.customers?.full_name || srv.receiver_name || "Khách hàng",
     buyer_phone: srv.buyer_phone || srv.customers?.phone || srv.receiver_phone || "",
     buyer_email: srv.buyer_email || srv.customers?.email || "",
@@ -110,9 +123,9 @@ function TrackContent() {
     updated_at: srv.updated_at || srv.created_at || new Date().toISOString(),
     items:
       Array.isArray(srv.items) && srv.items.length > 0
-        ? srv.items.map((it: any) => ({
+        ? srv.items.map((it: ServerOrderItem) => ({
             order_item_id: it.order_item_id || `item-${it.product_name || "product"}`,
-            order_id: it.order_id || srv.order_id,
+            order_id: it.order_id || srv.order_id || "",
             product_id: it.product_id || "",
             variant_id: it.variant_id || null,
             combo_id: it.combo_id || null,
@@ -127,9 +140,9 @@ function TrackContent() {
             created_at: it.created_at || srv.created_at || new Date().toISOString(),
           }))
         : Array.isArray(srv.order_items) && srv.order_items.length > 0
-        ? srv.order_items.map((it: any) => ({
+        ? srv.order_items.map((it: ServerOrderItem) => ({
             order_item_id: it.order_item_id || `item-${it.item_name_snapshot || "product"}`,
-            order_id: it.order_id || srv.order_id,
+            order_id: it.order_id || srv.order_id || "",
             product_id: it.product_id || "",
             variant_id: it.variant_id || null,
             combo_id: it.combo_id || null,
@@ -142,9 +155,9 @@ function TrackContent() {
             created_at: srv.created_at || new Date().toISOString(),
           }))
         : [],
-  });
+  }), []);
 
-  const performSearchByCode = async (rawQuery: string, ordersList?: Order[]) => {
+  const performSearchByCode = useCallback(async (rawQuery: string, ordersList?: Order[]) => {
     setErrorMsg(null);
     setHasSearched(true);
 
@@ -209,7 +222,13 @@ function TrackContent() {
     setErrorMsg(
       `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817) được cấp khi bạn đặt hàng.`
     );
-  };
+  }, [mapServerOrder, searchPhone]);
+
+  useEffect(() => {
+    if (initialCode) {
+      queueMicrotask(() => void performSearchByCode(initialCode, getStoredOrders()));
+    }
+  }, [initialCode, performSearchByCode]);
 
   const performSearchByPhoneAndName = async (rawPhone: string, rawName: string) => {
     setErrorMsg(null);
@@ -496,7 +515,7 @@ function TrackContent() {
           </h3>
 
           <div className="divide-y divide-gray-100">
-            {matchedOrders.map((ord, idx) => (
+            {matchedOrders.map((ord) => (
               <div
                 key={ord.order_id}
                 className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-gray-50/60 p-3 rounded-2xl transition-colors"
@@ -587,7 +606,7 @@ function TrackContent() {
 
                 const getStepTimestamp = () => {
                   if (idx > currentStepIndex) return null;
-                  const timestamps = (selectedOrder as any).status_timestamps || {};
+                  const timestamps = (selectedOrder as Order & { status_timestamps?: Record<string, string> }).status_timestamps || {};
                   if (timestamps[step.key]) return timestamps[step.key];
                   if (step.key === "pending") return selectedOrder.created_at;
                   if (step.key === "confirmed") return selectedOrder.confirmed_at || (idx <= currentStepIndex ? selectedOrder.updated_at || selectedOrder.created_at : null);

@@ -35,12 +35,14 @@ export default function CartPage() {
   useEffect(() => {
     syncVouchersFromServer(true);
     syncSettingsFromServer(true);
-    const res = validateCart();
-    if (res && res.removedCount > 0) {
-      setRemovedAlert(true);
-    }
-    setSettings(getStoredSettings());
-    setAllVouchers(getStoredVouchers().filter((v) => v.status === "active"));
+    queueMicrotask(() => {
+      const res = validateCart();
+      if (res && res.removedCount > 0) {
+        setRemovedAlert(true);
+      }
+      setSettings(getStoredSettings());
+      setAllVouchers(getStoredVouchers().filter((v) => v.status === "active"));
+    });
   }, [validateCart]);
 
   const subtotal = getSubtotal();

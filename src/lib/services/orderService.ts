@@ -2,6 +2,54 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyOrderProofToken } from "@/lib/auth/serverAuth";
 
 type DbReadError = { code?: string | null; message?: string | null };
+type PackingReservation = { order_id: string; variant_id: string; quantity: number };
+type PackingVariant = {
+  variant_id: string;
+  name?: string | null;
+  sku?: string | null;
+  products?: { name?: string | null } | Array<{ name?: string | null }> | null;
+};
+type OrderItemRow = {
+  order_item_id: string;
+  product_id?: string | null;
+  variant_id?: string | null;
+  combo_id?: string | null;
+  item_name_snapshot: string;
+  variant_name_snapshot?: string | null;
+  sku_snapshot?: string | null;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+};
+type OrderQueryRow = {
+  order_id: string;
+  order_code: string;
+  receiver_name?: string | null;
+  receiver_phone?: string | null;
+  delivery_type?: string | null;
+  shipping_address_snapshot?: string | null;
+  subtotal: number;
+  shipping_fee: number;
+  voucher_discount: number;
+  final_amount: number;
+  order_status: string;
+  payment_status: string;
+  delivery_status: string;
+  payment_method: string;
+  customer_note?: string | null;
+  internal_note?: string | null;
+  assigned_shipper_id?: string | null;
+  source_type?: string | null;
+  introducer_info?: string | null;
+  seller_id?: string | null;
+  created_at: string;
+  confirmed_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  customers?: { full_name?: string | null; phone?: string | null; email?: string | null } |
+    Array<{ full_name?: string | null; phone?: string | null; email?: string | null }> | null;
+  order_items?: OrderItemRow[] | null;
+};
 
 export function canExposeOrderPaymentProof(
   isAdmin: boolean,
@@ -134,7 +182,7 @@ export async function getOrdersServer(options?: {
       variant_name: string;
       sku: string | null;
     }>>();
-    const orderIds = (data || []).map((row: any) => row.order_id).filter(Boolean);
+    const orderIds = (data || []).map((row: OrderQueryRow) => row.order_id).filter(Boolean);
 
     if (orderIds.length > 0) {
       const reservationResult = await supabase
@@ -158,9 +206,9 @@ export async function getOrdersServer(options?: {
       } else {
         const reservations = reservationResult.data || [];
         const variantIds = [...new Set(
-          reservations.map((row: any) => row.variant_id).filter(Boolean),
+          reservations.map((row: PackingReservation) => row.variant_id).filter(Boolean),
         )];
-        const variantById = new Map<string, any>();
+        const variantById = new Map<string, PackingVariant>();
 
         if (variantIds.length > 0) {
           const variantResult = await supabase
@@ -194,9 +242,11 @@ export async function getOrdersServer(options?: {
       }
     }
 
-    return (data || []).flatMap((row: any) => {
+    return (data || []).flatMap((sourceRow: OrderQueryRow) => {
+      const customer = Array.isArray(sourceRow.customers) ? sourceRow.customers[0] : sourceRow.customers;
+      const row = { ...sourceRow, customers: customer };
       const inputPhone = options?.phone?.replace(/\D/g, "") || "";
-      const buyerPhone = String(row.customers?.phone || "").replace(/\D/g, "");
+      const buyerPhone = String(customer?.phone || "").replace(/\D/g, "");
       const receiverPhone = String(row.receiver_phone || "").replace(/\D/g, "");
       const hasPhoneVerification = Boolean(
         inputPhone.length >= 9 && (inputPhone === buyerPhone || inputPhone === receiverPhone)
@@ -219,7 +269,7 @@ export async function getOrdersServer(options?: {
         order_code: row.order_code,
         buyer_name: shouldMask ? maskName(rawBuyerName) : rawBuyerName,
         buyer_phone: shouldMask ? maskPhoneStr(rawBuyerPhone) : rawBuyerPhone,
-        buyer_email: shouldMask ? "" : (row.customers?.email || ""),
+        buyer_email: shouldMask ? "" : (customer?.email || ""),
         recipient_name: shouldMask ? maskName(rawRecipientName) : rawRecipientName,
         recipient_phone: shouldMask ? maskPhoneStr(rawRecipientPhone) : rawRecipientPhone,
         address_detail: shouldMask ? maskAddressStr(rawAddress) : rawAddress,
@@ -251,7 +301,7 @@ export async function getOrdersServer(options?: {
         confirmed_at: row.confirmed_at,
         completed_at: row.completed_at,
         cancelled_at: row.cancelled_at,
-        items: (row.order_items || []).map((it: any) => ({
+        items: (row.order_items || []).map((it: OrderItemRow) => ({
           order_item_id: it.order_item_id,
           order_id: row.order_id,
           product_id: it.product_id ?? null,

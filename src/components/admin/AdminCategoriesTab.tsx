@@ -28,7 +28,7 @@ export function AdminCategoriesTab() {
   };
 
   useEffect(() => {
-    loadData();
+    queueMicrotask(loadData);
     const handleCatUpdate = () => setCategories(getStoredCategories());
     const handleProdUpdate = () => setProducts(getStoredProducts());
 
@@ -478,7 +478,7 @@ export function AdminCategoriesTab() {
                   <label className="font-bold text-[#342A24] block">Trạng thái</label>
                   <select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    onChange={(e) => setNewStatus(e.target.value as "active" | "draft")}
                     className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"
                   >
                     <option value="active">Đang dùng</option>
@@ -592,7 +592,7 @@ export function AdminCategoriesTab() {
                     onChange={(e) =>
                       setEditingCategory({
                         ...editingCategory,
-                        status: e.target.value as any,
+                        status: e.target.value as ProductCategory["status"],
                       })
                     }
                     className="w-full px-3 py-2 rounded-xl border border-[#F0E5D8] text-xs font-semibold text-[#342A24] bg-white outline-none"

@@ -34,8 +34,30 @@ export type PaymentRecordResult = {
   error: string | null;
 };
 
-type SupabaseLike = {
-  from(table: string): any;
+export type PaymentDbError = { message: string; code?: string | null };
+export type PaymentInsertRow = Record<string, unknown>;
+
+type PaymentSelectBuilder = {
+  eq(column: string, value: unknown): {
+    eq(column: string, value: unknown): {
+      maybeSingle(): Promise<{
+        data: { payment_id: string } | null;
+        error: PaymentDbError | null;
+      }>;
+    };
+  };
+};
+
+type PaymentTable = {
+  select(columns: string): PaymentSelectBuilder;
+  insert(rows: PaymentInsertRow[]): PromiseLike<{
+    data: unknown;
+    error: PaymentDbError | null;
+  }>;
+};
+
+export type PaymentSupabaseLike = {
+  from(table: string): PaymentTable;
 };
 
 /** Tên unique constraint do migration 018 tạo (dùng filter 23505 — fail-closed). */
@@ -54,7 +76,7 @@ function isPaymentUniqueViolation(err: unknown): boolean {
 }
 
 export async function recordPaymentOnce(
-  supabase: SupabaseLike,
+  supabase: PaymentSupabaseLike,
   input: PaymentRecordInput
 ): Promise<PaymentRecordResult> {
   const { orderId, amount, transactionCode, paymentMethod = "banking" } = input;

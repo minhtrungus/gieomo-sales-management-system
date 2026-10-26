@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
-import { Star, CheckCircle, Image as ImageIcon, Trash2, ShieldCheck, Camera, MessageSquare, Loader2 } from "lucide-react";
+import { Star, CheckCircle, Trash2, Camera, MessageSquare, Loader2 } from "lucide-react";
 import {
   getStoredReviews,
   saveNewReview,
@@ -48,20 +48,20 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
   // Selected image modal for zoom
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
-  const loadReviews = () => {
+  const loadReviews = useCallback(() => {
     const local = getStoredReviews(productId, productSlug);
     setReviews(local);
     setIsAdmin(isAdminAuthenticated());
-  };
+  }, [productId, productSlug]);
 
   useEffect(() => {
-    loadReviews();
+    queueMicrotask(loadReviews);
     syncReviewsFromServer(productId, productSlug);
 
     const handleUpdate = () => loadReviews();
     window.addEventListener("gieomo_reviews_updated", handleUpdate);
     return () => window.removeEventListener("gieomo_reviews_updated", handleUpdate);
-  }, [productId, productSlug]);
+  }, [productId, productSlug, loadReviews]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -91,7 +91,7 @@ export function ProductReviews({ productId, productName, productSlug }: ProductR
       if (errors.length > 0) {
         setFormError(`Lỗi tải ảnh đính kèm: ${errors.join("; ")}`);
       }
-    } catch (err: any) {
+    } catch {
       setFormError("Không thể tải ảnh đính kèm. Vui lòng thử lại.");
     } finally {
       setIsUploadingImages(false);

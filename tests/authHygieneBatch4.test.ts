@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { readFileSync } from "node:fs";
-import { createFakeOrderDb, type FakeOrderDb } from "./helpers/fakeOrderDb.ts";
+import { createFakeOrderDb, type FakeOrderDb, type Row } from "./helpers/fakeOrderDb.ts";
 
 /**
  * Batch 4b — auth hygiene fixes (source-verified, mock/contract):
@@ -166,9 +166,15 @@ function presenceGetReq(): Promise<Response> {
   return PRESENCE_GET(new Request("http://localhost/api/members/presence", { method: "GET" }));
 }
 
-const json = async (res: Response): Promise<Record<string, any>> => (await res.json()) as Record<string, any>;
-const historyOf = (db: FakeOrderDb): Array<Record<string, any>> => db.tables.order_status_history ?? [];
-const configsOf = (db: FakeOrderDb): Array<Record<string, any>> => db.tables.system_configs ?? [];
+type JsonBody = Record<string, unknown> & { presence: Record<string, unknown> };
+
+const json = async (res: Response): Promise<JsonBody> => {
+  const body: unknown = await res.json();
+  assert.ok(body && typeof body === "object" && !Array.isArray(body));
+  return body as JsonBody;
+};
+const historyOf = (db: FakeOrderDb): Row[] => db.tables.order_status_history ?? [];
+const configsOf = (db: FakeOrderDb): Row[] => db.tables.system_configs ?? [];
 
 test("BH1 — sepay sai API key → 401, success:false", async () => {
   seedDb();
@@ -218,7 +224,7 @@ test("BH4 — presence POST: body spoof memberId/email bị bỏ, chỉ ghi sess
   // persisted vào system_configs
   const cfg = configsOf(db).find((c) => c.config_key === "members_online_presence");
   assert.ok(cfg, "presence được upsert vào system_configs");
-  const persisted = JSON.parse(cfg!.config_value);
+  const persisted = JSON.parse(String(cfg!.config_value)) as Record<string, unknown>;
   assert.ok(persisted[STAFF_ID], "persisted map có session identity");
   assert.ok(!("evil-9999-spoof" in persisted), "persisted map không có spoof key");
 });

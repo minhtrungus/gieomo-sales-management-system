@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { createFakeOrderDb, type FakeOrderDb, type HookContext } from "./helpers/fakeOrderDb.ts";
+import {
+  createFakeOrderDb,
+  type FakeOrderDb,
+  type HookContext,
+  type Row,
+} from "./helpers/fakeOrderDb.ts";
 
 /**
  * Batch 2F — unit/mock tests cho SAFE variant upsert trong upsertProductServer
@@ -77,7 +82,8 @@ const PRODUCT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const VAR_ID_1 = "11111111-1111-1111-1111-111111111111";
 const VAR_ID_2 = "22222222-2222-2222-2222-222222222222";
 
-type OpRecord = { table: string; op: string; payload?: any };
+type OpRecord = { table: string; op: string; payload?: Row | Row[] };
+type ProductInput = Parameters<typeof upsertProductServer>[0];
 
 function seedDb(): { db: FakeOrderDb; ops: OpRecord[] } {
   const ops: OpRecord[] = [];
@@ -126,16 +132,16 @@ function seedDb(): { db: FakeOrderDb; ops: OpRecord[] } {
   return { db, ops };
 }
 
-function baseProduct(overrides: Record<string, any> = {}): any {
+function baseProduct(overrides: Record<string, unknown> = {}): ProductInput {
   return {
     product_id: PRODUCT_ID,
     name: "Sản phẩm A",
     slug: "sp-a",
     price: 100000,
     status: "active",
-    variants: [] as any[],
+    variants: [],
     ...overrides,
-  };
+  } as unknown as ProductInput;
 }
 
 function variantOps(ops: OpRecord[], op: string) {
@@ -166,6 +172,7 @@ test("U1/U2 — variant hiện có match theo variant_id; UPDATE payload KHÔNG 
   const updates = variantOps(ops, "update");
   assert.equal(updates.length, 1, "phải UPDATE đúng1 variant hiện có");
   const updPayload = updates[0].payload;
+  assert.ok(!Array.isArray(updPayload));
   assert.ok(updPayload, "update phải có payload");
   assert.equal(
     "stock" in updPayload,
@@ -204,8 +211,10 @@ test("U3 — SKU fallback: pseudo variant_id không match; match theo SKU duy nh
 
   const updates = variantOps(ops, "update");
   assert.equal(updates.length, 1);
+  const updatePayload = updates[0].payload;
+  assert.ok(updatePayload && !Array.isArray(updatePayload));
   assert.equal(
-    "stock" in updates[0].payload,
+    "stock" in updatePayload,
     false,
     "SKU-fallback UPDATE cũng KHÔNG được chứa stock"
   );
@@ -219,7 +228,7 @@ test("U3 — SKU fallback: pseudo variant_id không match; match theo SKU duy nh
 // U4 — SKU mơ hồ trong payload (2 entry cùng SKU) → fail closed
 // ============================================================
 test("U4 — 2 payload entry cùng SKU → fail closed, không update/insert/delete gì", async () => {
-  const { db, ops } = seedDb();
+  const { ops } = seedDb();
   const res = await upsertProductServer(
     baseProduct({
       variants: [
@@ -281,6 +290,7 @@ test("U6 — variant mới → INSERT đúng contract (stock từ payload, khôn
   const insRows = Array.isArray(inserts[0].payload) ? inserts[0].payload : [inserts[0].payload];
   assert.equal(insRows.length, 1);
   const row = insRows[0];
+  assert.ok(row);
   assert.equal(row.product_id, PRODUCT_ID);
   assert.equal(row.sku, "SKU-NEW-01");
   assert.equal(row.stock, 12, "stock ban đầu = payload");
@@ -365,14 +375,15 @@ test("U9 — 2 payload match cùng1 DB variant (ID + SKU) → fail closed", asyn
   assert.ok(res.error && res.error.includes("mơ hồ"), `error phải báo mơ hồ, got: ${res.error}`);
   assert.equal(variantOps(ops, "update").length, 0);
   assert.equal(variantOps(ops, "insert").length, 0);
+  assert.equal(db.tables.product_variants?.length, 2);
 });
 
 // ============================================================
 // U10 — stock ban đầu variant mới không hợp lệ → fail closed
 // ============================================================
 test("U10 — variant mới có stock âm/không nguyên → fail closed, không insert", async () => {
-  const { db, ops } = seedDb();
-  for (const bad of [-1, 2.5, NaN as any]) {
+  const { ops } = seedDb();
+  for (const bad of [-1, 2.5, Number.NaN]) {
     const res = await upsertProductServer(
       baseProduct({
         variants: [{ sku: "SKU-BAD", name: "X", stock: bad }],

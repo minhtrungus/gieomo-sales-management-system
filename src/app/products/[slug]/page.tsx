@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { getProductBySlugServer, getProductsServer } from "@/lib/services/productService";
 import { getSiteUrl } from "@/lib/constants";
 import { ProductDetailClient } from "./ProductDetailClient";
@@ -39,7 +38,13 @@ function buildMetaDescription(productName: string, price: number, rawDesc?: stri
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductBySlugServer(slug);
+  let product = null;
+  try {
+    product = await getProductBySlugServer(slug);
+  } catch {
+    // Keep metadata generation available when the product service is
+    // temporarily unavailable; the client can still use its supported cache.
+  }
 
   if (!product) {
     const formattedTitle = slug
@@ -117,8 +122,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
   const decodedSlug = decodeURIComponent(slug);
 
-  // Single roundtrip to fetch all active products
-  const allProducts = await getProductsServer(false);
+  // Single roundtrip to fetch all active products. Service unavailability must
+  // not prevent the client from rendering its supported local product cache.
+  let allProducts: Awaited<ReturnType<typeof getProductsServer>> = [];
+  try {
+    allProducts = await getProductsServer(false);
+  } catch {
+    allProducts = [];
+  }
   let product = allProducts.find(
     (p) =>
       p.slug === slug ||
@@ -129,7 +140,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   // Fallback if product is a draft or unlisted
   if (!product) {
-    product = (await getProductBySlugServer(slug)) ?? undefined;
+    try {
+      product = (await getProductBySlugServer(slug)) ?? undefined;
+    } catch {
+      product = undefined;
+    }
   }
 
   const relatedProducts = allProducts

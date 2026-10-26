@@ -3,11 +3,19 @@ import assert from "node:assert/strict";
 
 const pgUrl = process.env.ATOMIC_PG_URL;
 const isolated = process.env.GIEOMO_PG_ISOLATED === "1";
-let Client: any = null;
+type QueryResult = { rows: Array<{ count: number }> };
+type PgClientLike = {
+  connect(): Promise<void>;
+  query(sql: string, values?: unknown[]): Promise<QueryResult>;
+  end(): Promise<void>;
+};
+type PgClientConstructor = new (config: { connectionString?: string }) => PgClientLike;
+
+let Client: PgClientConstructor | null = null;
 try {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (
     specifier: string
-  ) => Promise<any>;
+  ) => Promise<{ Client: PgClientConstructor }>;
   ({ Client } = await dynamicImport("pg"));
 } catch {
   // Reported as a skip below; CI installs pg ephemerally.
@@ -22,6 +30,7 @@ const skipReason = !isolated
       : false;
 
 test("voucher duplicate code is rejected sequentially on isolated PostgreSQL", { skip: skipReason }, async () => {
+  assert.ok(Client);
   const client = new Client({ connectionString: pgUrl });
   await client.connect();
   const code = `ISO-VOUCHER-SEQ-${Date.now()}`;
@@ -35,7 +44,7 @@ test("voucher duplicate code is rejected sequentially on isolated PostgreSQL", {
     await client.query(sql, [code]);
     await assert.rejects(
       () => client.query(sql, [code]),
-      (error: any) => error?.code === "23505"
+      (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "23505")
     );
     await client.query("ROLLBACK");
   } finally {
@@ -44,6 +53,7 @@ test("voucher duplicate code is rejected sequentially on isolated PostgreSQL", {
 });
 
 test("voucher duplicate code is serialized across two isolated sessions", { skip: skipReason }, async () => {
+  assert.ok(Client);
   const first = new Client({ connectionString: pgUrl });
   const second = new Client({ connectionString: pgUrl });
   await first.connect();
@@ -63,7 +73,10 @@ test("voucher duplicate code is serialized across two isolated sessions", { skip
     await first.query("COMMIT");
     await assert.rejects(
       () => losing,
-      (error: any) => error?.code === "23505" || error?.code === "55P03"
+      (error: unknown) => Boolean(
+        error && typeof error === "object" && "code" in error &&
+        (error.code === "23505" || error.code === "55P03")
+      )
     );
     await second.query("ROLLBACK");
 

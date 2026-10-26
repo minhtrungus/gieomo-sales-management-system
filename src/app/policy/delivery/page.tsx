@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import Link from "next/link";
-import { Truck, ShieldCheck, Clock, PackageCheck } from "lucide-react";
+import { Truck, ShieldCheck, Clock } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Chính sách vận chuyển",

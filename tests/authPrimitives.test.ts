@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { createHmac } from "crypto";
-import { createFakeOrderDb } from "./helpers/fakeOrderDb.ts";
+import { createFakeOrderDb, type FakeOrderDb } from "./helpers/fakeOrderDb.ts";
 
 /**
  * Batch B — pin HÀNH VI auth primitives THẬT (serverAuth), không mock function.
@@ -92,12 +92,14 @@ const BASE_USER = {
   authVersion: "2026-10-23T00:00:00.000Z",
 };
 
+const testGlobal = globalThis as typeof globalThis & { __fakeOrderDb?: FakeOrderDb };
+
 function setCurrentMember(
   role: "admin" | "btc_sale" | "delivery_staff",
   status = "active",
   updatedAt = BASE_USER.authVersion
 ): void {
-  (globalThis as any).__fakeOrderDb = createFakeOrderDb({
+  testGlobal.__fakeOrderDb = createFakeOrderDb({
     members: [{
       member_id: BASE_USER.memberId,
       email: BASE_USER.email,

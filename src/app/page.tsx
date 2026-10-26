@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
-import { Sparkles, ArrowRight, Heart, Scissors, Compass } from "lucide-react";
+import { Sparkles, ArrowRight, Heart, Compass } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Gieo Mơ",

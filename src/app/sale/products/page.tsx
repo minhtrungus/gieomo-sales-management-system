@@ -13,7 +13,7 @@ export default function SaleProductsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    setProducts(getStoredProducts());
+    queueMicrotask(() => setProducts(getStoredProducts()));
   }, []);
 
   const filteredProducts = products.filter((p) => {

@@ -2,9 +2,14 @@ import type { Product, ProductCategory, ProductVariant, Combo, Voucher, Order, O
 
 export const MOCK_WAREHOUSES: Warehouse[] = [];
 
+export interface ExtendedProductVariant extends ProductVariant {
+  local_cancel_restored_orders?: string[];
+  imageUrl?: string | null;
+}
+
 export interface ExtendedProduct extends Product {
   category?: ProductCategory;
-  variants?: ProductVariant[];
+  variants?: ExtendedProductVariant[];
   images?: string[];
   stock?: number;
   badge?: "new" | "best_seller" | "limited" | "out_of_stock";
@@ -22,6 +27,7 @@ export interface ExtendedCombo extends Omit<Combo, "items"> {
   }>;
   images?: string[];
   thumbnail?: string;
+  stock?: number;
 }
 
 export const MOCK_CATEGORIES: ProductCategory[] = [];

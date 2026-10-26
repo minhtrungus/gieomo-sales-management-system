@@ -27,7 +27,7 @@ export const ProductCard = memo(function ProductCard({ product }: ProductCardPro
   const defaultVariant = product.variants?.[0];
   const stockCount = product.variants && product.variants.length > 0
     ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-    : (defaultVariant ? Number(defaultVariant.stock) || 0 : 0);
+    : Number(product.stock) || 0;
   const isOutOfStock = stockCount <= 0;
 
   const handleQuickAdd = (e: React.MouseEvent) => {

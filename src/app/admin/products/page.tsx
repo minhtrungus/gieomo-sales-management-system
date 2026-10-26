@@ -39,9 +39,10 @@ export default function AdminProductsPage() {
   }, []);
 
   useEffect(() => {
-    const initial = getStoredProducts();
-    setProducts(initial);
-    handleRefresh();
+    queueMicrotask(() => {
+      setProducts(getStoredProducts());
+      void handleRefresh();
+    });
 
     const handleUpdate = () => {
       setProducts(getStoredProducts());
@@ -201,7 +202,7 @@ export default function AdminProductsPage() {
             )}
           </div>
         ) : (
-          filteredProducts.map((p, idx) => {
+          filteredProducts.map((p) => {
             const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? 0;
             const isOutOfStock = totalStock <= 0;
             return (

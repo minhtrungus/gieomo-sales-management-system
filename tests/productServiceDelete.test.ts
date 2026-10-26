@@ -69,13 +69,22 @@ const PRODUCT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
 type Call = { table: string; op: string; filters: [string, unknown][] };
 type Behavior = (call: Call) => { data?: unknown; error?: { code?: string; message: string } } | undefined;
+interface MockQuery {
+  delete(): MockQuery;
+  select(): MockQuery;
+  eq(col: string, val: unknown): MockQuery;
+  neq(col: string, val: unknown): MockQuery;
+  or(): MockQuery;
+  maybeSingle(): MockQuery;
+  then(resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown): Promise<unknown>;
+}
 
 /** Chainable mock PostgREST: delete/select + eq/neq/or + maybeSingle, thenable. */
 function makeDb(behavior: Behavior, calls: Call[] = []) {
   const client = {
     from(table: string) {
       const state = { op: "select", filters: [] as [string, unknown][] };
-      const api: any = {
+      const api: MockQuery = {
         delete() {
           state.op = "delete";
           return api;

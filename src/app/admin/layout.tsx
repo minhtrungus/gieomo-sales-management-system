@@ -6,7 +6,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NotificationProvider } from "@/lib/notifications/NotificationContext";
 import { NotificationToastContainer } from "@/components/admin/NotificationToast";
-import { isAdminAuthenticated, getAdminSession, clearAdminSession, touchMemberActive } from "@/lib/data/orderStore";
+import { getAdminSession, clearAdminSession, touchMemberActive } from "@/lib/data/orderStore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

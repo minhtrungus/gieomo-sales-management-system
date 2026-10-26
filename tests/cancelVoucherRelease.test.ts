@@ -178,6 +178,7 @@ class PatchQuery {
   }
 
   private async exec(_mode: "many"): Promise<{ data: unknown; error: unknown }> {
+    void _mode;
     const world = this.world;
     world.fromCalls.push({ table: this.table, action: this.op ?? "unknown", payload: this.payload });
 

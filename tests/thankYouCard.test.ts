@@ -27,15 +27,15 @@ test("format ignores the machine timezone", () => {
   assert.equal(formatSowingDate("2026-10-11T18:30:00Z"), "12/10/2026");
 });
 test("source renderer uses template, exact color/size, local font and blank fields", async () => {
-  const calls: any[] = [];
-  const ctx: any = { save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
-    drawImage: (...args: any[]) => calls.push(["image", ...args]),
+  const calls: unknown[][] = [];
+  const ctx = { font: "", fillStyle: "", save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
+    drawImage: (...args: unknown[]) => calls.push(["image", ...args]),
     measureText: () => ({ actualBoundingBoxAscent: 50, actualBoundingBoxDescent: 10 }),
     fillText(value: string, x: number, y: number, maxWidth: number) {
       calls.push(["text", value, this.font, this.fillStyle, x, y, maxWidth]);
     } };
   Object.assign(globalThis, {
-    document: { fonts: { add: (font: any) => calls.push(["font", font]) }, createElement: () => ({ getContext: () => ctx }) },
+    document: { fonts: { add: (font: unknown) => calls.push(["font", font]) }, createElement: () => ({ getContext: () => ctx }) },
     FontFace: class { family: string; source: string;
       constructor(family: string, source: string) { this.family = family; this.source = source; }
       async load() { return this; } },

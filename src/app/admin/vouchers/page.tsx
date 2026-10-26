@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
-import { Badge } from "@/components/ui/Badge";
 import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
 import {
   getStoredOrders,
@@ -22,14 +21,9 @@ import {
   Trash2,
   X,
   Ticket,
-  AlertTriangle,
-  Filter,
   Eye,
   ShoppingBag,
   ArrowRight,
-  Search,
-  CheckCircle2,
-  Power,
 } from "lucide-react";
 
 export default function AdminVouchersPage() {
@@ -43,8 +37,10 @@ export default function AdminVouchersPage() {
   useEffect(() => {
     syncVouchersFromServer(true);
     syncOrdersFromServer(true);
-    setVouchers(getStoredVouchers());
-    setOrders(getStoredOrders());
+    queueMicrotask(() => {
+      setVouchers(getStoredVouchers());
+      setOrders(getStoredOrders());
+    });
 
     const handleVouchersUpdate = () => setVouchers(getStoredVouchers());
     const handleOrdersUpdate = () => setOrders(getStoredOrders());
@@ -72,7 +68,7 @@ export default function AdminVouchersPage() {
   const [minItemsCount, setMinItemsCount] = useState<number>(0);
   const [isGiftVoucher, setIsGiftVoucher] = useState<boolean>(false);
   const [giftMinOrderValue, setGiftMinOrderValue] = useState<number>(150000);
-  const [usageLimit, setUsageLimit] = useState<number>(50);
+  const [usageLimit] = useState<number>(50);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [status, setStatus] = useState<"active" | "inactive">("active");
 
@@ -261,7 +257,7 @@ export default function AdminVouchersPage() {
             ].map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setVisibilityFilter(tab.key as any)}
+                onClick={() => setVisibilityFilter(tab.key as "all" | "public" | "private")}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   visibilityFilter === tab.key
                     ? "bg-[#2D6338] text-white shadow-2xs"
@@ -283,7 +279,7 @@ export default function AdminVouchersPage() {
             ].map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setStatusFilter(tab.key as any)}
+                onClick={() => setStatusFilter(tab.key as "all" | "active" | "inactive")}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   statusFilter === tab.key
                     ? "bg-[#E2884E] text-white shadow-2xs"
@@ -851,7 +847,7 @@ export default function AdminVouchersPage() {
                   <label className="font-bold text-[#342A24] block">Phân loại hiển thị</label>
                   <select
                     value={editingVoucher.visibility || "public"}
-                    onChange={(e) => setEditingVoucher({ ...editingVoucher, visibility: e.target.value as any })}
+                    onChange={(e) => setEditingVoucher({ ...editingVoucher, visibility: e.target.value as "public" | "private" })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold"
                   >
                     <option value="public">🌐 Công khai</option>
@@ -863,7 +859,7 @@ export default function AdminVouchersPage() {
                   <label className="font-bold text-[#342A24] block">Trạng thái</label>
                   <select
                     value={editingVoucher.status}
-                    onChange={(e) => setEditingVoucher({ ...editingVoucher, status: e.target.value as any })}
+                    onChange={(e) => setEditingVoucher({ ...editingVoucher, status: e.target.value as Voucher["status"] })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#F0E5D8] text-xs outline-none focus:border-[#FFB98A] bg-white font-bold"
                   >
                     <option value="active">✓ Đang áp dụng</option>

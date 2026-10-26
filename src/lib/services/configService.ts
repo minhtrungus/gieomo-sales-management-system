@@ -182,7 +182,8 @@ export async function updateSystemSettingsServer(
       return { success: false, error: error.message };
     }
     return { success: true };
-  } catch (e: any) {
+  } catch (caught: unknown) {
+    const e = caught as { message?: string } | null;
     console.error("[updateSystemSettingsServer] Exception:", e);
     return { success: false, error: e?.message || "Unknown error" };
   }

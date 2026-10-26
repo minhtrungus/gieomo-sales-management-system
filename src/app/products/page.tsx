@@ -17,7 +17,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     syncProductsFromServer(true);
-    setProducts(getStoredProducts());
+    queueMicrotask(() => setProducts(getStoredProducts()));
     const handleUpdate = () => setProducts(getStoredProducts());
     window.addEventListener("gieomo_products_updated", handleUpdate);
     return () => {

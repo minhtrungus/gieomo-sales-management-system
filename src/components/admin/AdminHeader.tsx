@@ -25,14 +25,19 @@ interface AdminHeaderProps {
   title?: string;
 }
 
-import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
-
 export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const settings = useSiteSettings();
+  const [nowMs, setNowMs] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateClock = () => setNowMs(Date.now());
+    queueMicrotask(updateClock);
+    const timer = setInterval(updateClock, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const {
     notifications,
@@ -110,8 +115,8 @@ export function AdminHeader({ onOpenSidebar, title }: AdminHeaderProps) {
     }
   };
 
-const formatShortTime = (isoString: string) => {
-     const nowMs = Date.now();
+const formatShortTime = (isoString: string, nowMs: number) => {
+    if (nowMs === 0) return new Date(isoString).toLocaleDateString("vi-VN");
      const diffMs = nowMs - new Date(isoString).getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     if (diffMins < 1) return "Vừa xong";
@@ -239,7 +244,7 @@ const formatShortTime = (isoString: string) => {
                             {item.title}
                           </span>
                           <span className="text-[10px] text-[#A89B92] shrink-0">
-                            {formatShortTime(item.created_at)}
+                            {formatShortTime(item.created_at, nowMs)}
                           </span>
                         </div>
                         <p className="text-[11px] text-[#7E7068] leading-relaxed line-clamp-2">

@@ -13,7 +13,24 @@ interface NotificationState {
   deletedIds: string[];
 }
 
-async function getNotificationState(supabase: any): Promise<NotificationState> {
+type AdminSupabaseClient = ReturnType<typeof createAdminClient>;
+type ProductStockRow = {
+  product_id: string;
+  name: string;
+  product_variants?: Array<{ stock?: number | null }> | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+async function getNotificationState(supabase: AdminSupabaseClient): Promise<NotificationState> {
   // Batch 3E C6/C7 — fail-closed: đọc state lỗi phải Ném lỗi, không giả lập
   // "trạng thái rỗng" (có thể resurrect notification đã delete khi lưu đè).
   const { data, error } = await supabase
@@ -27,17 +44,18 @@ async function getNotificationState(supabase: any): Promise<NotificationState> {
   }
 
   if (data?.config_value) {
-    const parsed = JSON.parse(data.config_value);
+    const parsed: unknown = JSON.parse(data.config_value);
+    if (!isRecord(parsed)) return { readIds: [], starredIds: [], deletedIds: [] };
     return {
-      readIds: Array.isArray(parsed.readIds) ? parsed.readIds : [],
-      starredIds: Array.isArray(parsed.starredIds) ? parsed.starredIds : [],
-      deletedIds: Array.isArray(parsed.deletedIds) ? parsed.deletedIds : [],
+      readIds: stringArray(parsed.readIds),
+      starredIds: stringArray(parsed.starredIds),
+      deletedIds: stringArray(parsed.deletedIds),
     };
   }
   return { readIds: [], starredIds: [], deletedIds: [] };
 }
 
-async function saveNotificationState(supabase: any, state: NotificationState): Promise<void> {
+async function saveNotificationState(supabase: AdminSupabaseClient, state: NotificationState): Promise<void> {
   // Batch 3E C7 — kiểm tra .error của upsert; trước đây nuốt im lặng →
   // client tưởng đã lưu (read/star/delete mất hoặc resurrect).
   const { error } = await supabase.from("system_configs").upsert(
@@ -151,9 +169,10 @@ export async function GET(request: Request) {
 
     // Map Stock Alerts (Only alert if the ENTIRE product has 0 stock across all variants)
     if (productsRes.data && Array.isArray(productsRes.data)) {
-      for (const prod of productsRes.data) {
-        const variants = (prod as any).product_variants || [];
-        const totalStock = variants.reduce((sum: number, v: any) => sum + (Number(v.stock) || 0), 0);
+      const products: ProductStockRow[] = productsRes.data;
+      for (const prod of products) {
+        const variants = prod.product_variants || [];
+        const totalStock = variants.reduce((sum, variant) => sum + (Number(variant.stock) || 0), 0);
 
         // Only notify if product has variants and total stock is 0
         if (variants.length > 0 && totalStock <= 0) {
@@ -192,7 +211,7 @@ export async function GET(request: Request) {
       unreadCount,
       notifications,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/admin/notifications] Error:", err);
     // Batch 3E C6 — trước đây trả success:true + [] → client ghi đè state
     // và localStorage bằng rỗng. Trả 500/success:false để client giữ trạng
@@ -211,8 +230,13 @@ export async function POST(request: Request) {
       return authCheck.response;
     }
 
-    const body = await request.json();
-    const { action, ids = [], id } = body;
+    const body: unknown = await request.json();
+    if (!isRecord(body)) {
+      return NextResponse.json({ success: false, error: "Dữ liệu thông báo không hợp lệ" }, { status: 400 });
+    }
+    const action = typeof body.action === "string" ? body.action : "";
+    const ids = stringArray(body.ids);
+    const id = typeof body.id === "string" ? body.id : "";
 
     const targetIds = Array.isArray(ids) && ids.length > 0 ? ids : id ? [id] : [];
     if (!action) {
@@ -243,9 +267,13 @@ export async function POST(request: Request) {
     } else if (action === "markAllRead") {
       // Get all current notifications
       const getRes = await GET(request);
-      const data = await getRes.json();
-      if (Array.isArray(data.notifications)) {
-        data.notifications.forEach((n: NotificationItem) => readSet.add(n.id));
+      const data: unknown = await getRes.json();
+      if (isRecord(data) && Array.isArray(data.notifications)) {
+        data.notifications.forEach((notification) => {
+          if (isRecord(notification) && typeof notification.id === "string") {
+            readSet.add(notification.id);
+          }
+        });
       }
     } else if (action === "toggleStar") {
       targetIds.forEach((tId) => {
@@ -269,10 +297,10 @@ export async function POST(request: Request) {
     await saveNotificationState(supabase, updatedState);
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/admin/notifications] Error:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || "Lỗi cập nhật thông báo" },
+      { success: false, error: err instanceof Error ? err.message : "Lỗi cập nhật thông báo" },
       { status: 500 }
     );
   }

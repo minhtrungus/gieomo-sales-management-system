@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { createFakeOrderDb } from "./helpers/fakeOrderDb.ts";
+import { createFakeOrderDb, type FakeOrderDb } from "./helpers/fakeOrderDb.ts";
 
 /**
  * Batch F7 — getOrdersServer item mapping aliases.
@@ -21,6 +21,7 @@ import { createFakeOrderDb } from "./helpers/fakeOrderDb.ts";
  */
 
 const SRC_ROOT = new URL("../src/", import.meta.url).href;
+const testGlobal = globalThis as typeof globalThis & { __fakeOrderDb?: FakeOrderDb };
 
 const hooksSource = `
 const MOCKS = {
@@ -170,7 +171,7 @@ function seedDb() {
     }],
     order_inventory_reservations: [{ order_id: "o1", variant_id: "v-pack", quantity: 2 }],
   });
-  (globalThis as any).__fakeOrderDb = db;
+  testGlobal.__fakeOrderDb = db;
   return db;
 }
 

@@ -66,7 +66,7 @@ export default function AdminLoginPage() {
       } else {
         router.push("/admin/dashboard");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Login] Exception:", err);
       setError("Lỗi kết nối máy chủ khi đăng nhập. Vui lòng thử lại!");
       setLoading(false);

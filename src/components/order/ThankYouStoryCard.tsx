@@ -18,6 +18,8 @@ export async function generateThankYouCardCanvas(
   customerName: string, orderDate: string,
   _items: Array<{ name: string; quantity: number }> = [], _qrDataUrl?: string
 ): Promise<HTMLCanvasElement | null> {
+  void _items;
+  void _qrDataUrl;
   return renderThankYouCard(customerName, orderDate);
 }
 

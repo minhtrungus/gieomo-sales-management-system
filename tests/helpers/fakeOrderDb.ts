@@ -12,7 +12,29 @@
  * requires a real PG/Supabase environment with migration 015 applied.
  */
 
-export type Row = Record<string, any>;
+export type Row = Record<string, unknown>;
+
+type FakeDbError = { code?: string | null; message: string };
+type QueryResult = { data: Row | Row[] | null; error: FakeDbError | null };
+
+interface FakeQueryBuilder extends PromiseLike<QueryResult> {
+  insert(payload: Row | Row[]): FakeQueryBuilder;
+  update(payload: Row): FakeQueryBuilder;
+  upsert(payload: Row, options?: { onConflict?: string }): FakeQueryBuilder;
+  select(columns?: string): FakeQueryBuilder;
+  eq(column: string, value: unknown): FakeQueryBuilder;
+  is(column: string, value: null): FakeQueryBuilder;
+  neq(column: string, value: unknown): FakeQueryBuilder;
+  gte(column: string, value: unknown): FakeQueryBuilder;
+  gt(column: string, value: unknown): FakeQueryBuilder;
+  lte(column: string, value: unknown): FakeQueryBuilder;
+  in(column: string, values: unknown[]): FakeQueryBuilder;
+  ilike(column: string, value: string): FakeQueryBuilder;
+  or(expression: string): FakeQueryBuilder;
+  order(column: string, options?: { ascending?: boolean }): FakeQueryBuilder;
+  single(): FakeQueryBuilder;
+  maybeSingle(): FakeQueryBuilder;
+}
 
 export type HookOp = "select" | "insert" | "update" | "upsert" | "rpc";
 
@@ -46,7 +68,7 @@ export interface FakeOrderDb {
    * handler chung nuốt mất kết quả trừ kho; inject lỗi qua db.hook.
    */
   rpcHandler: ((name: string, args: Record<string, unknown>) => RpcHandlerResult | Promise<RpcHandlerResult>) | null;
-  from(table: string): any;
+  from(table: string): FakeQueryBuilder;
   rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
 }
 
@@ -201,7 +223,7 @@ function projectRow(row: Row, state: QueryState, table: string, tables: Record<s
   return out;
 }
 
-function terminal(rows: Row[], state: QueryState): { data: any; error: any } {
+function terminal(rows: Row[], state: QueryState): QueryResult {
   if (state.single) {
     if (rows.length === 1) return { data: rows[0], error: null };
     return {
@@ -280,7 +302,7 @@ export function createFakeOrderDb(seed: Record<string, Row[]> = {}): FakeOrderDb
   function from(table: string) {
     const state: QueryState = { op: "select", filters: [], orders: [], single: false, maybe: false };
 
-    const api: any = {
+    const api: FakeQueryBuilder = {
       insert(payload: Row | Row[]) {
         state.op = "insert";
         state.payload = payload;
@@ -352,12 +374,15 @@ export function createFakeOrderDb(seed: Record<string, Row[]> = {}): FakeOrderDb
         state.maybe = true;
         return api;
       },
-      then(resolve: (v: any) => any, reject: (e: any) => any) {
+      then<TResult1 = QueryResult, TResult2 = never>(
+        resolve?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+        reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ): PromiseLike<TResult1 | TResult2> {
         return execute().then(resolve, reject);
       },
     };
 
-    async function execute(): Promise<{ data: any; error: any }> {
+    async function execute(): Promise<QueryResult> {
       const rows = tables[table] || (tables[table] = []);
 
       if (db.hook) {

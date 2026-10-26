@@ -52,11 +52,13 @@ const MAX_REASON_LEN = 200;
 const MAX_KEY_LEN = 128;
 const MAX_ABS_DELTA = 1_000_000;
 
+type RpcError = { code?: string; message?: string; details?: string };
+
 type SupabaseLike = {
   rpc(
     name: string,
     args: Record<string, unknown>
-  ): PromiseLike<{ data: unknown; error: any }>;
+  ): PromiseLike<{ data: unknown; error: RpcError | null }>;
 };
 
 export type AdjustStockValidation =
@@ -137,7 +139,7 @@ export async function executeStockAdjustment(
   input: AdjustStockInput
 ): Promise<AdjustStockResult> {
   let data: unknown = null;
-  let error: any = null;
+  let error: RpcError | null = null;
   try {
     ({ data, error } = await supabase.rpc("adjust_variant_stock", {
       p_variant_id: input.variantId,
@@ -146,7 +148,8 @@ export async function executeStockAdjustment(
       p_idempotency_key: input.idempotencyKey,
       p_actor_member_id: input.actorMemberId ?? null,
     }));
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     return {
       status: "error",
       applied: false,
@@ -326,9 +329,9 @@ export async function postAdjustStock(input: {
     );
   }
 
-  let body: any = null;
+  let parsedBody: unknown = null;
   try {
-    body = await res.json();
+    parsedBody = await res.json();
   } catch {
     throw new Error(
       "Phản hồi máy chủ không hợp lệ — kết quả KHÔNG xác định. Bấm thử lại (sẽ dùng cùng mã thao tác)."
@@ -336,7 +339,10 @@ export async function postAdjustStock(input: {
   }
 
   // Map body → AdjustStockResult (server đã classify; tôn trọng outcome)
-  const outcome = typeof body?.outcome === "string" ? body.outcome : "";
+  const body = parsedBody && typeof parsedBody === "object"
+    ? parsedBody as Record<string, unknown>
+    : {};
+  const outcome = typeof body.outcome === "string" ? body.outcome : "";
   if (res.ok && (outcome === "applied" || outcome === "duplicate")) {
     return {
       ok: true,
@@ -344,16 +350,16 @@ export async function postAdjustStock(input: {
         status: outcome,
         applied: outcome === "applied",
         duplicate: outcome === "duplicate",
-        stockBefore: toNum(body?.stockBefore),
-        stockAfter: toNum(body?.stockAfter),
-        message: typeof body?.message === "string" ? body.message : "",
+        stockBefore: toNum(body.stockBefore),
+        stockAfter: toNum(body.stockAfter),
+        message: typeof body.message === "string" ? body.message : "",
         retryable: false,
       },
     };
   }
 
   const message =
-    typeof body?.error === "string" && body.error
+    typeof body.error === "string" && body.error
       ? body.error
       : `Điều chỉnh thất bại (HTTP ${res.status})`;
   return { ok: false, message };

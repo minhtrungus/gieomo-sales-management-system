@@ -42,7 +42,8 @@ export async function uploadAsset(
     }
 
     return { success: true, url: data.url };
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[uploadAsset] Exception:", err);
     return { success: false, error: err?.message || "Lỗi kết nối khi tải tệp tin" };
   }
@@ -112,7 +113,8 @@ export async function uploadAssetsParallel(
     });
 
     return { successfulUrls, errors };
-  } catch (err: any) {
+  } catch (caught: unknown) {
+    const err = caught as { message?: string } | null;
     console.error("[uploadAssetsParallel] Exception:", err);
     return { successfulUrls: [], errors: [err?.message || "Lỗi kết nối khi tải nhiều ảnh"] };
   }

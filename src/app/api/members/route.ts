@@ -4,6 +4,39 @@ import { getAuthenticatedUser, requireAdmin, hashPassword } from "@/lib/auth/ser
 
 export const dynamic = "force-dynamic";
 
+type MemberRow = {
+  member_id: string;
+  full_name: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: "admin" | "btc_sale";
+  status?: "active" | "inactive";
+  referral_code?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type MemberWritePayload = {
+  member_id?: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  role: "admin" | "btc_sale";
+  status: "active" | "inactive";
+  referral_code: string | null;
+  password_hash?: string;
+  created_at?: string;
+  updated_at: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = createAdminClient();
@@ -22,7 +55,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: true, members: [] });
       }
 
-      const publicMembers = (data || []).map((m: any) => ({
+      const publicMembers = (data || []).map((m: MemberRow) => ({
         memberId: m.member_id,
         fullName: m.full_name,
         referralCode: m.referral_code || "",
@@ -50,13 +83,18 @@ export async function GET(request: Request) {
         .eq("config_key", "members_online_presence")
         .maybeSingle();
       if (presenceConfig?.config_value) {
-        presenceMap = JSON.parse(presenceConfig.config_value);
+        const parsed: unknown = JSON.parse(presenceConfig.config_value);
+        if (isRecord(parsed)) {
+          presenceMap = Object.fromEntries(
+            Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+          );
+        }
       }
     } catch {
       // ignore
     }
 
-    const sanitizedMembers = (data || []).map((m: any) => {
+    const sanitizedMembers = (data || []).map((m: MemberRow) => {
       const idKey = m.member_id || "";
       const emailKey = m.email ? m.email.toLowerCase().trim() : "";
       const resolvedLastActive =
@@ -84,7 +122,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ success: true, members: sanitizedMembers });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[GET /api/members] Exception:", err);
     return NextResponse.json({ success: true, members: [] });
   }
@@ -98,8 +136,8 @@ export async function POST(request: Request) {
       return authCheck.response;
     }
 
-    const body = await request.json();
-    if (!body || (!body.fullName && !body.full_name)) {
+    const body: unknown = await request.json();
+    if (!isRecord(body) || (!stringValue(body.fullName) && !stringValue(body.full_name))) {
       return NextResponse.json(
         { success: false, error: "Họ và tên thành viên là bắt buộc" },
         { status: 400 }
@@ -107,18 +145,18 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const fullName = (body.fullName || body.full_name || "").trim();
-    const email = (body.email || "").trim().toLowerCase() || null;
-    const phone = (body.phone || "").trim() || null;
+    const fullName = (stringValue(body.fullName) || stringValue(body.full_name)).trim();
+    const email = stringValue(body.email).trim().toLowerCase() || null;
+    const phone = stringValue(body.phone).trim() || null;
     const role = body.role === "admin" ? "admin" : "btc_sale";
     const status = body.status === "inactive" ? "inactive" : "active";
-    const referralCode = (body.referralCode || body.referral_code || "").trim() || null;
-    const memberId = body.memberId || body.member_id;
-    const rawPassword = body.password?.trim();
+    const referralCode = (stringValue(body.referralCode) || stringValue(body.referral_code)).trim() || null;
+    const memberId = stringValue(body.memberId) || stringValue(body.member_id);
+    const rawPassword = stringValue(body.password).trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(memberId || "");
 
-    const payload: any = {
+    const payload: MemberWritePayload = {
       full_name: fullName,
       email,
       phone,
@@ -162,7 +200,7 @@ export async function POST(request: Request) {
       if (byRef?.member_id) existingMemberId = byRef.member_id;
     }
 
-    let savedMemberData: any = null;
+    let savedMemberData: MemberRow | null = null;
 
     if (existingMemberId) {
       const { data, error } = await supabase
@@ -199,9 +237,12 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, member: savedMemberData });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[POST /api/members] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi lưu thành viên" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Lỗi lưu thành viên" },
+      { status: 500 },
+    );
   }
 }
 
@@ -244,8 +285,11 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[DELETE /api/members] Exception:", err);
-    return NextResponse.json({ success: false, error: err?.message || "Lỗi xóa thành viên" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Lỗi xóa thành viên" },
+      { status: 500 },
+    );
   }
 }

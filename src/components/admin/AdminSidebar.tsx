@@ -20,13 +20,11 @@ import {
   Warehouse,
   Bell,
   MessageSquare,
-  Sparkles,
   ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
 import { clearAdminSession, getAdminSession, type AdminSession } from "@/lib/data/orderStore";
-import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -36,7 +34,6 @@ interface AdminSidebarProps {
 function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const settings = useSiteSettings();
   const { unreadCount } = useNotifications();
   const [session, setSession] = useState<AdminSession | null>(null);
 

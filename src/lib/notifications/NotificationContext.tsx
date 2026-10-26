@@ -43,11 +43,6 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-// Clean initial system notifications - empty by default to prevent spam notifications
-function generateInitialNotifications(): NotificationItem[] {
-  return [];
-}
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -55,15 +50,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Load initial notifications from local storage for fast render
   useEffect(() => {
-    const saved = localStorage.getItem("gieomo_admin_notifications");
-    if (saved) {
-      try {
-        setNotifications(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved notifications", e);
+    queueMicrotask(() => {
+      const saved = localStorage.getItem("gieomo_admin_notifications");
+      if (saved) {
+        try {
+          setNotifications(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse saved notifications", e);
+        }
       }
-    }
-    setIsLoaded(true);
+      setIsLoaded(true);
+    });
   }, []);
 
   // Fetch live notifications from Supabase API
@@ -89,7 +86,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Sync with server on mount, when orders/messages update, and window focus (debounced to avoid re-render cascades)
   useEffect(() => {
-    refreshNotifications();
+    queueMicrotask(() => void refreshNotifications());
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleDebouncedEvent = () => {
@@ -129,7 +126,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Automatic push notifications and toasts are blocked per user instruction
   const pushNotification = useCallback(
-    (_itemData: Omit<NotificationItem, "id" | "created_at" | "read" | "starred">) => {
+    () => {
       // Intentionally blocked to prevent unwanted automatic popups
     },
     []

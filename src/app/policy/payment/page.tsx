@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import Link from "next/link";
-import { QrCode, Banknote, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { QrCode, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Hướng dẫn thanh toán",

@@ -1,11 +1,87 @@
 "use client";
 
-import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, Combo, ProductReview } from "@/types/database";
-import { MOCK_ORDERS, MOCK_VOUCHERS, MOCK_PRODUCTS, MOCK_WAREHOUSES, MOCK_CATEGORIES, MOCK_COMBOS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
+import type { Order, OrderStatus, PaymentStatus, DeliveryStatus, PickupPoint, ContactMessage, Voucher, Warehouse, ProductCategory, ProductReview } from "@/types/database";
+import { MOCK_PRODUCTS, type ExtendedProduct, type ExtendedCombo } from "./mockData";
 import { beginCreateOrderAttempt } from "../checkout/createOrderAttempt";
 import { sortProductVariants } from "../productVariantOrder";
 
 export type { ExtendedProduct, ExtendedCombo };
+
+type CreateOrderApiResponse = {
+  success?: boolean;
+  idempotency?: string;
+  error?: string;
+  orderId?: string;
+  orderCode?: string;
+  finalAmount?: number | string;
+  proofToken?: string;
+  replayed?: boolean;
+};
+
+type CancelOrderApiResponse = {
+  success: boolean;
+  outcome?: string;
+  alreadyCancelled?: boolean;
+  error?: string;
+  currentStatus?: string;
+  retryable?: boolean;
+};
+
+type StoredCustomerSummary = {
+  customerId?: string;
+  fullName?: string;
+  phone?: string;
+  totalOrders?: number;
+  totalSpent?: number;
+  name?: string;
+  email?: string;
+  address?: string;
+  lastOrder?: string;
+  createdAt?: string;
+};
+
+type PersistedCartItem = {
+  product_id?: string;
+  combo_id?: string;
+  slug?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCreateOrderResponse(value: unknown): CreateOrderApiResponse | null {
+  if (!isRecord(value)) return null;
+  return {
+    success: typeof value.success === "boolean" ? value.success : undefined,
+    idempotency: typeof value.idempotency === "string" ? value.idempotency : undefined,
+    error: typeof value.error === "string" ? value.error : undefined,
+    orderId: typeof value.orderId === "string" ? value.orderId : undefined,
+    orderCode: typeof value.orderCode === "string" ? value.orderCode : undefined,
+    finalAmount:
+      typeof value.finalAmount === "number" || typeof value.finalAmount === "string"
+        ? value.finalAmount
+        : undefined,
+    proofToken: typeof value.proofToken === "string" ? value.proofToken : undefined,
+    replayed: typeof value.replayed === "boolean" ? value.replayed : undefined,
+  };
+}
+
+function parseCancelOrderResponse(value: unknown): CancelOrderApiResponse | null {
+  if (!isRecord(value) || typeof value.success !== "boolean") return null;
+  return {
+    success: value.success,
+    outcome: typeof value.outcome === "string" ? value.outcome : undefined,
+    alreadyCancelled: typeof value.alreadyCancelled === "boolean" ? value.alreadyCancelled : undefined,
+    error: typeof value.error === "string" ? value.error : undefined,
+    currentStatus: typeof value.currentStatus === "string" ? value.currentStatus : undefined,
+    retryable: typeof value.retryable === "boolean" ? value.retryable : undefined,
+  };
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export interface PaymentRecord {
   paymentId: string;
@@ -17,10 +93,7 @@ export interface PaymentRecord {
   createdAt: string;
 }
 
-const SEED_PAYMENTS: PaymentRecord[] = [];
-
 let cachedOrders: Order[] | null = null;
-let cachedPayments: PaymentRecord[] | null = null;
 let cachedVouchers: Voucher[] | null = null;
 let cachedProducts: ExtendedProduct[] | null = null;
 let cachedWarehouses: Warehouse[] | null = null;
@@ -197,7 +270,7 @@ export async function saveNewOrder(
     seller_id: newOrder.seller_id || null,
     introducer_info: newOrder.introducer_info,
     source_type: newOrder.source_type || null,
-    items: (newOrder.items || []).map((it: any) => ({
+    items: (newOrder.items || []).map((it) => ({
       product_id: it.product_id,
       variant_id: it.variant_id || null,
       combo_id: it.combo_id || null,
@@ -227,9 +300,9 @@ export async function saveNewOrder(
       };
     }
 
-    let data: any = null;
+    let data: CreateOrderApiResponse | null = null;
     try {
-      data = await res.json();
+      data = parseCreateOrderResponse(await res.json());
     } catch {
       data = null;
     }
@@ -317,7 +390,7 @@ function persistLocalOrderSideEffects(newOrder: Order): void {
           let prodModified = false;
           const updatedVariants = prod.variants?.map((v) => {
             const matchingItem = newOrder.items?.find(
-              (it: any) =>
+              (it) =>
                 (it.product_id === prod.product_id || it.product_name_snapshot === prod.name || it.item_name_snapshot === prod.name) &&
                 (it.variant_id
                   ? it.variant_id === v.variant_id
@@ -354,7 +427,7 @@ function persistLocalOrderSideEffects(newOrder: Order): void {
           });
 
           if (prodModified) {
-            const totalProdStock = (updatedVariants || []).reduce((sum: number, vr: any) => sum + (Number(vr.stock) || 0), 0);
+            const totalProdStock = (updatedVariants || []).reduce((sum, variant) => sum + (Number(variant.stock) || 0), 0);
             return { ...prod, variants: updatedVariants, stock: totalProdStock };
           }
           return prod;
@@ -373,10 +446,10 @@ function persistLocalOrderSideEffects(newOrder: Order): void {
     // Auto-sync customer record
     try {
       const custRaw = localStorage.getItem("gieomo_customers");
-      const custList = custRaw ? JSON.parse(custRaw) : [];
+      const custList: StoredCustomerSummary[] = custRaw ? JSON.parse(custRaw) : [];
       const cleanPhone = (newOrder.buyer_phone || newOrder.recipient_phone || "").replace(/\s+/g, "");
       if (cleanPhone) {
-        const existingIdx = custList.findIndex((c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone);
+        const existingIdx = custList.findIndex((c) => c.phone?.replace(/\s+/g, "") === cleanPhone);
         if (existingIdx >= 0) {
           custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 0) + 1;
           custList[existingIdx].totalSpent = (custList[existingIdx].totalSpent || 0) + (newOrder.final_amount || 0);
@@ -436,7 +509,7 @@ export function cacheServerCreatedOrder(newOrder: Order): void {
   try {
     if (!newOrder.warehouse_id) {
       const whList = getStoredWarehouses();
-      const defaultWh = whList.find((w: any) => w.is_default) || whList[0];
+      const defaultWh = whList.find((w) => w.is_default) || whList[0];
       if (defaultWh) {
         newOrder.warehouse_id = defaultWh.warehouse_id;
         newOrder.warehouse_name = defaultWh.name;
@@ -447,7 +520,7 @@ export function cacheServerCreatedOrder(newOrder: Order): void {
     const updated = [
       newOrder,
       ...orders.filter(
-        (o: any) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code
+        (o) => o.order_id !== newOrder.order_id && o.order_code !== newOrder.order_code
       ),
     ];
     cachedOrders = updated;
@@ -455,11 +528,11 @@ export function cacheServerCreatedOrder(newOrder: Order): void {
 
     try {
       const custRaw = localStorage.getItem("gieomo_customers");
-      const custList = custRaw ? JSON.parse(custRaw) : [];
+      const custList: StoredCustomerSummary[] = custRaw ? JSON.parse(custRaw) : [];
       const cleanPhone = (newOrder.buyer_phone || newOrder.recipient_phone || "").replace(/\s+/g, "");
       if (cleanPhone) {
         const existingIdx = custList.findIndex(
-          (c: any) => c.phone?.replace(/\s+/g, "") === cleanPhone
+          (c) => c.phone?.replace(/\s+/g, "") === cleanPhone
         );
         if (existingIdx >= 0) {
           custList[existingIdx].totalOrders = (custList[existingIdx].totalOrders || 0) + 1;
@@ -502,7 +575,7 @@ export function cacheServerCreatedOrder(newOrder: Order): void {
       };
       const updatedPayments = [
         newPay,
-        ...payments.filter((p: any) => p.orderCode !== newOrder.order_code),
+        ...payments.filter((p) => p.orderCode !== newOrder.order_code),
       ];
       localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
     }
@@ -638,7 +711,7 @@ const cancelLockChains = new Map<string, Promise<unknown>>();
  */
 export async function withCancelLock<T>(orderId: string, fn: () => T | Promise<T>): Promise<T> {
   const key = `gieomo-cancel-${orderId}`;
-  const locks = (globalThis as any)?.navigator?.locks;
+  const locks = globalThis.navigator?.locks;
   if (locks?.request) {
     let fnValue: T | undefined;
     let fnFailed = false;
@@ -696,7 +769,7 @@ export async function withCancelLock<T>(orderId: string, fn: () => T | Promise<T
 function flipOrderRowToCancelled(orderId: string, orderCode: string | null): void {
   const orders = getStoredOrders();
   const nowIso = new Date().toISOString();
-  const updated = orders.map((o: any) => {
+  const updated = orders.map((o) => {
     if (o.order_id === orderId || (orderCode && o.order_code === orderCode)) {
       const timestamps = { ...(o.status_timestamps || {}) };
       timestamps["cancelled"] = nowIso;
@@ -729,9 +802,9 @@ function restoreLocalStockForCancelledOrder(order: Order): void {
   let prodsChanged = false;
   const restored = prods.map((prod) => {
     let prodModified = false;
-    const updatedVariants = prod.variants?.map((v: any) => {
+    const updatedVariants = prod.variants?.map((v) => {
       const matchingItem = order.items?.find(
-        (it: any) =>
+        (it) =>
           it.product_id === prod.product_id &&
           (it.variant_id ? it.variant_id === v.variant_id : true)
       );
@@ -915,9 +988,9 @@ export function recoverPendingCancelJournals(): void {
     for (const prod of prods) {
       if (!prod.variants) continue;
       let prodModified = false;
-      const updatedVariants = prod.variants.map((v: any) => {
+      const updatedVariants = prod.variants.map((v) => {
         const matchingItem = row.items?.find(
-          (it: any) =>
+          (it) =>
             it.product_id === prod.product_id &&
             (it.variant_id ? it.variant_id === v.variant_id : true)
         );
@@ -1027,18 +1100,18 @@ async function performCancelStoredOrder(
       headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ ...identity, orderStatus: "cancelled" }),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       success: false,
       outcome: "network_error",
-      error: err?.message || "Mất kết nối khi hủy đơn — kết quả không xác định, đơn chưa bị hủy.",
+      error: errorMessage(err, "Mất kết nối khi hủy đơn — kết quả không xác định, đơn chưa bị hủy."),
       retryable: true,
     };
   }
 
-  let body: any = null;
+  let body: CancelOrderApiResponse | null = null;
   try {
-    body = await res.json();
+    body = parseCancelOrderResponse(await res.json());
   } catch {
     body = null;
   }
@@ -1126,9 +1199,9 @@ export function updateStoredOrderStatus(orderId: string, newStatus: OrderStatus)
   try {
     const orders = getStoredOrders();
     const nowIso = new Date().toISOString();
-    const updated = orders.map((o: any) => {
+    const updated = orders.map((o) => {
       if (o.order_id === orderId || o.order_code === orderId) {
-        const timestamps = { ...((o as any).status_timestamps || {}) };
+        const timestamps = { ...(o.status_timestamps || {}) };
         timestamps[newStatus] = nowIso;
         return {
           ...o,
@@ -1209,9 +1282,9 @@ export function syncStoredOrderStatusLocal(orderCodeOrId: string, orderStatus: O
   try {
     const orders = getStoredOrders();
     const nowIso = new Date().toISOString();
-    const updated = orders.map((o: any) => {
+    const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
-        const timestamps = { ...((o as any).status_timestamps || {}) };
+        const timestamps = { ...(o.status_timestamps || {}) };
         timestamps[orderStatus] = nowIso;
         return {
           ...o,
@@ -1239,7 +1312,7 @@ export function updateStoredDeliveryStatus(orderCodeOrId: string, deliveryStatus
     const nowIso = new Date().toISOString();
     const updated = orders.map((o) => {
       if (o.order_id === orderCodeOrId || o.order_code === orderCodeOrId) {
-        const timestamps = { ...((o as any).status_timestamps || {}) };
+        const timestamps = { ...(o.status_timestamps || {}) };
         timestamps[deliveryStatus] = nowIso;
         if (deliveryStatus === "out_for_delivery") timestamps["shipping"] = nowIso;
         if (deliveryStatus === "delivered") timestamps["completed"] = nowIso;
@@ -1359,6 +1432,8 @@ export function updateStoredPaymentProof(orderId: string, proof: string): void {
 }
 
 export function updateStoredOrderWarehouse(_orderId: string, _warehouseId: string): OrderDetailsResult {
+  void _orderId;
+  void _warehouseId;
   return { success: false, error: "Chưa hỗ trợ lưu kho điều phối cho đơn hàng." };
 }
 
@@ -1391,9 +1466,9 @@ export function getStoredPayments(): PaymentRecord[] {
             paymentId: `pay-${o.order_id || o.order_code}`,
             orderCode: o.order_code,
             amount: o.final_amount,
-            paymentMethod: (o.payment_method as any) || "vietqr",
+            paymentMethod: o.payment_method || "vietqr",
             transactionCode:
-              (o as any).transaction_code ||
+              ("transaction_code" in o && typeof o.transaction_code === "string" && o.transaction_code) ||
               `MB-${o.order_code.replace(/\D/g, "") || Math.floor(1000000 + Math.random() * 9000000)}`,
             status: o.payment_status === "paid" ? "paid" : o.payment_status === "failed" ? "failed" : "pending",
             createdAt: o.created_at
@@ -1426,7 +1501,6 @@ export function getStoredPayments(): PaymentRecord[] {
       return 0;
     });
 
-    cachedPayments = combined;
     return combined;
   } catch (e) {
     console.error("Error reading gieomo_payments", e);
@@ -1446,7 +1520,6 @@ export function approveStoredPayment(paymentId: string): void {
       }
       return p;
     });
-    cachedPayments = updatedPayments;
     localStorage.setItem("gieomo_payments", JSON.stringify(updatedPayments));
 
     if (approvedOrderCode) {
@@ -1511,7 +1584,7 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
  * Safely fetches and parses JSON without throwing SyntaxError on empty, aborted, or non-JSON responses.
  * Especially crucial when search engine crawlers (like Googlebot) abort background fetches or block /api routes.
  */
-async function safeFetchJson<T = any>(url: string, timeoutMs = 10000): Promise<T | null> {
+async function safeFetchJson<T = unknown>(url: string, timeoutMs = 10000): Promise<T | null> {
   try {
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -1615,8 +1688,6 @@ export function deleteStoredPickupPoint(pointId: string): void {
 }
 
 // === CONTACT MESSAGES STORE ===
-
-const SEED_CONTACT_MESSAGES: ContactMessage[] = [];
 
 export function syncContactMessagesFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedContactMessagesWithServer && !force)) return;
@@ -1725,6 +1796,47 @@ export interface StoredMember {
   isSystemProtected?: boolean;
 }
 
+type ServerMember = {
+  member_id?: string;
+  memberId?: string;
+  full_name?: string;
+  fullName?: string;
+  email?: string;
+  role?: StoredMember["role"];
+  referral_code?: string;
+  referralCode?: string;
+  phone?: string;
+  status?: StoredMember["status"];
+  created_at?: string;
+  password?: string;
+  last_active_at?: string;
+};
+
+function optionalString(record: Record<string, unknown>, key: string): string | undefined {
+  return typeof record[key] === "string" ? record[key] : undefined;
+}
+
+function parseServerMember(value: unknown): ServerMember | null {
+  if (!isRecord(value)) return null;
+  const role = value.role === "admin" || value.role === "btc_sale" ? value.role : undefined;
+  const status = value.status === "active" || value.status === "inactive" ? value.status : undefined;
+  return {
+    member_id: optionalString(value, "member_id"),
+    memberId: optionalString(value, "memberId"),
+    full_name: optionalString(value, "full_name"),
+    fullName: optionalString(value, "fullName"),
+    email: optionalString(value, "email"),
+    role,
+    referral_code: optionalString(value, "referral_code"),
+    referralCode: optionalString(value, "referralCode"),
+    phone: optionalString(value, "phone"),
+    status,
+    created_at: optionalString(value, "created_at"),
+    password: optionalString(value, "password"),
+    last_active_at: optionalString(value, "last_active_at"),
+  };
+}
+
 export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
   memberId: "baotri-system",
   fullName: "Bảo trì Hệ thống",
@@ -1743,7 +1855,7 @@ export const SYSTEM_MAINTENANCE_ACCOUNT: StoredMember = {
 export function syncMembersFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedMembersWithServer && !force)) return;
   if (membersSyncInFlight) return;
-  membersSyncInFlight = safeFetchJson<{ success: boolean; members: any[] }>("/api/members", 10000)
+  membersSyncInFlight = safeFetchJson<{ success: boolean; members: unknown[] }>("/api/members", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.members)) {
         hasSyncedMembersWithServer = true;
@@ -1761,7 +1873,9 @@ export function syncMembersFromServer(force = false): void {
             presenceMap = JSON.parse(localStorage.getItem("gieomo_presence") || "{}");
           } catch {}
 
-          const mapped: StoredMember[] = data.members.map((m: any) => {
+          const mapped: StoredMember[] = data.members.flatMap((value) => {
+            const m = parseServerMember(value);
+            if (!m) return [];
             const resolvedId = m.member_id || m.memberId || "";
             const resolvedName = m.full_name || m.fullName || "";
             const resolvedRef = m.referral_code || m.referralCode || "";
@@ -1769,7 +1883,7 @@ export function syncMembersFromServer(force = false): void {
             const savedPresence = presenceMap[resolvedId] || (m.email ? presenceMap[m.email.toLowerCase()] : undefined);
             const finalLastActive = m.last_active_at || loc?.lastActiveAt || savedPresence || undefined;
 
-            return {
+            return [{
               memberId: resolvedId,
               fullName: resolvedName,
               email: m.email || "",
@@ -1783,7 +1897,7 @@ export function syncMembersFromServer(force = false): void {
               password: m.password || loc?.password || "••••••••",
               lastActiveAt: finalLastActive,
               lastLoginAt: loc?.lastLoginAt || undefined,
-            };
+            }];
           });
 
           const hasMaintenance = mapped.some(
@@ -2135,6 +2249,7 @@ export async function updateOrderShipper(
   shipperId: string | null,
   _shipperName: string | null
 ): Promise<OrderDetailsResult> {
+  void _shipperName;
   return updateStoredOrderDetails(orderCode, { assignedShipperId: shipperId });
 }
 
@@ -2398,7 +2513,7 @@ export async function saveNewProduct(
   product: ExtendedProduct
 ): Promise<{ success: boolean; product_id?: string; error?: string }> {
   // Ensure variants have warehouse stock values
-  const normalizedVariants = product.variants?.map((v, i) => {
+  const normalizedVariants = product.variants?.map((v) => {
     const wh1 = Number(v.stock_warehouse_1) || 0;
     const wh2 = Number(v.stock_warehouse_2) || 0;
     const total = v.stock !== undefined ? Number(v.stock) : (wh1 + wh2);
@@ -2434,7 +2549,7 @@ export async function saveNewProduct(
       if (data.product_id) {
         productToSave = { ...productToSave, product_id: data.product_id };
       }
-    } catch (netErr: any) {
+    } catch (netErr: unknown) {
       console.warn("[saveNewProduct] Network error syncing to server:", netErr);
     }
   }
@@ -2503,9 +2618,9 @@ export async function updateStoredProduct(
         console.warn("[updateStoredProduct] Server warning:", data?.error);
         return { success: false, error: data?.error };
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Error updating product", e);
-      return { success: false, error: e?.message };
+      return { success: false, error: errorMessage(e, "Không thể cập nhật sản phẩm.") };
     }
   }
 
@@ -2577,7 +2692,7 @@ export function deleteStoredProduct(productId: string): void {
         const parsed = JSON.parse(rawCart);
         if (parsed?.state?.items) {
           parsed.state.items = parsed.state.items.filter(
-            (i: any) =>
+            (i: PersistedCartItem) =>
               i.product_id !== productId &&
               i.product_id !== target?.product_id &&
               i.slug !== productId &&
@@ -3280,50 +3395,76 @@ let hasSyncedCombosWithServer = false;
 
 export function syncCombosFromServer(force = false): void {
   if (typeof window === "undefined" || (hasSyncedCombosWithServer && !force)) return;
-  safeFetchJson<{ success: boolean; combos: any[] }>("/api/combos", 10000)
+  safeFetchJson<{ success: boolean; combos: unknown[] }>("/api/combos", 10000)
     .then((data) => {
       if (data?.success && Array.isArray(data.combos)) {
         hasSyncedCombosWithServer = true;
-        const mapped: ExtendedCombo[] = data.combos.map((sC) => {
-          const itemThumb = sC.image_url || sC.thumbnail || "/images/product-image-unavailable.svg";
-          return {
-            combo_id: sC.combo_id,
-            name: sC.name,
-            slug: sC.slug,
-            price: Number(sC.price) || 0,
-            description: sC.description || "",
+        const mapped: ExtendedCombo[] = data.combos.flatMap((value) => {
+          if (!isRecord(value)) return [];
+          const itemThumb =
+            optionalString(value, "image_url") ||
+            optionalString(value, "thumbnail") ||
+            "/images/product-image-unavailable.svg";
+          const imageStatus =
+            value.image_status === "source" || value.image_status === "fallback_only"
+              ? value.image_status
+              : "missing";
+          const status =
+            value.status === "draft" || value.status === "archived" ? value.status : "active";
+          const rawItems = Array.isArray(value.combo_items) ? value.combo_items : [];
+          return [{
+            combo_id: optionalString(value, "combo_id") || "",
+            name: optionalString(value, "name") || "",
+            slug: optionalString(value, "slug") || "",
+            price: Number(value.price) || 0,
+            description: optionalString(value, "description") || "",
             thumbnail: itemThumb,
             images: [itemThumb],
-            image_status: sC.image_status || "missing",
-            status: sC.status || "active",
-            featured: Boolean(sC.featured),
-            sort_order: Number(sC.sort_order) || 1,
-            created_at: sC.created_at || new Date().toISOString(),
-            items: (sC.combo_items || []).map((ci: any) => {
-              const p = ci.product || {};
-              return {
-                product_id: ci.product_id,
-                variant_id: ci.variant_id ?? null,
-                quantity: ci.quantity || 1,
-                name: p.name || "Sản phẩm",
-                slug: p.slug || "",
-                price: Number(p.price) || 0,
+            image_status: imageStatus,
+            status,
+            featured: Boolean(value.featured),
+            sort_order: Number(value.sort_order) || 1,
+            created_at: optionalString(value, "created_at") || new Date().toISOString(),
+            items: rawItems.flatMap((itemValue) => {
+              if (!isRecord(itemValue)) return [];
+              const product = isRecord(itemValue.product) ? itemValue.product : {};
+              const productId = optionalString(itemValue, "product_id") || "";
+              const productName = optionalString(product, "name") || "Sản phẩm";
+              const productSlug = optionalString(product, "slug") || "";
+              const productImageStatus =
+                product.image_status === "source" || product.image_status === "fallback_only"
+                  ? product.image_status
+                  : "missing";
+              return [{
+                product_id: productId,
+                variant_id: optionalString(itemValue, "variant_id") ?? null,
+                quantity: Number(itemValue.quantity) || 1,
+                name: productName,
+                slug: productSlug,
+                price: Number(product.price) || 0,
                 product: {
-                  product_id: ci.product_id,
-                  name: p.name || "Sản phẩm",
-                  slug: p.slug || "",
-                  price: Number(p.price) || 0,
-                  thumbnail: p.thumbnail || "/images/product-image-unavailable.svg",
-                  image_status: p.image_status || "missing",
+                  product_id: productId,
+                  category_id: null,
+                  name: productName,
+                  slug: productSlug,
+                  short_description: null,
+                  description: null,
+                  price: Number(product.price) || 0,
+                  thumbnail:
+                    optionalString(product, "thumbnail") || "/images/product-image-unavailable.svg",
+                  image_status: productImageStatus,
                   compare_at_price: null,
                   cost_price: null,
                   status: "active" as const,
+                  featured: false,
+                  sort_order: 0,
+                  weight_gram: null,
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                 },
-              };
+              }];
             }),
-          };
+          }];
         });
         cachedCombos = mapped;
         localStorage.setItem("gieomo_combos", JSON.stringify(mapped));
@@ -3432,7 +3573,8 @@ export function updateStoredCombo(
     // Mặc định KHÔNG gửi items: các thao tác sửa trường không liên quan
     // (đổi tên, bật/tắt status...) không được phép động đến combo_items.
     // Chỉ luồng sửa thành phần truyền { includeItems: true }.
-    const { items: _items, ...comboHeader } = combo;
+    const { items, ...comboHeader } = combo;
+    void items;
     const serverPayload = options?.includeItems === true ? combo : comboHeader;
     return fetch("/api/combos", {
       method: "POST",
@@ -3521,7 +3663,7 @@ export async function deleteStoredCombo(comboId: string): Promise<ComboSyncResul
         const parsed = JSON.parse(rawCart);
         if (parsed?.state?.items) {
           parsed.state.items = parsed.state.items.filter(
-            (i: any) =>
+            (i: PersistedCartItem) =>
               i.combo_id !== comboId &&
               i.combo_id !== target?.combo_id &&
               i.slug !== comboId &&
@@ -3568,7 +3710,6 @@ export interface LoginResult {
 }
 
 export function verifyAdminLogin(password: string, emailOrAccount?: string): LoginResult {
-  const currentPass = getStoredAdminPassword();
   const members = getStoredMembers();
   const cleanInput = (emailOrAccount || "").trim();
   const cleanLower = cleanInput.toLowerCase();
@@ -3781,8 +3922,6 @@ export function updateMemberPassword(
 // ==========================================
 // PRODUCT REVIEWS STORE (Masked phone, Verified badge, Admin delete)
 // ==========================================
-const SEED_REVIEWS: ProductReview[] = [];
-
 let cachedReviews: ProductReview[] | null = null;
 let hasSyncedReviewsWithServer = false;
 
@@ -3915,6 +4054,7 @@ export function deleteStoredReview(reviewId: string): void {
 // DATA CLEANUP & LIVE STORE PREPARATION
 // ==========================================
 export function clearAllMockData(includeCatalog = true): void {
+  void includeCatalog;
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem("gieomo_cleaned_seed", "true");
@@ -3943,7 +4083,6 @@ export function clearAllMockData(includeCatalog = true): void {
     localStorage.setItem("gieomo_members", JSON.stringify(members));
     
     cachedOrders = [];
-    cachedPayments = [];
     cachedReviews = [];
     cachedVouchers = [];
 
@@ -3989,7 +4128,6 @@ export function restoreSeedMockData(): void {
     localStorage.removeItem("gieomo_categories");
 
     cachedOrders = null;
-    cachedPayments = null;
     cachedReviews = null;
     cachedProducts = null;
 

@@ -176,7 +176,7 @@ export const useCartStore = create<CartState>()(
                 removedCount++;
                 continue;
               }
-              const comboStock = (combo as any).stock !== undefined ? Number((combo as any).stock) : 999;
+              const comboStock = combo.stock !== undefined ? Number(combo.stock) : 999;
               if (comboStock <= 0) {
                 removedCount++;
                 continue;
@@ -237,8 +237,8 @@ export const useCartStore = create<CartState>()(
                 const pStock =
                   product.variants && product.variants.length > 0
                     ? product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-                    : (product as any).stock !== undefined
-                    ? Number((product as any).stock)
+                    : product.stock !== undefined
+                    ? Number(product.stock)
                     : 999;
 
                 if (pStock <= 0) {

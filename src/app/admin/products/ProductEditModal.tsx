@@ -2,11 +2,11 @@
 
 import { useState, useId } from "react";
 import Image from "next/image";
-import { ExtendedProduct } from "@/lib/data/mockData";
+import { ExtendedProduct, type ExtendedProductVariant } from "@/lib/data/mockData";
 import { parseProductDescription } from "@/lib/utils/productParser";
 import { uploadAsset, uploadAssetsParallel } from "@/lib/services/uploadService";
-import { Edit3, X, Upload, Loader2, Trash2, Sparkles } from "lucide-react";
-import { BulkVariantGenerator } from "@/components/admin/BulkVariantGenerator";
+import { Edit3, X, Upload, Loader2 } from "lucide-react";
+import { BulkVariantGenerator, type VariantItem } from "@/components/admin/BulkVariantGenerator";
 import { generateSku } from "@/lib/utils/skuGenerator";
 
 interface ProductEditModalProps {
@@ -37,9 +37,11 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
   const [imagesTextInput, setImagesTextInput] = useState("");
 
   // Variants with individual image URLs
-  const [variants, setVariants] = useState<any[]>(() => {
+  const [variants, setVariants] = useState<VariantItem[]>(() => {
     return (product.variants || []).map((v) => ({
       ...v,
+      sku: v.sku || "",
+      imageUrl: v.imageUrl || v.image_url || "",
       image_url: v.image_url || "",
     }));
   });
@@ -60,7 +62,6 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
   // Uploading states
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
-  const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
   const thumbInputId = useId();
   const galleryInputId = useId();
@@ -80,7 +81,8 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       } else {
         alert(`Lỗi tải ảnh: ${res.error || "Không thể tải lên"}`);
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       alert(`Lỗi kết nối khi tải ảnh: ${err?.message || "Lỗi không xác định"}`);
     } finally {
       setLoading?.(false);
@@ -101,7 +103,8 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
       if (errors.length > 0) {
         alert(`Có ${errors.length} ảnh gặp sự cố: ${errors.join("; ")}`);
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       alert(`Lỗi tải ảnh: ${err?.message || "Lỗi kết nối"}`);
     } finally {
       setUploadingGallery(false);
@@ -119,20 +122,6 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
 
   const handleRemoveGalleryImage = (idxToRemove: number) => {
     setImages((prev) => prev.filter((_, i) => i !== idxToRemove));
-  };
-
-  // Variant photo upload
-  const handleVariantPhotoUpload = async (file: File, variantIndex: number) => {
-    setUploadingVariantIdx(variantIndex);
-    await handleUploadSingle(
-      file,
-      (url) => {
-        setVariants((prev) =>
-          prev.map((v, i) => (i === variantIndex ? { ...v, image_url: url } : v))
-        );
-      },
-      () => setUploadingVariantIdx(null)
-    );
   };
 
   // Save changes
@@ -176,11 +165,21 @@ export function ProductEditModal({ product, onClose, onSave }: ProductEditModalP
 
     // Update variant warehouse stock and ensure valid SKU
     // Preserve existing stock values — stock changes must go through inventory receipts
-    const updatedVariants = variants.map((v, i) => {
+    const updatedVariants: ExtendedProductVariant[] = variants.map((v, i) => {
       const ensuredSku = v.sku?.trim() || generateSku(name, v.name || "", i);
       return {
         ...v,
+        variant_id: v.variant_id || `var-${Date.now()}-${i}`,
+        product_id: product.product_id,
+        name: v.name || "Phân loại",
         sku: ensuredSku,
+        price: v.price ?? null,
+        compare_at_price: v.compare_at_price ?? null,
+        cost_price: null,
+        stock: Number(v.stock) || 0,
+        weight_gram: null,
+        status: "active",
+        created_at: new Date().toISOString(),
         sort_order: i + 1,
       };
     });

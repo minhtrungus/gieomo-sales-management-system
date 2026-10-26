@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import Image from "next/image";
 import { ExtendedProduct } from "@/lib/data/mockData";
 import {
   getStoredProducts,
@@ -26,7 +27,6 @@ import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
 import {
   AlertTriangle,
   Plus,
-  Minus,
   PackagePlus,
   CheckCircle2,
   X,
@@ -43,10 +43,8 @@ import {
   User,
   History,
   Eye,
-  RefreshCw,
   ChevronDown,
   ChevronUp,
-  Layers,
   Sparkles,
 } from "lucide-react";
 
@@ -56,6 +54,15 @@ export default function AdminInventoryPage() {
 
   // Main Page Tabs: "inventory" (Kiểm kho) | "warehouses" (Quản lý kho) | "logs" (Lịch sử)
   const [mainTab, setMainTab] = useState<"inventory" | "warehouses" | "logs">("inventory");
+  const [importWarehouseId, setImportWarehouseId] = useState<string>("");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [transferProductId, setTransferProductId] = useState("");
+  const [transferVariantId, setTransferVariantId] = useState("");
+  const [fromWarehouse, setFromWarehouse] = useState<string>("");
+  const [toWarehouse, setToWarehouse] = useState<string>("");
+  const [inflowLogs, setInflowLogs] = useState<InflowLog[]>(() => (typeof window !== "undefined" ? getStoredInflowLogs() : []));
+  const [transferLogs, setTransferLogs] = useState<TransferLog[]>(() => (typeof window !== "undefined" ? getStoredTransferLogs() : []));
 
   // Load from persistent stores
   useEffect(() => {
@@ -206,7 +213,6 @@ export default function AdminInventoryPage() {
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>("all");
   const [stockAvailabilityFilter, setStockAvailabilityFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all");
   const [activeLogTab, setActiveLogTab] = useState<"inflow" | "transfer">("inflow");
-  const [viewGrouping, setViewGrouping] = useState<"grouped" | "flattened">("grouped");
   const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set());
 
   const toggleExpandProduct = (pId: string) => {
@@ -300,9 +306,6 @@ export default function AdminInventoryPage() {
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [bulkImportMode, setBulkImportMode] = useState<"single" | "batch_all">("single");
   const [bulkBatchCondition, setBulkBatchCondition] = useState<"out_of_stock_only" | "add_to_all">("out_of_stock_only");
-  const [importWarehouseId, setImportWarehouseId] = useState<string>("");
-  const [selectedProductId, setSelectedProductId] = useState(products[0]?.product_id || "");
-  const [selectedVariantId, setSelectedVariantId] = useState(products[0]?.variants?.[0]?.variant_id || "");
   const [importQty, setImportQty] = useState<number>(1);
   const [unitCost, setUnitCost] = useState<number>(35000);
   const [approvedBy, setApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
@@ -316,10 +319,6 @@ export default function AdminInventoryPage() {
   const bulkSingleInFlightRef = useRef(false);
 
   const [isTransferOpen, setIsTransferOpen] = useState(false);
-  const [transferProductId, setTransferProductId] = useState(products[0]?.product_id || "");
-  const [transferVariantId, setTransferVariantId] = useState(products[0]?.variants?.[0]?.variant_id || "");
-  const [fromWarehouse, setFromWarehouse] = useState<string>("");
-  const [toWarehouse, setToWarehouse] = useState<string>("");
   const [transferQty, setTransferQty] = useState<number>(10);
   const [transferApprovedBy, setTransferApprovedBy] = useState(() => (typeof window !== "undefined" ? getAdminSession()?.name : "") || "Admin Ban Tổ Chức");
   const [transferReason, setTransferReason] = useState("Chi viện hàng cho bàn trực gian hàng");
@@ -349,12 +348,6 @@ export default function AdminInventoryPage() {
   // cùng chạy continuation → local stock += delta hai lần. Ref ghi ngay
   // lập tức trước mọi await → continuation thứ hai không bao giờ chạy.
   const adjustInFlightRef = useRef(false);
-
-  // Inflow Logs State - persistent and clean
-  const [inflowLogs, setInflowLogs] = useState<InflowLog[]>(() => (typeof window !== "undefined" ? getStoredInflowLogs() : []));
-
-  // Transfer Logs State - persistent and clean
-  const [transferLogs, setTransferLogs] = useState<TransferLog[]>(() => (typeof window !== "undefined" ? getStoredTransferLogs() : []));
 
   const [stockSyncWarning, setStockSyncWarning] = useState<string | null>(null);
 
@@ -485,7 +478,8 @@ export default function AdminInventoryPage() {
         setAdjustError(res.message);
         return;
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       // Timeout/network — kết quả KHÔNG xác định: KHÔNG mutate local.
       // Key giữ nguyên → retry sẽ reuse (server dedup nếu đã áp dụng).
       setAdjustError(err?.message || "Không kết nối được máy chủ. Thử lại — sẽ dùng cùng mã thao tác.");
@@ -671,7 +665,8 @@ export default function AdminInventoryPage() {
         setBulkSingleError(res.message);
         return;
       }
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = caught as { message?: string } | null;
       // Timeout/network — kết quả không xác định: không mutate local
       setBulkSingleError(
         err?.message || "Không kết nối được máy chủ. Thử lại — sẽ dùng cùng mã thao tác."
@@ -1328,7 +1323,7 @@ export default function AdminInventoryPage() {
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <select
                   value={stockAvailabilityFilter}
-                  onChange={(e) => setStockAvailabilityFilter(e.target.value as any)}
+                  onChange={(e) => setStockAvailabilityFilter(e.target.value as "all" | "in_stock" | "low_stock" | "out_of_stock")}
                   className="px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold text-emerald-950 bg-white cursor-pointer outline-none"
                 >
                   <option value="all">Tất cả sản phẩm ({allInventoryRows.length})</option>
@@ -1424,9 +1419,11 @@ export default function AdminInventoryPage() {
                           )}
 
                           {grp.thumbnail ? (
-                            <img
+                            <Image
                               src={grp.thumbnail}
                               alt={grp.productName}
+                              width={44}
+                              height={44}
                               className="w-11 h-11 rounded-xl object-contain bg-cream border border-[#F0E5D8] shrink-0"
                             />
                           ) : (
@@ -2884,7 +2881,7 @@ export default function AdminInventoryPage() {
                 return (
                   <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center gap-3">
                     {p.thumbnail ? (
-                      <img src={p.thumbnail} alt="" className="w-10 h-10 rounded-xl object-contain bg-white border border-amber-200" />
+                      <Image src={p.thumbnail} alt="" width={40} height={40} className="w-10 h-10 rounded-xl object-contain bg-white border border-amber-200" />
                     ) : (
                       <div className="w-10 h-10 rounded-xl bg-white border border-amber-200 flex items-center justify-center text-base">🎁</div>
                     )}

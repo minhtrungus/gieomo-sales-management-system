@@ -1,7 +1,12 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { createFakeOrderDb, type FakeOrderDb, type HookContext } from "./helpers/fakeOrderDb.ts";
+import {
+  createFakeOrderDb,
+  type FakeOrderDb,
+  type HookContext,
+  type RpcHandlerResult,
+} from "./helpers/fakeOrderDb.ts";
 
 /**
  * Batch BLOCKERS-1-3 — contract tests cho writer TẠO ĐƠN duy nhất còn lại:
@@ -97,7 +102,10 @@ const PROTECTED_TABLES = [
   "order_status_history",
 ];
 
-type RpcCall = { name: string; args: Record<string, any> };
+type RpcCall = { name: string; args: Record<string, unknown> };
+type TestGlobal = typeof globalThis & { __fakeOrderDb?: FakeOrderDb };
+
+const testGlobal = globalThis as TestGlobal;
 let rpcCalls: RpcCall[] = [];
 let opLog: HookContext[] = [];
 
@@ -105,14 +113,15 @@ beforeEach(() => {
   opLog = [];
   rpcCalls = [];
   const db = createFakeOrderDb();
-  (globalThis as any).__fakeOrderDb = db;
+  testGlobal.__fakeOrderDb = db;
   db.hook = (ctx: HookContext) => {
     opLog.push(ctx);
   };
 });
 
 function db(): FakeOrderDb {
-  return (globalThis as any).__fakeOrderDb as FakeOrderDb;
+  assert.ok(testGlobal.__fakeOrderDb, "fake order DB must be initialized");
+  return testGlobal.__fakeOrderDb;
 }
 
 function rowCount(table: string): number {
@@ -129,11 +138,18 @@ function input(overrides: Record<string, unknown> = {}): Parameters<typeof creat
   } as Parameters<typeof createOrderServerAtomicV2>[0];
 }
 
-function captureRpc(handler: (name: string, args: Record<string, any>) => any): void {
+function captureRpc(
+  handler: (name: string, args: Record<string, unknown>) => RpcHandlerResult | Promise<RpcHandlerResult>
+): void {
   db().rpcHandler = async (name, args) => {
     rpcCalls.push({ name, args });
     return handler(name, args);
   };
+}
+
+function requireRecord(value: unknown, message = "expected an object"): Record<string, unknown> {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), message);
+  return value as Record<string, unknown>;
 }
 
 function protectedOps(): HookContext[] {
@@ -186,7 +202,7 @@ test("V2-C1 — key hợp lệ: payload đúng hợp đồng canonical, KHÔNG �
 
   assert.equal(rpcCalls.length, 1);
   assert.equal(rpcCalls[0].name, "create_order_atomic");
-  const p = captured as Record<string, any>;
+  const p = requireRecord(captured);
   assert.ok(p, "rpc phải nhận payload p");
 
   const scope = buildOrderIdempotencyScopeV2(null, canonical.buyer_phone);
@@ -241,7 +257,7 @@ test("V2-C3 — kết quả RPC dị dạng → nghiêm ngặt fail, không succ
     assert.equal(result.idempotency, undefined, JSON.stringify(payload));
   }
   // key giữ nguyên — client retry sẽ ánh xạ sang replay thay vì tạo lần 2
-  assert.equal(rpcCalls.every((c) => c.args.p.idempotency_key === KEY), true);
+  assert.equal(rpcCalls.every((c) => requireRecord(c.args.p).idempotency_key === KEY), true);
 });
 
 test("V2-C4 — D3:HASH_MISMATCH → hash_mismatch; D3:IN_PROGRESS → processing", async () => {
@@ -281,7 +297,7 @@ test("V2-C6 — lỗi DB không gắn nhãn D3 → undefined idempotency (retrya
   assert.equal(result.error, "Không thể tạo đơn hàng nguyên tử.");
   assert.equal(result.idempotency, undefined);
   assert.equal(rowCount("order_idempotency"), 0);
-  assert.equal(rpcCalls.every((c) => c.args.p.idempotency_key === KEY), true);
+  assert.equal(rpcCalls.every((c) => requireRecord(c.args.p).idempotency_key === KEY), true);
 });
 
 test("V2-C7 — thiếu function (PGRST202) → lỗi migration rõ, KHÔNG fallback TS", async () => {
@@ -303,7 +319,7 @@ test("V2-C8 — transport exception → undefined idempotency, key giữ nguyên
   const result = await createOrderServerAtomicV2(input());
   assert.equal(result.success, false);
   assert.equal(result.idempotency, undefined);
-  assert.equal(rpcCalls.every((c) => c.args.p.idempotency_key === KEY), true);
+  assert.equal(rpcCalls.every((c) => requireRecord(c.args.p).idempotency_key === KEY), true);
 });
 
 test("V2-C9 — keyless/malformed key → từ chối tường minh trước rpc (BLOCKER-3)", async () => {
@@ -344,16 +360,22 @@ test("V2-C11 — response mất sau commit → retry cùng key hội tụ replay
   const expected = expectedHashAndCanonical(orderInput);
 
   captureRpc((_name, args) => {
-    const p = args.p as Record<string, any>;
-    keys.push(p.idempotency_key);
+    const p = requireRecord(args.p);
+    const idempotencyKey = p.idempotency_key;
+    if (typeof idempotencyKey !== "string") throw new Error("expected string idempotency key");
+    keys.push(idempotencyKey);
     if (commits > 0) {
       assert.equal(p.request_hash, committedHash, "retry cùng payload cùng hash");
       return { data: { outcome: "created", order_id: ORDER_ID, order_code: ORDER_CODE, final_amount: 65000, replayed: true }, error: null };
     }
     assert.equal(p.request_hash, expected.hash);
-    assert.match(p.scope_key, /^guest:[0-9a-f]{64}$/);
+    const scopeKey = p.scope_key;
+    if (typeof scopeKey !== "string") throw new Error("expected string scope key");
+    assert.match(scopeKey, /^guest:[0-9a-f]{64}$/);
     commits = 1;
-    committedHash = p.request_hash;
+    const requestHash = p.request_hash;
+    if (typeof requestHash !== "string") throw new Error("expected string request hash");
+    committedHash = requestHash;
     return { data: { outcome: "created", order_id: ORDER_ID, order_code: ORDER_CODE, final_amount: 65000, replayed: false }, error: null };
   });
 
@@ -395,9 +417,11 @@ test("V2-C13 — member identity → scope member:<uuid>, actor_member_id truy�
   const result = await createOrderServerAtomicV2(input(), { memberId: MEMBER_ID });
 
   assert.equal(result.success, true);
-  const p = captured as Record<string, any>;
+  const p = requireRecord(captured);
   assert.ok(p);
   assert.equal(p.scope_key, `member:${MEMBER_ID}`);
   assert.equal(p.actor_member_id, MEMBER_ID);
-  assert.match(p.scope_key, /^member:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  const scopeKey = p.scope_key;
+  if (typeof scopeKey !== "string") throw new Error("expected string scope key");
+  assert.match(scopeKey, /^member:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });

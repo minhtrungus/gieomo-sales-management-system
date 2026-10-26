@@ -30,7 +30,12 @@ export async function load(url, context, nextLoad) {
 register(`data:text/javascript,${encodeURIComponent(loader)}`, import.meta.url);
 
 const { GET } = await import("../src/app/api/orders/route.ts");
-const g = globalThis as any;
+type H32Lookup = { phone?: string; proofToken?: string; isAdmin?: boolean };
+type H32Global = typeof globalThis & {
+  __h32User: { role: string; memberId: string } | null;
+  __h32Lookup: H32Lookup | null;
+};
+const g = globalThis as H32Global;
 
 beforeEach(() => {
   g.__h32User = null;
@@ -45,15 +50,18 @@ test("H32-R1 — anonymous order code alone is rejected before database lookup",
 
 test("H32-R2 — public tracking forwards code plus ownership credential", async () => {
   assert.equal((await GET(new Request("http://localhost/api/orders?code=GM-1&phone=0900000000"))).status, 200);
+  assert.ok(g.__h32Lookup);
   assert.equal(g.__h32Lookup.phone, "0900000000");
 
   assert.equal((await GET(new Request("http://localhost/api/orders?code=GM-1&token=proof"))).status, 200);
+  assert.ok(g.__h32Lookup);
   assert.equal(g.__h32Lookup.proofToken, "proof");
 });
 
 test("H32-R3 — admin retains full list access", async () => {
   g.__h32User = { role: "admin", memberId: "member" };
   assert.equal((await GET(new Request("http://localhost/api/orders"))).status, 200);
+  assert.ok(g.__h32Lookup);
   assert.equal(g.__h32Lookup.isAdmin, true);
 });
 
