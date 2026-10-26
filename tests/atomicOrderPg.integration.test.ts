@@ -266,15 +266,24 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
 
     // ClientA COMMIT để claim visible cho clientB (test idempotency thật);
     // clientB ROLLBACK để không để lại đơn thừa.
-    const [a, b] = await Promise.all([
-      run(clientA, "aaaaaaa1-4444-4444-8444-888888888888", `GM-C1${String(Date.now()).slice(-7)}`, true),
-      run(clientB, "bbbbbbb2-4444-4444-8444-888888888888", `GM-C2${String(Date.now()).slice(-7)}`, false),
-    ]);
+    // CHỮA H50P (CI run 40266756402): interleave cũ chạy A và B ĐỒNG THỜI
+    // (Promise.all) với A COMMIT / B ROLLBACK — không định đoạt được dưới
+    // ngữ nghĩa PostgreSQL: nếu B claim key trước, A bị chặn trên unique
+    // index của order_idempotency; khi B ROLLBACK, claim của B biến mất
+    // nên A insert thành công và tạo đơn RIÊNG → a.order_id !== b.order_id
+    // (đúng như CI ghi nhận). Invariant "cùng key chỉ sinh đúng một order"
+    // chỉ assert được khi thứ tự claim/commit rõ ràng → cố định thứ tự:
+    // A claim + COMMIT trước, B chạy sau → thấy row committed → replay
+    // (replayed=true) → ROLLBACK không để lại đơn thừa. Kịch bản đồng thời
+    // thật với cả hai COMMIT vẫn do mandatory PG suites bảo vệ.
+    const a = await run(clientA, "aaaaaaa1-4444-4444-8444-888888888888", `GM-C1${String(Date.now()).slice(-7)}`, true);
+    const b = await run(clientB, "bbbbbbb2-4444-4444-8444-888888888888", `GM-C2${String(Date.now()).slice(-7)}`, false);
 
     assert.equal(a.outcome, "created");
     assert.equal(b.outcome, "created");
     assert.equal(a.order_id, b.order_id, "cùng key chỉ sinh đúng một order");
-    assert.deepEqual([Boolean(a.replayed), Boolean(b.replayed)].sort(), [false, true]);
+    assert.equal(Boolean(a.replayed), false, "A claim đầu tiên → không replay");
+    assert.equal(Boolean(b.replayed), true, "B thấy claim đã COMMIT của A → replay");
 
     // Dọn seed (best effort) — clientA đã COMMIT → cần DELETE thủ công.
     await clientA.query("DELETE FROM public.order_items WHERE order_id IN ('aaaaaaa1-4444-4444-8444-888888888888','bbbbbbb2-4444-4444-8444-888888888888')");

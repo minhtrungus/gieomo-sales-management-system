@@ -3,9 +3,9 @@ import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
+import { psqlBin as psql } from "./helpers/psqlBin.ts";
 
 const databaseUrl = process.env.ATOMIC_PG_URL;
-const psql = process.env.PSQL_BIN || "psql.exe";
 const execFileAsync = promisify(execFile);
 const adminId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
