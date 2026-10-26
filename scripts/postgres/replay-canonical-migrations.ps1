@@ -55,7 +55,7 @@ try {
   }
 
   Invoke-Checked "migration chain validation" {
-    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "037"
+    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "038"
     try { & node (Join-Path $repoRoot "scripts/migrations/validate-chain.mjs") | Out-Null }
     finally { Remove-Item Env:GIEOMO_EXPECTED_MIGRATION_TIP -ErrorAction SilentlyContinue }
   }
@@ -136,6 +136,12 @@ END `$`$;
   try {
     Invoke-Checked "mandatory Node PostgreSQL tests" {
       & node scripts/postgres/run-mandatory-pg-tests.mjs
+    }
+    $allNodeTestFiles = Get-ChildItem (Join-Path $repoRoot "tests") -File -Filter "*.test.ts" |
+      Sort-Object FullName |
+      ForEach-Object FullName
+    Invoke-Checked "complete Node test suite with PostgreSQL target" {
+      & node --test --test-concurrency=1 @allNodeTestFiles
     }
     if ($ProposalFiles.Count -gt 0) {
       Invoke-Checked "remediation proposal PostgreSQL tests" {
