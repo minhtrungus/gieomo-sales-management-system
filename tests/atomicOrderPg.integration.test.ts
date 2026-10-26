@@ -192,7 +192,7 @@ test("PG atomic — create_order_atomic: tạo đơn + trừ stock + ledger comp
   });
 });
 
-test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing (không 2 đơn)", async (t) => {
+test("PG same-key sequential — claim đã COMMIT: replay (replayed=true); claim ROLLBACK không để lại đơn thừa", async (t) => {
   if (!canRun) {
     t.skip(skipReason);
     return;
@@ -266,16 +266,15 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
 
     // ClientA COMMIT để claim visible cho clientB (test idempotency thật);
     // clientB ROLLBACK để không để lại đơn thừa.
-    // CHỮA H50P (CI run 40266756402): interleave cũ chạy A và B ĐỒNG THỜI
-    // (Promise.all) với A COMMIT / B ROLLBACK — không định đoạt được dưới
-    // ngữ nghĩa PostgreSQL: nếu B claim key trước, A bị chặn trên unique
-    // index của order_idempotency; khi B ROLLBACK, claim của B biến mất
-    // nên A insert thành công và tạo đơn RIÊNG → a.order_id !== b.order_id
-    // (đúng như CI ghi nhận). Invariant "cùng key chỉ sinh đúng một order"
-    // chỉ assert được khi thứ tự claim/commit rõ ràng → cố định thứ tự:
-    // A claim + COMMIT trước, B chạy sau → thấy row committed → replay
-    // (replayed=true) → ROLLBACK không để lại đơn thừa. Kịch bản đồng thời
-    // thật với cả hai COMMIT vẫn do mandatory PG suites bảo vệ.
+    // LỊCH SỬ (H50P/H50Q, CI run 40266756402): bản gốc chạy A và B ĐỒNG
+    // THỜI (Promise.all) với A COMMIT / B ROLLBACK — không định đoạt được
+    // dưới ngữ nghĩa PostgreSQL: nếu B claim key trước, A bị chặn trên
+    // unique index của order_idempotency; khi B ROLLBACK, claim của B
+    // biến mất nên A insert thành công và tạo đơn RIÊNG → a.order_id !==
+    // b.order_id (đúng như CI ghi nhận). Test này giờ chỉ giữ kịch bản
+    // TUẦN TỰ định đoạt được: A claim + COMMIT, B chạy sau → replay.
+    // Kịch bản ĐỒNG THỜI thật cùng key được tách sang test race riêng
+    // bên dưới (đồng bộ bằng quan sát pg_stat_activity, không sleep mù).
     const a = await run(clientA, "aaaaaaa1-4444-4444-8444-888888888888", `GM-C1${String(Date.now()).slice(-7)}`, true);
     const b = await run(clientB, "bbbbbbb2-4444-4444-8444-888888888888", `GM-C2${String(Date.now()).slice(-7)}`, false);
 
@@ -295,6 +294,199 @@ test("PG concurrency — 2 kết nối cùng key: đúng 1 created + 1 existing 
   } finally {
     await clientA.end();
     await clientB.end();
+  }
+});
+
+// PG same-key race — ĐỒNG THỜI THẬT, ĐỊNH ĐOẠT ĐƯỢC (không phụ thuộc
+// "ai claim trước"): A claim key (INSERT order_idempotency 'in_progress'
+// trong tx CHƯA commit) → B chạy CÙNG key và PHẢI bị chặn trên unique
+// index của claim (chứng minh bằng pg_stat_activity: B ở trạng thái
+// wait_event_type='Lock' TRƯỚC khi A commit — quan sát, không sleep mù).
+// A COMMIT → INSERT của B vấp unique violation 23505 → v25 KHÔNG có
+// handler cho 23505 (migrate 035 L155: INSERT trần) → lỗi surfaced
+// fail-closed cho client (KHÔNG tự biến thành replay). Contract kỳ vọng:
+//   1) A: claim + tạo đơn, 'replayed': false, trong tx chưa commit.
+//   2) B (chưa commit của A): SELECT FOR UPDATE không thấy row → tới
+//      INSERT → block trên unique index.
+//   3) A commit → claim row 'completed' (claim + hoàn tất cùng 1 tx).
+//   4) B: 23505 surfaced, tx B abort → không có đơn thứ hai.
+//   5) Retry cùng key (tx mới): SELECT thấy row 'completed' → replay,
+//      cùng order_id với A, replayed=true.
+// Invariant: ĐÚNG 1 đơn committed cho cùng key.
+test("PG same-key race — B chặn trên claim CHƯA commit; A commit → B 23505 fail-closed; đúng 1 đơn committed; retry replay", async (t) => {
+  if (!canRun) {
+    t.skip(skipReason);
+    return;
+  }
+  const clientA = new pgMod.Client({ connectionString: ATOMIC_PG_URL });
+  const clientB = new pgMod.Client({ connectionString: ATOMIC_PG_URL });
+  const clientW = new pgMod.Client({ connectionString: ATOMIC_PG_URL });
+  await clientA.connect();
+  await clientB.connect();
+  await clientW.connect();
+  try {
+    if (!(await functionExists(clientA, "create_order_atomic"))) {
+      t.skip("public.create_order_atomic chưa tồn tại — apply migration 016 trước (Q7)");
+      return;
+    }
+
+    // PID backend của B để quan sát trạng thái chờ lock qua pg_stat_activity.
+    const pidRes = await clientB.query("SELECT pg_backend_pid() AS pid");
+    const bPid = pidRes.rows[0].pid as number;
+
+    const token = `pg-race-${Date.now()}`;
+    // Seed COMMITTED (clientA ngoài tx) — product KHÔNG biến thể → không deduct stock.
+    const prodRes = await clientA.query(
+      "INSERT INTO public.products (name, slug, price, status) VALUES ($1, $2, 20000, 'active') RETURNING product_id",
+      ["PG race test", `pg-race-${token}`]
+    );
+    const productId = prodRes.rows[0].product_id as string;
+    const custRes = await clientA.query(
+      "INSERT INTO public.customers (full_name, phone, email) VALUES ('PG Race', $1, null) RETURNING customer_id",
+      [`0912${String(Date.now()).slice(-7)}`]
+    );
+    const customerId = custRes.rows[0].customer_id as string;
+    const key = crypto.randomUUID();
+
+    const mkPayload = (orderId: string, orderCode: string) => ({
+      idempotency_key: key,
+      request_hash: "pg-race-hash",
+      lease_owner: `owner-${orderCode}`,
+      proof_token: `tok-${orderCode}`,
+      order_id: orderId,
+      order_code: orderCode,
+      customer_id: customerId,
+      seller_id: null,
+      assigned_shipper_id: null,
+      source_type: "landing_page",
+      introducer_info: "Trực tiếp (Website)",
+      receiver_name: "PG Race",
+      receiver_phone: "0912000001",
+      delivery_type: "home_delivery",
+      shipping_address_snapshot: null,
+      customer_note: null,
+      voucher_code: null,
+      base_shipping_fee: 25000,
+      free_shipping_threshold: 0,
+      items: [{ combo_id: null, variant_id: null, product_id: productId, quantity: 1 }],
+    });
+
+    const run = async (client: any, orderId: string, orderCode: string, commit: boolean) => {
+      await client.query("BEGIN");
+      try {
+        const res = await client.query("SELECT public.create_order_atomic($1::jsonb) AS r", [
+          JSON.stringify(canonicalPayload(mkPayload(orderId, orderCode))),
+        ]);
+        const out = res.rows[0].r as { outcome: string; replayed?: boolean; order_id: string };
+        if (commit) {
+          await client.query("COMMIT");
+        } else {
+          await client.query("ROLLBACK");
+        }
+        return out;
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
+    };
+
+    // A: claim + tạo đơn trong tx CHƯA commit. Thứ tự A-first được ép bằng
+    // cách chỉ khởi động B SAU khi A đã claim thành công (assert bên dưới).
+    // TX A GIỮ MỞ (không COMMIT/ROLLBACK ở đây) — B phải chặn trên claim
+    // chưa commit; COMMIT A được thực hiện sau khi quan sát được B chờ lock.
+    await clientA.query("BEGIN");
+    const aRes = await clientA.query("SELECT public.create_order_atomic($1::jsonb) AS r", [
+      JSON.stringify(canonicalPayload(mkPayload("aaaaaaa3-4444-4444-8444-888888888888", `GM-R1${String(Date.now()).slice(-7)}`))),
+    ]);
+    const a = aRes.rows[0].r as { outcome: string; replayed?: boolean; order_id: string };
+    assert.equal(a.outcome, "created", "A phải tạo được đơn trong tx chưa commit");
+
+    // Bằng chứng claim của A tồn tại trong tx CHƯA commit của A (status
+    // 'completed' chỉ nhìn thấy từ chính tx của A vì claim+hoàn tất cùng tx).
+    const claimRes = await clientA.query(
+      "SELECT status, order_id FROM public.order_idempotency WHERE idempotency_key = $1",
+      [key]
+    );
+    assert.equal(claimRes.rowCount, 1, "A phải giữ đúng 1 claim trong tx chưa commit");
+    assert.equal(claimRes.rows[0].status, "completed");
+    assert.equal(claimRes.rows[0].order_id, a.order_id);
+
+    // B: cùng key — sẽ block tại INSERT claim (unique index) cho tới khi A commit.
+    // Không dựa sleep mù: chờ B được QUAN SÁT là đang chờ lock (pg_stat_activity),
+    // với trần thời gian rõ ràng; chỉ sau đó mới COMMIT A.
+    const bResult = (async () => {
+      await clientB.query("BEGIN");
+      try {
+        const res = await clientB.query("SELECT public.create_order_atomic($1::jsonb) AS r", [
+          JSON.stringify(canonicalPayload(mkPayload("bbbbbbb4-4444-4444-8444-888888888888", `GM-R2${String(Date.now()).slice(-7)}`))),
+        ]);
+        return { ok: true as const, out: res.rows[0].r };
+      } catch (err: any) {
+        return { ok: false as const, code: err?.code, detail: err?.detail, message: err?.message };
+      } finally {
+        try {
+          await clientB.query("ROLLBACK");
+        } catch {
+          /* tx B có thể đã abort — ROLLBACK vẫn an toàn */
+        }
+      }
+    })();
+
+    let blockedObserved = false;
+    for (let i = 0; i < 100; i++) {
+      const w = await clientW.query(
+        "SELECT wait_event_type, state FROM pg_stat_activity WHERE pid = $1",
+        [bPid]
+      );
+      if (w.rows[0] && w.rows[0].state === "active" && w.rows[0].wait_event_type === "Lock") {
+        blockedObserved = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(
+      blockedObserved,
+      true,
+      "B phải được quan sát đang CHỜ LOCK (pg_stat_activity) trước khi A commit — nếu không, đồng bộ race không deterministic"
+    );
+
+    await clientA.query("COMMIT");
+    const b = await bResult;
+
+    // Contract hiện tại: 23505 KHÔNG được handler → surfaced fail-closed.
+    assert.equal(b.ok, false, "B phải fail-closed khi claim đã commit bởi A (không có handler 23505 trong v25)");
+    assert.equal((b as any).code, "23505", `B phải dính unique violation 23505 (actual: ${(b as any).code} — ${(b as any).message})`);
+
+    // Invariant: ĐÚNG 1 đơn committed cho cùng key; ledger 'completed' trỏ tới đơn của A.
+    const committedRes = await clientA.query(
+      "SELECT count(*)::int AS n FROM public.orders WHERE idempotency_key = $1",
+      [key]
+    );
+    assert.equal(Number(committedRes.rows[0].n), 1, "cùng key chỉ được ĐÚNG 1 đơn committed");
+    const ledgerRes = await clientA.query(
+      "SELECT status, order_id FROM public.order_idempotency WHERE idempotency_key = $1",
+      [key]
+    );
+    assert.equal(ledgerRes.rows[0].status, "completed");
+    assert.equal(ledgerRes.rows[0].order_id, a.order_id);
+
+    // Retry (tx mới, sau khi A commit): canonical replay — cùng order_id, replayed=true.
+    const c = await run(clientA, "aaaaaaa3-4444-4444-8444-888888888888", `GM-R1${String(Date.now()).slice(-7)}`, true);
+    assert.equal(c.outcome, "created");
+    assert.equal(c.order_id, a.order_id, "retry sau commit phải trả cùng order_id (replay)");
+    assert.equal(Boolean(c.replayed), true, "retry phải là replay (replayed=true)");
+
+    // Dọn seed (best effort) — clientA đã COMMIT → cần DELETE thủ công.
+    await clientA.query("DELETE FROM public.order_items WHERE order_id IN ('aaaaaaa3-4444-4444-8444-888888888888','bbbbbbb4-4444-4444-8444-888888888888')");
+    await clientA.query("DELETE FROM public.orders WHERE order_id IN ('aaaaaaa3-4444-4444-8444-888888888888')");
+    await clientA.query("DELETE FROM public.order_status_history WHERE order_id IN ('aaaaaaa3-4444-4444-8444-888888888888')");
+    await clientA.query("DELETE FROM public.order_idempotency WHERE idempotency_key = $1", [key]);
+    await clientA.query("DELETE FROM public.products WHERE product_id = $1", [productId]);
+    await clientA.query("DELETE FROM public.customers WHERE customer_id = $1", [customerId]);
+  } finally {
+    await clientA.end();
+    await clientB.end();
+    await clientW.end();
   }
 });
 
