@@ -8,11 +8,11 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProductReviews } from "@/components/products/ProductReviews";
-import { ProductLightbox } from "@/components/products/ProductLightbox";
+import { ProductGallery } from "@/components/products/ProductGallery";
 import type { ExtendedProduct, ExtendedProductVariant } from "@/lib/data/mockData";
 import { getStoredProducts } from "@/lib/data/orderStore";
 import { parseProductDescription, buildProductSpecRows } from "@/lib/utils/productParser";
-import { BookOpen, ShieldCheck, SlidersHorizontal, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { BookOpen, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { useCartStore } from "@/store/cart";
@@ -35,9 +35,7 @@ export function ProductDetailClient({
   const [product, setProduct] = useState<ExtendedProduct | null>(initialProduct ?? null);
   const [isLoading, setIsLoading] = useState<boolean>(!initialProduct);
   const [selectedVariant, setSelectedVariant] = useState<ExtendedProductVariant | null>(initialProduct?.variants?.[0] ?? null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [customActiveImage, setCustomActiveImage] = useState<string | null>(null);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [galleryVariantImage, setGalleryVariantImage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -151,22 +149,11 @@ export function ProductDetailClient({
     return base;
   }, [product]);
 
-  // Ảnh đang hiển thị trong gallery và lightbox.
-  const activeGalleryImage = customActiveImage || displayImages[selectedImageIndex] || displayImages[0];
-
   // When variant changes, auto-switch to its image if available
   const handleVariantSelect = (v: ExtendedProductVariant) => {
     setSelectedVariant(v);
     setQuantity(1);
-    if (v.image_url) {
-      const idx = displayImages.indexOf(v.image_url);
-      if (idx >= 0) {
-        setSelectedImageIndex(idx);
-        setCustomActiveImage(null);
-      } else {
-        setCustomActiveImage(v.image_url);
-      }
-    }
+    setGalleryVariantImage(v.image_url || null);
   };
 
   const parsedInfo = useMemo(() => {
@@ -322,125 +309,13 @@ export function ProductDetailClient({
 
         {/* Product Detail Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-8 border border-[#F0E5D8] shadow-soft mb-12">
-          {/* Gallery - Left 6 Cols */}
-          <div className="lg:col-span-6 space-y-4">
-            {product.image_status !== "source" && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
-                Ảnh sản phẩm thật chưa có trong bản sao cục bộ; hình bên dưới là trạng thái thay thế, không phải ảnh đã xác minh.
-              </div>
-            )}
-            <div 
-              onClick={() => setIsLightboxOpen(true)}
-              className="relative aspect-4/3 sm:aspect-square w-full rounded-2xl bg-[#FFF8EE] border border-[#F0E5D8] overflow-hidden flex items-center justify-center group/gallery select-none cursor-zoom-in"
-              title="Nhấp để phóng to ảnh xem chi tiết các mẫu"
-            >
-              {/* Ambient backdrop for non-square photos without raw image network request */}
-              <div 
-                className="absolute inset-0 bg-gradient-to-tr from-amber-100/30 via-emerald-50/20 to-transparent pointer-events-none"
-              />
-
-              {/* Render optimized active product image */}
-              {(() => {
-                const currentImg = activeGalleryImage;
-                if (!currentImg) return null;
-                return (
-                  <div
-                    key={currentImg}
-                    className="absolute inset-0 flex items-center justify-center p-2 transition-opacity duration-300 ease-out z-10"
-                  >
-                    <Image
-                      src={currentImg}
-                      alt={product.name}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 580px"
-                      className="object-contain"
-                      priority={selectedImageIndex === 0 && !customActiveImage}
-                    />
-                  </div>
-                );
-              })()}
-
-              {/* Hover Zoom Badge */}
-              <div className="absolute top-3 right-3 z-30 px-2.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-xs flex items-center gap-1.5 transition-all shadow-md">
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Phóng to xem chi tiết</span>
-              </div>
-
-              {/* Navigation Arrows if more than 1 image */}
-              {displayImages.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCustomActiveImage(null);
-                      setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : displayImages.length - 1));
-                    }}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-white/90 hover:bg-white text-[#342A24] shadow-soft backdrop-blur-xs opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 active:scale-95 cursor-pointer"
-                    aria-label="Ảnh trước"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCustomActiveImage(null);
-                      setSelectedImageIndex((prev) => (prev < displayImages.length - 1 ? prev + 1 : 0));
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 p-2.5 rounded-full bg-white/90 hover:bg-white text-[#342A24] shadow-soft backdrop-blur-xs opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 active:scale-95 cursor-pointer"
-                    aria-label="Ảnh tiếp theo"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-
-                  {/* Slide dots indicator */}
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-xs">
-                    {displayImages.map((_, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedImageIndex(i);
-                          setCustomActiveImage(null);
-                        }}
-                        className={`h-1.5 rounded-full transition-all duration-500 cursor-pointer ${
-                          selectedImageIndex === i && !customActiveImage ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/80"
-                        }`}
-                        aria-label={`Chuyển đến ảnh ${i + 1}`}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Thumbnails */}
-            {displayImages.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
-                {displayImages.map((img, idx) => {
-                  const isActive = selectedImageIndex === idx && !customActiveImage;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setSelectedImageIndex(idx);
-                        setCustomActiveImage(null);
-                      }}
-                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition-all duration-300 cursor-pointer bg-[#FFF8EE] ${
-                        isActive
-                          ? "border-[#2D6338] ring-2 ring-[#2D6338]/20 shadow-soft scale-105"
-                          : "border-[#F0E5D8] opacity-60 hover:opacity-100 hover:border-[#FFB98A]"
-                      }`}
-                    >
-                      <Image src={img} alt="" fill sizes="80px" className="object-contain transition-transform duration-500 hover:scale-105" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <ProductGallery
+            key={galleryVariantImage || "default-gallery"}
+            productName={product.name}
+            imageStatus={product.image_status}
+            images={displayImages}
+            initialActiveImage={galleryVariantImage}
+          />
 
           {/* Details - Right 6 Cols */}
           <div className="lg:col-span-6 space-y-6 flex flex-col justify-between">
@@ -784,22 +659,6 @@ export function ProductDetailClient({
           </button>
         </div>
       </aside>
-
-      {/* FULLSCREEN LIGHTBOX MODAL (tách component — INP-LIGHTBOX) */}
-      {isLightboxOpen && product && (
-        <ProductLightbox
-          productName={product.name}
-          images={displayImages}
-          activeIndex={selectedImageIndex}
-          activeSrc={activeGalleryImage || displayImages[0]}
-          isVariantContext={Boolean(customActiveImage)}
-          onNavigate={(idx) => {
-            setSelectedImageIndex(idx);
-            setCustomActiveImage(null);
-          }}
-          onClose={() => setIsLightboxOpen(false)}
-        />
-      )}
 
       <Footer />
 

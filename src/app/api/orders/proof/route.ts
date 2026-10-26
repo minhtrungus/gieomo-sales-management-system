@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyOrderProofToken, getAuthenticatedUser } from "@/lib/auth/serverAuth";
+import { isSupportedOrderCode, normalizeOrderCode } from "@/lib/orders/orderCode";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      orderCode = (formData.get("orderCode") as string || "").trim().toUpperCase();
+      orderCode = normalizeOrderCode(formData.get("orderCode"));
       token = (formData.get("token") as string || "").trim();
       phone = (formData.get("phone") as string || "").trim().replace(/\D/g, "");
       paymentProofUrl = (formData.get("paymentProof") as string || "").trim();
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       fileToUpload = formData.get("file") as File | null;
     } else {
       const body = await request.json();
-      orderCode = (body.orderCode || "").trim().toUpperCase();
+      orderCode = normalizeOrderCode(body.orderCode);
       token = (body.token || "").trim();
       phone = (body.phone || "").trim().replace(/\D/g, "");
       paymentProofUrl = (body.paymentProof || "").trim();
@@ -57,9 +58,9 @@ export async function POST(request: Request) {
     }
 
     // 1. Validate Order Code format
-    if (!orderCode || !/^GM-[A-Z0-9]{4,10}$/i.test(orderCode)) {
+    if (!isSupportedOrderCode(orderCode)) {
       return NextResponse.json(
-        { success: false, error: "Mã đơn hàng không hợp lệ (Ví dụ: GM-369817)" },
+        { success: false, error: "Mã đơn hàng không hợp lệ (Ví dụ: GM-369817 hoặc GM-260901-000001)" },
         { status: 400 }
       );
     }

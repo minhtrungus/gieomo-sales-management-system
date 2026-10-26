@@ -17,11 +17,13 @@ const read = (path: string): string =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 
 const DETAIL = read("../src/app/products/[slug]/ProductDetailClient.tsx");
+const GALLERY = read("../src/components/products/ProductGallery.tsx");
 const LIGHTBOX = read("../src/components/products/ProductLightbox.tsx");
 
 test("INP-L1 — lightbox tách component riêng, zoom state sống nội bộ", () => {
-  assert.match(DETAIL, /from "@\/components\/products\/ProductLightbox"/);
-  assert.match(DETAIL, /<ProductLightbox\b/);
+  assert.match(DETAIL, /from "@\/components\/products\/ProductGallery"/);
+  assert.match(DETAIL, /<ProductGallery\b/);
+  assert.match(GALLERY, /<ProductLightbox\b/);
   // Trang chi tiết không còn giữ state/handler zoom nội khối lightbox
   assert.doesNotMatch(DETAIL, /lightboxZoom/);
   assert.match(LIGHTBOX, /const \[zoom, setZoom\] = useState\(1\)/);
@@ -36,17 +38,24 @@ test("INP-L2 — lightbox không request variant 100vw, sizes khớp hộp max-w
 });
 
 test("INP-L3 — gallery không re-render toàn trang hoặc eager-load ảnh lớn trên hover", () => {
-  assert.doesNotMatch(DETAIL, /isGalleryPrefetchArmed/);
-  assert.doesNotMatch(DETAIL, /setIsGalleryPrefetchArmed/);
-  assert.doesNotMatch(DETAIL, /loading="eager"/);
+  assert.doesNotMatch(GALLERY, /isGalleryPrefetchArmed/);
+  assert.doesNotMatch(GALLERY, /setIsGalleryPrefetchArmed/);
+  assert.doesNotMatch(GALLERY, /loading="eager"/);
 });
 
 test("INP-L4 — mở lightbox giữ nguyên hành vi: một luồng state, không side-effect lạ", () => {
   // click mở chỉ set isLightboxOpen; đóng qua onClose; keyboard trong component
-  assert.match(DETAIL, /onClick=\{\(\) => setIsLightboxOpen\(true\)\}/);
-  assert.match(DETAIL, /onClose=\{\(\) => setIsLightboxOpen\(false\)\}/);
+  assert.match(GALLERY, /onClick=\{\(\) => setIsLightboxOpen\(true\)\}/);
+  assert.match(GALLERY, /onClose=\{\(\) => setIsLightboxOpen\(false\)\}/);
   assert.doesNotMatch(LIGHTBOX, /router\.|fetch\(|window\.location/);
   assert.match(LIGHTBOX, /e\.key === "Escape"/);
+});
+
+test("INP-L6 — thumbnail state is isolated from the full product detail render", () => {
+  assert.match(GALLERY, /export const ProductGallery = memo/);
+  assert.match(GALLERY, /const \[selectedImageIndex, setSelectedImageIndex\] = useState/);
+  assert.doesNotMatch(DETAIL, /const \[selectedImageIndex, setSelectedImageIndex\] = useState/);
+  assert.match(GALLERY, /aria-pressed=\{isActive\}/);
 });
 
 test("INP-L5 — lightbox dài chỉ render tối đa chín thumbnail quanh ảnh đang xem", () => {

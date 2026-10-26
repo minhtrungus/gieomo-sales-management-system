@@ -82,12 +82,12 @@ const AUTH_VERSION = "2026-10-23T00:00:00.000Z";
 
 const g = globalThis as unknown as { __fakeOrderDb?: unknown };
 
-function seedDb(payment_status = "pending"): FakeOrderDb {
+function seedDb(payment_status = "pending", orderCode = ORDER_CODE): FakeOrderDb {
   const db = createFakeOrderDb({
     orders: [
       {
         order_id: ORDER_ID,
-        order_code: ORDER_CODE,
+        order_code: orderCode,
         customer_id: null,
         receiver_name: "Nguyen Van A",
         receiver_phone: RECEIVER_PHONE,
@@ -108,6 +108,29 @@ function seedDb(payment_status = "pending"): FakeOrderDb {
   });
   g.__fakeOrderDb = db;
   return db;
+}
+
+function addStorage(db: FakeOrderDb, uploadError: { message: string } | null = null) {
+  const storage = {
+    from: () => ({
+      upload: async () => ({ error: uploadError }),
+      getPublicUrl: (path: string) => ({ data: { publicUrl: `https://proof.test/${path}` } }),
+    }),
+  };
+  Object.assign(db, { storage });
+}
+
+function pngFile(): File {
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  return new File([bytes], "proof.png", { type: "image/png" });
+}
+
+function proofFormReq(orderCode: string, phone: string, file: File): Promise<Response> {
+  const form = new FormData();
+  form.set("orderCode", orderCode);
+  form.set("phone", phone);
+  form.set("file", file);
+  return PROOF_POST(new Request("http://localhost/api/orders/proof", { method: "POST", body: form }));
 }
 
 function proofReq(body: Record<string, unknown>, headers: Record<string, string> = {}): Promise<Response> {
@@ -180,4 +203,31 @@ test("B13 — order code không tồn tại → 404", async () => {
   seedDb();
   const res = await proofReq({ orderCode: "GM-NOPE99", phone: RECEIVER_PHONE });
   assert.equal(res.status, 404);
+});
+
+test("B14 — canonical GM-YYMMDD-sequence vượt validation và upload thành công", async () => {
+  const canonicalCode = "GM-260901-000001";
+  const db = seedDb("pending", canonicalCode);
+  addStorage(db);
+  const res = await proofFormReq(canonicalCode.toLowerCase(), RECEIVER_PHONE, pngFile());
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.orderCode, canonicalCode);
+  assert.match(body.paymentProof, /proof-GM-260901-000001-/);
+  assert.match(String(db.tables.orders[0].internal_note), /\[Ảnh biên lai\]: https:\/\/proof\.test\//);
+});
+
+test("B15 — lỗi storage trả 500 và không ghi proof vào DB", async () => {
+  const canonicalCode = "GM-260901-000002";
+  const db = seedDb("pending", canonicalCode);
+  addStorage(db, { message: "storage unavailable" });
+  const res = await proofFormReq(canonicalCode, RECEIVER_PHONE, pngFile());
+  assert.equal(res.status, 500);
+  assert.equal(db.tables.orders[0].internal_note, null);
+});
+
+test("B16 — thiếu hoặc sai format mã đơn bị chặn trước lookup", async () => {
+  seedDb();
+  assert.equal((await proofReq({ phone: RECEIVER_PHONE })).status, 400);
+  assert.equal((await proofReq({ orderCode: "GM-260901-1", phone: RECEIVER_PHONE })).status, 400);
 });

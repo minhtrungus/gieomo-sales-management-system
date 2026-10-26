@@ -7,9 +7,11 @@ import { Footer } from "@/components/layout/Footer";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { OrderThankYouCardDialog } from "@/components/order/OrderThankYouCardDialog";
 import { CUSTOMER_TIMELINE_STEPS, ORDER_STATUS_LABELS } from "@/lib/constants";
 import { getStoredOrders } from "@/lib/data/orderStore";
 import type { Order, OrderItem } from "@/types/database";
+import { Printer } from "lucide-react";
 
 function removeVietnameseTones(str: string): string {
   return str
@@ -39,6 +41,7 @@ function TrackContent() {
 
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [thankYouOrder, setThankYouOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -163,7 +166,7 @@ function TrackContent() {
 
     const query = rawQuery.trim();
     if (!query) {
-      setErrorMsg("Vui lòng nhập Mã đơn hàng của bạn (Ví dụ: GM-369817).");
+      setErrorMsg("Vui lòng nhập Mã đơn hàng của bạn (Ví dụ: GM-369817 hoặc GM-260901-000001).");
       setMatchedOrders([]);
       setSelectedOrder(null);
       return;
@@ -220,7 +223,7 @@ function TrackContent() {
     setMatchedOrders([]);
     setSelectedOrder(null);
     setErrorMsg(
-      `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817) được cấp khi bạn đặt hàng.`
+      `Không tìm thấy đơn hàng nào có mã "${query}". Vui lòng kiểm tra lại mã đơn (Ví dụ: GM-369817 hoặc GM-260901-000001) được cấp khi bạn đặt hàng.`
     );
   }, [mapServerOrder, searchPhone]);
 
@@ -413,7 +416,7 @@ function TrackContent() {
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   label="Mã đơn hàng:"
-                  placeholder="Ví dụ: GM-369817 hoặc GM-260901..."
+                  placeholder="Ví dụ: GM-369817 hoặc GM-260901-000001"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -578,8 +581,19 @@ function TrackContent() {
                 Ngày đặt: {new Date(selectedOrder.created_at).toLocaleString("vi-VN")}
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-soft-green/60 text-emerald-950 text-xs font-extrabold">
-              Trạng thái: {ORDER_STATUS_LABELS[selectedOrder.order_status]}
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+              <div className="inline-flex items-center gap-2 self-start rounded-xl bg-soft-green/60 px-3 py-1.5 text-xs font-extrabold text-emerald-950 sm:self-auto">
+                Trạng thái: {ORDER_STATUS_LABELS[selectedOrder.order_status]}
+              </div>
+              <button
+                type="button"
+                onClick={() => setThankYouOrder(selectedOrder)}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#9ed4a3] bg-[#EAF7ED] px-4 py-2 text-xs font-extrabold text-[#16381D] transition-colors hover:bg-[#BFE9C3] sm:w-auto"
+                aria-label={`Xem hoặc in thiệp cảm ơn cho đơn ${selectedOrder.order_code}`}
+              >
+                <Printer className="h-4 w-4" />
+                Xem / in thiệp cảm ơn
+              </button>
             </div>
           </div>
 
@@ -757,6 +771,10 @@ function TrackContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {thankYouOrder && (
+        <OrderThankYouCardDialog order={thankYouOrder} onClose={() => setThankYouOrder(null)} />
       )}
     </div>
   );
