@@ -144,6 +144,8 @@ export async function POST(request: Request) {
       );
     }
 
+    // Deprecated compatibility path for previously deployed clients. There is
+    // intentionally no admin UI caller; keep the audited RPC contract intact.
     if (action === "adjust_confirmation") {
       const reason = typeof body.reason === "string" ? body.reason.trim() : "";
       const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";

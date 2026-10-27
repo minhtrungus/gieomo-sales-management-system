@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -13,6 +13,7 @@ import {
   type PaymentRecord,
 } from "@/lib/data/orderStore";
 import type { Order } from "@/types/database";
+import { PaymentRefreshCoordinator, shouldRefreshPayments } from "@/lib/admin/paymentRefreshCoordinator";
 
 interface ReconciliationPaymentRow {
   payment_id: string;
@@ -45,6 +46,7 @@ interface MissingPaymentLedgerRow {
 interface PaymentPageData {
   payments: PaymentRecord[];
   missingLedger: MissingPaymentLedgerRow[];
+  orders?: Order[];
 }
 
 async function fetchRecordedPayments(): Promise<PaymentPageData> {
@@ -106,42 +108,35 @@ export default function AdminPaymentsPage() {
   const [paymentReadError, setPaymentReadError] = useState<string | null>(null);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const refreshInFlight = useRef<Promise<boolean> | null>(null);
-
-  const loadData = () => {
-    setOrders(getStoredOrders());
-  };
-
-  const refreshAuthoritativeData = useCallback((showError = true) => {
-    if (refreshInFlight.current) return refreshInFlight.current;
-    const flight = (async () => {
-      try {
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [refreshCoordinator] = useState(() =>
+    new PaymentRefreshCoordinator<PaymentPageData>(
+      async () => {
         await syncOrdersFromServer(true);
-        setOrders(getStoredOrders());
         const result = await fetchRecordedPayments();
-        setPayments(result.payments);
-        setMissingLedger(result.missingLedger);
-        setPaymentReadError(null);
-        return true;
-      } catch {
-        if (showError) {
-          setPayments([]);
-          setMissingLedger([]);
-          setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
-        }
-        return false;
-      }
-    })().finally(() => { refreshInFlight.current = null; });
-    refreshInFlight.current = flight;
-    return flight;
-  }, []);
+        return { ...result, orders: getStoredOrders() };
+      },
+      (result) => {
+        setOrders(result.orders || []); setPayments(result.payments); setMissingLedger(result.missingLedger);
+        setPaymentReadError(null); setHasLoaded(true);
+      },
+      (_error, reportError) => {
+        setHasLoaded(true);
+        if (reportError) setPaymentReadError("Không thể tải sổ giao dịch thực từ database. Dữ liệu đang hiển thị được giữ nguyên.");
+      },
+    ),
+  );
+
+  const refreshAuthoritativeData = useCallback((showError = true, force = false) =>
+    refreshCoordinator.refresh({ force, reportError: showError }), [refreshCoordinator]);
 
   useEffect(() => {
+    refreshCoordinator.start();
     void refreshAuthoritativeData();
 
     const handleUpdate = () => setOrders(getStoredOrders());
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void refreshAuthoritativeData(false);
+      if (shouldRefreshPayments(document.visibilityState)) void refreshAuthoritativeData(false);
     };
     const interval = window.setInterval(refreshWhenVisible, 30_000);
 
@@ -149,22 +144,21 @@ export default function AdminPaymentsPage() {
     window.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
+      refreshCoordinator.stop();
       window.clearInterval(interval);
       window.removeEventListener("gieomo_orders_updated", handleUpdate);
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [refreshAuthoritativeData]);
+  }, [refreshAuthoritativeData, refreshCoordinator]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     setRefreshMessage(null);
     try {
-      const refreshed = await refreshAuthoritativeData();
+      const refreshed = await refreshAuthoritativeData(true, true);
       setRefreshMessage(refreshed ? "Đã tải lại trạng thái đơn và sổ giao dịch từ database của hệ thống." : null);
     } catch {
-      setPayments([]);
-      setMissingLedger([]);
       setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
       setRefreshMessage(null);
     } finally {
@@ -192,22 +186,15 @@ export default function AdminPaymentsPage() {
         setConfirmingPayment(null);
         setBankReference("");
         try {
-          await syncOrdersFromServer(true);
-          loadData();
-          const refreshed = await fetchRecordedPayments();
-          setPayments(refreshed.payments);
-          setMissingLedger(refreshed.missingLedger);
+          const refreshed = await refreshAuthoritativeData(true, true);
+          if (!refreshed) throw new Error("authoritative refresh failed");
           setActionMessage("Đã xác nhận thanh toán và tải lại dữ liệu từ database.");
         } catch {
           setActionMessage("Thanh toán đã được xác nhận nhưng chưa tải lại được danh sách. Không xác nhận lần nữa; hãy thử tải lại dữ liệu.");
         }
       } else {
         if (res.status === 409) {
-          await syncOrdersFromServer(true);
-          loadData();
-          const refreshed = await fetchRecordedPayments();
-          setPayments(refreshed.payments);
-          setMissingLedger(refreshed.missingLedger);
+          await refreshAuthoritativeData(true, true);
         }
         setActionMessage(data.error || "Không thể xác nhận thanh toán.");
       }
@@ -240,22 +227,15 @@ export default function AdminPaymentsPage() {
         setRejectingPayment(null);
         setRejectReason("");
         try {
-          await syncOrdersFromServer(true);
-          loadData();
-          const refreshed = await fetchRecordedPayments();
-          setPayments(refreshed.payments);
-          setMissingLedger(refreshed.missingLedger);
+          const refreshed = await refreshAuthoritativeData(true, true);
+          if (!refreshed) throw new Error("authoritative refresh failed");
           setActionMessage("Đã từ chối chứng từ và tải lại trạng thái mới nhất.");
         } catch {
           setActionMessage("Chứng từ đã bị từ chối nhưng chưa tải lại được danh sách. Không gửi lại thao tác; hãy thử tải lại dữ liệu.");
         }
       } else {
         if (res.status === 409) {
-          await syncOrdersFromServer(true);
-          loadData();
-          const refreshed = await fetchRecordedPayments();
-          setPayments(refreshed.payments);
-          setMissingLedger(refreshed.missingLedger);
+          await refreshAuthoritativeData(true, true);
         }
         setActionMessage(data.error || "Không thể từ chối thanh toán.");
       }
@@ -532,7 +512,7 @@ export default function AdminPaymentsPage() {
         {filteredPayments.length === 0 ? (
           <div className="bg-white rounded-3xl p-8 border border-[#F0E5D8] text-center text-[#7E7068] shadow-soft">
             <p className="font-bold text-sm text-[#231B16]">
-              {payments.length === 0 ? "Chưa có giao dịch nào được ghi trong sổ thanh toán." : "Không tìm thấy giao dịch nào phù hợp."}
+              {!hasLoaded ? "Đang tải dữ liệu thanh toán từ server..." : paymentReadError ? "Không thể hiển thị trạng thái rỗng vì lần tải gần nhất đã lỗi." : payments.length === 0 ? "Chưa có giao dịch nào được ghi trong sổ thanh toán." : "Không tìm thấy giao dịch nào phù hợp."}
             </p>
           </div>
         ) : (
@@ -633,7 +613,9 @@ export default function AdminPaymentsPage() {
               {filteredPayments.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-gray-500">
-                    {payments.length === 0
+                    {!hasLoaded ? "Đang tải dữ liệu thanh toán từ server..." : paymentReadError
+                      ? "Lần tải dữ liệu gần nhất đã lỗi; trạng thái rỗng chưa được xác nhận."
+                      : payments.length === 0
                       ? "Chưa có giao dịch nào được ghi trong sổ thanh toán. Xem danh sách thiếu đối soát phía trên."
                       : "Không tìm thấy giao dịch thanh toán nào phù hợp."}
                   </td>

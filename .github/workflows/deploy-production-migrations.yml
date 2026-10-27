@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 10
     env:
       EXPECTED_PRODUCTION_PROJECT_REF: snmmiwpvlpknkinhfqsv
-      GIEOMO_EXPECTED_MIGRATION_TIP: "041"
+      GIEOMO_EXPECTED_MIGRATION_TIP: "042"
     steps:
       - uses: actions/checkout@v4
         with:

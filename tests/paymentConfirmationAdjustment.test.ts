@@ -34,10 +34,10 @@ test("route requires admin auth, a reason, and optimistic-concurrency version", 
   assert.match(route, /adjust_payment_confirmation_atomic/);
 });
 
-test("admin UI explains impact and never offers a raw paid-to-pending field toggle", () => {
-  assert.match(detail, /Điều chỉnh xác nhận tiền mặt/);
-  assert.match(detail, /Sổ giao dịch không bị xóa/);
-  assert.match(detail, /expectedUpdatedAt: order\.updated_at/);
+test("legacy compensation stays server-side and is no longer discoverable in admin UI", () => {
+  assert.match(route, /Deprecated compatibility path/);
+  assert.doesNotMatch(detail, /Điều chỉnh xác nhận tiền mặt/);
+  assert.doesNotMatch(detail, /adjust_confirmation/);
   assert.match(detail, /disabled=\{paymentStatus === "paid"\}/);
   assert.doesNotMatch(detail, /<option value="refunded"/);
 });
