@@ -55,7 +55,7 @@ try {
   }
 
   Invoke-Checked "migration chain validation" {
-    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "042"
+    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "044"
     try { & node (Join-Path $repoRoot "scripts/migrations/validate-chain.mjs") | Out-Null }
     finally { Remove-Item Env:GIEOMO_EXPECTED_MIGRATION_TIP -ErrorAction SilentlyContinue }
   }

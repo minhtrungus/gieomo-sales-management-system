@@ -8,7 +8,7 @@ const source = readFileSync(
 );
 
 test("H29-P1 — admin payments reads recorded ledger rows and does not synthesize transactions from orders", () => {
-  assert.match(source, /\/api\/admin\/reconciliation\?limit=200&offset=0/);
+  assert.match(source, /\/api\/admin\/payments/);
   assert.match(source, /record\.payments/);
   assert.doesNotMatch(source, /getStoredPayments/);
   assert.doesNotMatch(source, /Math\.random/);

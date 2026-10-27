@@ -15,7 +15,7 @@ import {
 import type { Order } from "@/types/database";
 import { PaymentRefreshCoordinator, shouldRefreshPayments } from "@/lib/admin/paymentRefreshCoordinator";
 
-interface ReconciliationPaymentRow {
+interface PaymentFeedRow {
   payment_id: string;
   amount: number;
   payment_method?: string | null;
@@ -24,15 +24,14 @@ interface ReconciliationPaymentRow {
   created_at: string;
 }
 
-interface ReconciliationRecordRow {
+interface PaymentFeedRecord {
   order_code: string;
   created_at: string;
   payment_status?: string | null;
   expected_amount?: number | null;
   receiver_name?: string | null;
   receiver_phone?: string | null;
-  reconciliation_status?: string | null;
-  payments?: ReconciliationPaymentRow[];
+  payments?: PaymentFeedRow[];
 }
 
 interface MissingPaymentLedgerRow {
@@ -50,7 +49,7 @@ interface PaymentPageData {
 }
 
 async function fetchRecordedPayments(): Promise<PaymentPageData> {
-  const response = await fetch("/api/admin/reconciliation?limit=200&offset=0", {
+  const response = await fetch("/api/admin/payments", {
     cache: "no-store",
   });
   const data = await response.json();
@@ -58,7 +57,7 @@ async function fetchRecordedPayments(): Promise<PaymentPageData> {
     throw new Error(data?.error || "Không thể tải sổ giao dịch thanh toán.");
   }
 
-  const records = data.records as ReconciliationRecordRow[];
+  const records = data.records as PaymentFeedRecord[];
   const payments: PaymentRecord[] = records.flatMap((record) =>
     (record.payments || []).map((payment) => ({
       paymentId: payment.payment_id,
@@ -208,7 +207,7 @@ export default function AdminPaymentsPage() {
   const handleReject = async () => {
     if (!rejectingPayment) return;
     if (!rejectReason.trim()) {
-      setActionMessage("Vui lòng nhập lý do từ chối thanh toán.");
+      setActionMessage("Vui lòng nhập lý do hủy thanh toán.");
       return;
     }
     setActionLoading(true);
@@ -218,7 +217,7 @@ export default function AdminPaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderCode: rejectingPayment.orderCode,
-          action: "reject",
+          action: "cancel",
           reason: rejectReason.trim(),
         }),
       });
@@ -229,15 +228,15 @@ export default function AdminPaymentsPage() {
         try {
           const refreshed = await refreshAuthoritativeData(true, true);
           if (!refreshed) throw new Error("authoritative refresh failed");
-          setActionMessage("Đã từ chối chứng từ và tải lại trạng thái mới nhất.");
+          setActionMessage("Đã hủy yêu cầu thanh toán và tải lại trạng thái mới nhất.");
         } catch {
-          setActionMessage("Chứng từ đã bị từ chối nhưng chưa tải lại được danh sách. Không gửi lại thao tác; hãy thử tải lại dữ liệu.");
+          setActionMessage("Thanh toán đã được hủy nhưng chưa tải lại được danh sách. Không gửi lại thao tác; hãy thử tải lại dữ liệu.");
         }
       } else {
         if (res.status === 409) {
           await refreshAuthoritativeData(true, true);
         }
-        setActionMessage(data.error || "Không thể từ chối thanh toán.");
+        setActionMessage(data.error || "Không thể hủy thanh toán.");
       }
     } catch (err) {
       setActionMessage("Lỗi kết nối: " + (err as Error).message);
@@ -385,7 +384,7 @@ export default function AdminPaymentsPage() {
                       Xác nhận
                     </button>
                     <button type="button" onClick={() => { setRejectReason(""); setRejectingPayment(candidate); }} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                      Từ chối
+                      Hủy thanh toán
                     </button>
                   </div>
                 </div>
@@ -576,10 +575,10 @@ export default function AdminPaymentsPage() {
 
                   {p.status === "pending" ? (
                    <Link
-                     href="/admin/reconciliation"
+                     href={`/admin/orders/${encodeURIComponent(p.orderCode)}`}
                      className="w-full py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                    >
-                     <span>Mở đối soát giao dịch ngoại lệ</span>
+                     <span>Kiểm tra chi tiết đơn</span>
                    </Link>
                  ) : (
                    <div className="py-1.5 rounded-xl bg-emerald-50 text-[#16381D] font-bold text-[11px] text-center border border-emerald-200">
@@ -671,8 +670,8 @@ export default function AdminPaymentsPage() {
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         {p.status === "pending" ? (
-                          <Link href="/admin/reconciliation" className="inline-flex rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900">
-                            Mở đối soát
+                          <Link href={`/admin/orders/${encodeURIComponent(p.orderCode)}`} className="inline-flex rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900">
+                            Kiểm tra đơn
                           </Link>
                         ) : (
                           <span className="text-[10px] text-[#2D6338] font-bold">✓ Đã duyệt</span>
@@ -773,54 +772,34 @@ export default function AdminPaymentsPage() {
           </DoubleConfirmDialog>
         )}
 
-        {/* MODAL: TỪ CHỐI THANH TOÁN */}
         {rejectingPayment && (
-          <DoubleConfirmDialog
-            open={true}
-            onClose={() => {
-              setRejectingPayment(null);
-              setRejectReason("");
-            }}
-            onConfirm={handleReject}
-            title="Từ chối thanh toán"
-            message="Bạn có chắc muốn từ chối thanh toán cho đơn hàng này?"
-            confirmCode="XACNHAN"
-            details={[
-              {
-                label: "Mã đơn hàng",
-                value: rejectingPayment.orderCode,
-              },
-              {
-                label: "Khách hàng",
-                value: orderMap.get(rejectingPayment.orderCode)?.buyer_name || "Khách mua lẻ",
-              },
-              {
-                label: "Số tiền",
-                value: `${rejectingPayment.amount.toLocaleString("vi-VN")}₫`,
-              },
-              {
-                label: "Hành động",
-                value: "Từ chối thanh toán",
-              },
-            ]}
-            continueDisabled={!rejectReason.trim()}
-            loading={actionLoading}
-          >
-            <label
-              htmlFor="reject-reason"
-              className="block text-sm font-medium text-foreground mb-1.5"
-            >
-              Lý do từ chối <span className="text-danger">*</span>
-            </label>
-            <textarea
-              id="reject-reason"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={3}
-              placeholder="Nhập lý do từ chối thanh toán (bắt buộc)"
-              className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-border hover:border-muted-light bg-surface text-foreground text-sm placeholder:text-muted-light transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand resize-y"
-            />
-          </DoubleConfirmDialog>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div role="dialog" aria-modal="true" aria-labelledby="cancel-payment-title" className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+              <div>
+                <h2 id="cancel-payment-title" className="font-heading text-lg font-extrabold text-red-900">Hủy thanh toán</h2>
+                <p className="mt-1 text-sm text-gray-700">Đơn <strong>{rejectingPayment.orderCode}</strong> · {rejectingPayment.amount.toLocaleString("vi-VN")}₫</p>
+              </div>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                Thao tác này hủy yêu cầu/xác nhận thanh toán đang chờ và ghi nhật ký quản trị. Nếu tiền thật đã được chuyển hoặc nhận, thao tác này không tự hoàn tiền và không xóa sổ giao dịch.
+              </p>
+              <label htmlFor="reject-reason" className="block text-sm font-bold text-gray-800">Lý do hủy <span className="text-red-600">*</span></label>
+              <textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Nhập lý do hủy thanh toán"
+                className="w-full resize-y rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
+              />
+              <div className="flex justify-end gap-3">
+                <button type="button" disabled={actionLoading} onClick={() => { setRejectingPayment(null); setRejectReason(""); }} className="rounded-xl border px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-50">Đóng</button>
+                <button type="button" disabled={actionLoading || !rejectReason.trim()} onClick={handleReject} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">
+                  {actionLoading ? "Đang hủy..." : "Xác nhận hủy"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
     </div>
   );

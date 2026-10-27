@@ -5,29 +5,29 @@ import { spawnSync } from "node:child_process";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("migration chain is contiguous through 042", () => {
+test("migration chain is contiguous through 044", () => {
   const files = readdirSync(new URL("../supabase/migrations/", import.meta.url))
     .filter((name) => /^\d{3}_.+\.sql$/.test(name))
     .sort();
 
-  assert.equal(files.length, 42);
+  assert.equal(files.length, 44);
   assert.equal(files[0], "001_initial_schema.sql");
-  assert.equal(files.at(-1), "042_guarded_test_payment_deletion.sql");
+  assert.equal(files.at(-1), "044_combo_bottom_up_allocation.sql");
   assert.deepEqual(
     files.map((name) => Number(name.slice(0, 3))),
-    Array.from({ length: 42 }, (_, index) => index + 1)
+    Array.from({ length: 44 }, (_, index) => index + 1)
   );
 });
 
-test("migration validator accepts the canonical chain and enforces tip 042", () => {
+test("migration validator accepts the canonical chain and enforces tip 044", () => {
   const result = spawnSync(process.execPath, ["scripts/migrations/validate-chain.mjs"], {
     cwd: new URL("..", import.meta.url),
-    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "042" },
+    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "044" },
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
   const manifest = JSON.parse(result.stdout) as { count: number; tip: string };
-  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 42, tip: "042" });
+  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 44, tip: "044" });
 });
 
 test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory", () => {
@@ -36,7 +36,7 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   const mandatoryRunner = text("scripts/postgres/run-mandatory-pg-tests.mjs");
   assert.match(workflow, /services:\s*\n\s+postgres:/);
   assert.match(workflow, /GIEOMO_PG_ISOLATED:\s*"1"/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"042"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"044"/);
   assert.match(workflow, /find supabase\/migrations[^\n]+sort/);
   assert.match(workflow, /npm run test:pg:mandatory/);
   assert.match(workflow, /node --test --test-concurrency=1 tests\/\*\.test\.ts/);
@@ -55,7 +55,7 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /\bschedule:/);
   assert.match(workflow, /EXPECTED_PRODUCTION_PROJECT_REF:\s*snmmiwpvlpknkinhfqsv/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"042"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"044"/);
   assert.match(workflow, /supabase db push --linked --dry-run/);
   assert.match(workflow, /environment:\s*production/);
   assert.match(workflow, /vars\.PRODUCTION_DEPLOY_ENABLED == 'true'/);
@@ -72,7 +72,7 @@ test("local replay harness uses unique disposable targets and guarded teardown",
   assert.match(runner, /127\.0\.0\.1/);
   assert.match(runner, /Refusing unsafe teardown target/);
   assert.match(runner, /run-mandatory-pg-tests\.mjs/);
-  assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "042"/);
+  assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "044"/);
   assert.match(runner, /node --test --test-concurrency=1 @allNodeTestFiles/);
   assert.match(runner, /CANONICAL_REPLAY_PASS/);
   assert.doesNotMatch(runner, /SUPABASE_ACCESS_TOKEN|service_role_key/i);

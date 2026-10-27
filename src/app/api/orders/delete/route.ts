@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth/serverAuth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type DeleteRequest = {
-  mode?: "preview" | "delete";
+  mode?: "preview" | "delete" | "archive";
   orderId?: string;
   orderIds?: string[];
   reason?: string;
@@ -22,6 +22,31 @@ export async function POST(request: Request) {
     body = await request.json() as DeleteRequest;
   } catch {
     return NextResponse.json({ success: false, error: "Payload JSON không hợp lệ" }, { status: 400 });
+  }
+
+  if (body.mode === "archive") {
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const orderId = typeof body.orderId === "string" ? body.orderId.trim() : "";
+    if (!reason || !UUID_RE.test(orderId)) {
+      return NextResponse.json({ success: false, error: "Vui lòng nhập lý do và chọn đúng đơn hàng" }, { status: 400 });
+    }
+    const { data, error } = await createAdminClient().rpc("archive_order_atomic", {
+      p: { order_id: orderId, reason, actor_member_id: authCheck.user.memberId },
+    });
+    if (error) {
+      const unavailable = error.code === "PGRST202" || /could not find the function|schema cache/i.test(error.message);
+      return NextResponse.json({
+        success: false,
+        error: unavailable
+          ? "Database Preview chưa áp dụng migration 043 cho xóa đơn an toàn."
+          : "Không thể xóa đơn khỏi danh sách quản trị; dữ liệu chưa thay đổi.",
+      }, { status: unavailable ? 503 : 500 });
+    }
+    if (data?.outcome === "archived" || data?.outcome === "already_archived") {
+      return NextResponse.json({ success: true, ...data });
+    }
+    const status = data?.outcome === "not_found" ? 404 : data?.outcome === "invalid_actor" ? 403 : 409;
+    return NextResponse.json({ success: false, ...data, error: "Đơn không thể được xóa ở trạng thái hiện tại" }, { status });
   }
 
   if (body.mode !== "preview" && body.mode !== "delete") {

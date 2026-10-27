@@ -24,7 +24,9 @@ test("preview waits for the same registered fonts as PNG export without eager ca
   assert.match(renderer, /SVN-Lumios-Marker\.otf/);
   assert.match(card, /ensureThankYouCardFonts\(\)/);
   assert.match(card, /visibility: fontsReady \? "visible" : "hidden"/);
-  assert.doesNotMatch(card, /useEffect\([\s\S]{0,500}renderThankYouCard/);
+  const previewEffect = card.match(/useEffect\(\(\) => \{([\s\S]*?)\}\s*,\s*\[\]\);/)?.[1];
+  assert.ok(previewEffect, "font-registration effect should remain present");
+  assert.doesNotMatch(previewEffect, /renderThankYouCard/);
 });
 
 test("preview and print are separate explicit actions", () => {

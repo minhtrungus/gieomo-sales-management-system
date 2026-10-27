@@ -209,6 +209,60 @@ test("BH3 — sepay đúng key qua header x-api-key → pass auth", async () => 
   assert.equal(body.test, true);
 });
 
+test("BH3b — canonical SePay reference resolves exactly and continues through atomic amount handling", async () => {
+  const db = seedDb();
+  db.tables.orders[0].order_code = "GM-261027-000001";
+  db.tables.orders[0].final_amount = 85000;
+  const payloads: Record<string, unknown>[] = [];
+  db.rpcHandler = (name, args) => {
+    assert.equal(name, "apply_payment_event");
+    payloads.push(args.p as Record<string, unknown>);
+    return { data: { outcome: "applied", order_id: ORDER_ID, payment_status: "paid", order_status: "confirmed" }, error: null };
+  };
+  const res = await sepayReq(
+    { transactionContent: "THANH TOAN GM_261027_000001 CAM ON", referenceNumber: "SEP-BH3B", amountIn: 85000 },
+    { authorization: `Apikey ${TEST_SEPAY_KEY}` },
+  );
+  assert.equal(res.status, 200);
+  assert.equal(payloads[0]?.order_code, "GM-261027-000001");
+  assert.equal(payloads[0]?.amount, 85000);
+});
+
+test("BH3c — reported GM-26102700 fixture matches only the exact legacy order", async () => {
+  const db = seedDb();
+  db.tables.orders[0].order_code = "GM-26102700";
+  db.tables.orders[0].final_amount = 85000;
+  let matchedCode: unknown;
+  db.rpcHandler = (_name, args) => {
+    matchedCode = (args.p as Record<string, unknown>).order_code;
+    return { data: { outcome: "applied", order_id: ORDER_ID, payment_status: "paid", order_status: "confirmed" }, error: null };
+  };
+  const res = await sepayReq(
+    { transactionContent: "CK GM-26102700", referenceNumber: "SEP-BH3C", amountIn: 85000 },
+    { authorization: `Apikey ${TEST_SEPAY_KEY}` },
+  );
+  assert.equal(res.status, 200);
+  assert.equal(matchedCode, "GM-26102700");
+});
+
+test("BH3d — two existing exact order references fail closed as ambiguous", async () => {
+  const db = seedDb();
+  db.tables.orders = [
+    { ...db.tables.orders[0], order_id: ORDER_ID, order_code: "GM-1234" },
+    { ...db.tables.orders[0], order_id: "77777777-7777-4777-8777-777777777777", order_code: "GM-12345" },
+  ];
+  let rpcCalled = false;
+  db.rpcHandler = () => { rpcCalled = true; return { data: null, error: null }; };
+  const res = await sepayReq(
+    { transactionContent: "GM-1234 / GM-12345", referenceNumber: "SEP-BH3D", amountIn: 85000 },
+    { authorization: `Apikey ${TEST_SEPAY_KEY}` },
+  );
+  const body = await json(res);
+  assert.equal(body.outcome, "ambiguous_order_reference");
+  assert.equal(body.needs_review, true);
+  assert.equal(rpcCalled, false);
+});
+
 test("BH4 — presence POST: body spoof memberId/email bị bỏ, chỉ ghi session identity", async () => {
   const db = seedDb();
   const res = await presenceReq({
@@ -237,7 +291,7 @@ test("BH5 — payment confirm forwards session admin to atomic history/audit wri
   assert.match(migration, /v_admin_id/);
 });
 
-test("BH6 — payment reject delegates actor identity to atomic rejection RPC", async () => {
+test("BH6 — payment cancellation delegates actor identity and free-text reason to atomic RPC", async () => {
   const db = seedDb();
   let capturedActor: unknown;
   db.rpcHandler = (name, args) => {
@@ -248,7 +302,7 @@ test("BH6 — payment reject delegates actor identity to atomic rejection RPC", 
       error: null,
     };
   };
-  const res = await paymentReq({ orderCode: ORDER_CODE, action: "reject", reason: "test reject actor" });
+  const res = await paymentReq({ orderCode: ORDER_CODE, action: "cancel", reason: "Lý do tùy ý: khách đổi ý ✓" });
   assert.equal(res.status, 200);
   assert.equal(capturedActor, ADMIN_ID);
   assert.equal(historyOf(db).length, 0, "route không còn writer history ngoài transaction RPC");

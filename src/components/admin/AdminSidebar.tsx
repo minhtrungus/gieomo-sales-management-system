@@ -14,14 +14,12 @@ import {
   UserCheck,
   BarChart3,
   Settings,
-  Scale,
   LogOut,
   X,
   Warehouse,
   Bell,
   MessageSquare,
   ExternalLink,
-  Trash2,
 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
@@ -70,8 +68,6 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/inventory", label: "Kiểm kho", icon: Warehouse },
     { href: "/admin/customers", label: "Khách hàng", icon: Users },
     { href: "/admin/payments", label: "Xác nhận thanh toán", icon: CreditCard },
-    { href: "/admin/reconciliation", label: "Đối soát 3 chiều", icon: Scale },
-    { href: "/admin/test-payment-deletion", label: "Xóa đơn thanh toán test", icon: Trash2 },
     { href: "/admin/messages", label: "Tin nhắn & Đánh giá", icon: MessageSquare },
     { href: "/admin/vouchers", label: "Mã giảm giá", icon: Ticket },
     { href: "/admin/members", label: "Thành viên & Referral", icon: UserCheck },

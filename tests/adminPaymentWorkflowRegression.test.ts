@@ -12,7 +12,7 @@ const gallery = readFileSync(new URL("../src/components/products/ProductGallery.
 test("admin payment approval only targets new proofs without a ledger event", () => {
   assert.match(paymentsPage, /orderCodesWithLedger/);
   assert.match(paymentsPage, /!orderCodesWithLedger\.has\(order\.order_code\)/);
-  assert.match(paymentsPage, /Mở đối soát giao dịch ngoại lệ/);
+  assert.match(paymentsPage, /Kiểm tra chi tiết đơn/);
   assert.match(paymentsPage, /referenceNumber: bankReference\.trim\(\)/);
   assert.doesNotMatch(paymentsPage, /onClick=\{\(\) => setConfirmingPayment\(p\)\}/);
 });
@@ -35,6 +35,13 @@ test("payments refreshes only while visible and never polls a provider or write 
   assert.doesNotMatch(paymentsPage, /setInterval[\s\S]{0,300}sepay/i);
 });
 
+test("payment cancellation is one confirmation with a trimmed non-empty free-text reason", () => {
+  assert.match(paymentsPage, /action: "cancel"/);
+  assert.match(paymentsPage, /reason: rejectReason\.trim\(\)/);
+  assert.match(paymentsPage, /Hủy thanh toán/);
+  assert.match(paymentsPage, /không tự hoàn tiền/);
+});
+
 test("removed cards are absent from navigation while backend modules remain", () => {
   assert.doesNotMatch(sidebar, /href: "\/admin\/thank-you-cards"/);
   assert.doesNotMatch(sidebar, /href: "\/admin\/payment-reminders"/);
@@ -48,8 +55,10 @@ test("missing reminder RPC is reported as service unavailable instead of opaque 
 });
 
 test("interaction hot paths avoid eager canvas export and gallery remount", () => {
-  assert.doesNotMatch(thankYou, /useEffect\([\s\S]{0,500}renderThankYouCard/);
-  assert.match(thankYou, /useEffect\([\s\S]{0,500}ensureThankYouCardFonts/);
+  const previewEffect = thankYou.match(/useEffect\(\(\) => \{([\s\S]*?)\}\s*,\s*\[\]\);/)?.[1];
+  assert.ok(previewEffect, "font-registration effect should remain present");
+  assert.doesNotMatch(previewEffect, /renderThankYouCard/);
+  assert.match(previewEffect, /ensureThankYouCardFonts/);
   assert.doesNotMatch(thankYou, /canvas\.toDataURL/);
   assert.match(thankYou, /canvas\.toBlob/);
   assert.doesNotMatch(gallery, /key=\{activeGalleryImage\}/);

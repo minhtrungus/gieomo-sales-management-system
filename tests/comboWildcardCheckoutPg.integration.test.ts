@@ -210,9 +210,9 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
     const result = await callCheckout(c, { comboRef: combo.combo_id, quantity: 1 });
     assert.equal(result.outcome, "created");
 
-    // Explicit A always consumes one unit. The wildcard consumes one unit from
-    // the first eligible UUID because migration 035 deliberately locks and
-    // allocates in variant_id order (seed INSERT order is not allocation order).
+    // Explicit A always consumes one unit. Both seeded variants have the same
+    // default sort_order, so migration 044's bottom-up allocation uses the
+    // descending UUID tie-breaker (seed INSERT order is not allocation order).
     const [{ variant_id: variantA }, { variant_id: variantB }] = variants;
     const stocks = (
       await c.query(
@@ -221,7 +221,7 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
       )
     ).rows;
     const stockByVariant = new Map(stocks.map((row: any) => [row.variant_id, row.stock]));
-    const wildcardVariant = [variantA, variantB].sort()[0];
+    const wildcardVariant = [variantA, variantB].sort().at(-1)!;
     assert.equal(stockByVariant.get(variantA), wildcardVariant === variantA ? 0 : 1);
     assert.equal(stockByVariant.get(variantB), wildcardVariant === variantB ? 4 : 5);
     assert.equal(Number(stockByVariant.get(variantA)) + Number(stockByVariant.get(variantB)), 5);

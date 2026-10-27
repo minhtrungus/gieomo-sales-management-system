@@ -73,6 +73,12 @@ function isMissingTestArchiveTable(error: DbReadError | null | undefined): boole
     String(error.message || "").toLowerCase().includes("test_order_archives");
 }
 
+function isMissingAdminArchiveTable(error: DbReadError | null | undefined): boolean {
+  if (!error) return false;
+  return (error.code === "PGRST205" || error.code === "42P01") &&
+    String(error.message || "").toLowerCase().includes("admin_order_archives");
+}
+
 function maskName(name?: string | null): string {
   if (!name) return "Khách hàng";
   const parts = name.trim().split(/\s+/);
@@ -191,6 +197,14 @@ export async function getOrdersServer(options?: {
       }
       const archivedIds = new Set((archived.data || []).map((row: { order_id: string }) => row.order_id));
       visibleRows = visibleRows.filter((row) => !archivedIds.has(row.order_id));
+
+      const adminArchived = await supabase.from("admin_order_archives").select("order_id").in("order_id", candidateIds);
+      if (adminArchived.error && !isMissingAdminArchiveTable(adminArchived.error)) {
+        console.error("[getOrdersServer] admin-archive-read-failed", { code: adminArchived.error.code || "unknown" });
+        throw new Error("Không thể xác minh danh sách đơn đã xóa.");
+      }
+      const adminArchivedIds = new Set((adminArchived.data || []).map((row: { order_id: string }) => row.order_id));
+      visibleRows = visibleRows.filter((row) => !adminArchivedIds.has(row.order_id));
     }
 
     const packingByOrder = new Map<string, Array<{

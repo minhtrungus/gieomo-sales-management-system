@@ -1,10 +1,44 @@
-import { getFirstProductVariant } from "./productVariantOrder";
+import { getFirstProductVariant } from "./productVariantOrder.ts";
 
 interface ComboVariantStock {
   variant_id?: string | null;
   stock?: number | null;
   sort_order?: number | null;
   status?: string | null;
+}
+
+export interface ComboVariantAllocation {
+  variant_id: string;
+  quantity: number;
+}
+
+/** Mirrors atomic checkout wildcard allocation: bottom of configured list first. */
+export function allocateComboVariantsBottomUp(
+  variants: readonly ComboVariantStock[] | null | undefined,
+  quantity: number,
+): ComboVariantAllocation[] | null {
+  if (!Number.isSafeInteger(quantity) || quantity < 1) return null;
+  const eligible = (variants || [])
+    .filter((variant) =>
+      Boolean(variant.variant_id) &&
+      (variant.status === undefined || variant.status === null || variant.status === "active") &&
+      Number.isFinite(Number(variant.stock)) && Number(variant.stock) > 0
+    )
+    .map((variant, index) => ({ variant, index }))
+    .sort((left, right) => {
+      const leftOrder = Number.isFinite(Number(left.variant.sort_order)) ? Number(left.variant.sort_order) : 0;
+      const rightOrder = Number.isFinite(Number(right.variant.sort_order)) ? Number(right.variant.sort_order) : 0;
+      return rightOrder - leftOrder || right.index - left.index;
+    });
+  let remaining = quantity;
+  const result: ComboVariantAllocation[] = [];
+  for (const { variant } of eligible) {
+    if (remaining === 0) break;
+    const allocated = Math.min(remaining, Number(variant.stock));
+    result.push({ variant_id: String(variant.variant_id), quantity: allocated });
+    remaining -= allocated;
+  }
+  return remaining === 0 ? result : null;
 }
 
 interface ComboProductStock {

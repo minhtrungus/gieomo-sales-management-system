@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     if (!authCheck.authorized) return authCheck.response;
 
     const body = await request.json();
-    const { orderId, orderCode, action } = body;
+    const { orderId, orderCode } = body;
+    const action = body.action === "cancel" ? "reject" : body.action;
     if (!orderId && !orderCode) {
       return NextResponse.json({ success: false, error: "Thiếu orderId hoặc orderCode" }, { status: 400 });
     }
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
     if (action === "reject") {
       const reason = typeof body.reason === "string" ? body.reason.trim() : "";
       if (!reason) {
-        return NextResponse.json({ success: false, error: "Lý do từ chối là bắt buộc" }, { status: 400 });
+        return NextResponse.json({ success: false, error: "Lý do hủy thanh toán là bắt buộc" }, { status: 400 });
       }
       const { data: result, error } = await supabase.rpc("reject_payment_atomic", {
         p: { order_id: order.order_id, reason, actor_member_id: authCheck.user.memberId },
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
       if (error) {
         console.error("[POST /api/orders/payment] reject_payment_atomic failed:", error.message);
         return NextResponse.json(
-          { success: false, error: "Không thể từ chối thanh toán; toàn bộ thay đổi đã rollback" },
+          { success: false, error: "Không thể hủy thanh toán; toàn bộ thay đổi đã rollback" },
           { status: 500 }
         );
       }
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
       }
       const status = result?.outcome === "not_found" ? 404 : result?.outcome === "invalid_reason" ? 400 : 409;
       return NextResponse.json(
-        { success: false, outcome: result?.outcome ?? "invalid_result", error: "Payment state không cho phép từ chối" },
+        { success: false, outcome: result?.outcome ?? "invalid_result", error: "Trạng thái thanh toán đã thay đổi; hãy tải lại trước khi hủy" },
         { status }
       );
     }
