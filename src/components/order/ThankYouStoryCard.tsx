@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import Image from "next/image";
 import { Download, Share2 } from "lucide-react";
 import type { Order } from "@/types/database";
 import { getThankYouCardData, renderThankYouCard, THANK_YOU_CARD } from "@/lib/utils/thankYouCard";
@@ -29,26 +30,18 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ key: string; url: string } | null>(null);
   const { customerName, orderDate } = getThankYouCardData(order);
-  const previewKey = JSON.stringify([customerName, orderDate]);
-
-  useEffect(() => {
-    let active = true;
-    setError(null);
-    renderThankYouCard(customerName, orderDate).then((canvas) => {
-      if (active) setPreview({ key: previewKey, url: canvas.toDataURL("image/png") });
-    }).catch(() => {
-      if (active) setError("Chưa tải được thiệp hoặc font. Vui lòng thử lại.");
-    });
-    return () => { active = false; };
-  }, [customerName, orderDate, previewKey]);
 
   async function download() {
     const canvas = await renderThankYouCard(customerName, orderDate);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
+      value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.download = `Thiep-Cam-On-Gieo-Mo${customerName ? "-" + customerName.replace(/\s+/g, "-") : ""}.png`;
-    link.href = canvas.toDataURL("image/png"); link.click();
+    link.href = url;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
   const handleDownloadCard = async () => {
     if (isGenerating || isSharing) return;
@@ -75,11 +68,26 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
   };
   return (
     <div className="w-full max-w-lg mx-auto space-y-4">
-      <div id="gieomo-thankyou-card" style={{ width: "100%", aspectRatio: "9 / 16" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={preview?.key === previewKey ? preview.url : THANK_YOU_CARD.template}
+      <div id="gieomo-thankyou-card" className="relative overflow-hidden" style={{ width: "100%", aspectRatio: "9 / 16", containerType: "inline-size" }}>
+        <Image
+          src={THANK_YOU_CARD.template}
           alt={`Thiệp cảm ơn Gieo Mơ${customerName ? " - " + customerName : ""}${orderDate ? " - " + orderDate : ""}`}
-          width={1080} height={1920} style={{ width: "100%", height: "auto", display: "block" }} />
+          fill
+          sizes="(max-width: 640px) calc(100vw - 48px), 512px"
+          className="object-contain"
+        />
+        {customerName && (
+          <span aria-hidden="true" className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap text-center"
+            style={{ left: "12.96%", top: "30.78%", width: "74.08%", height: "6.67%", color: THANK_YOU_CARD.name.color, fontFamily: THANK_YOU_CARD.fontFamily, fontSize: "6.94cqw" }}>
+            {customerName}
+          </span>
+        )}
+        {orderDate && (
+          <span aria-hidden="true" className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap text-center"
+            style={{ left: "51.39%", top: "47.6%", width: "31.02%", height: "3.39%", color: THANK_YOU_CARD.date.color, fontFamily: THANK_YOU_CARD.dateFontFamily, fontSize: "6.02cqw" }}>
+            {orderDate}
+          </span>
+        )}
       </div>
       {(!customerName || !orderDate) && <p className="text-xs text-gray-600" role="status">
         {!customerName && "Chưa có tên người đặt. "}{!orderDate && "Chưa có ngày đặt hàng hợp lệ. "}Thiệp giữ trống phần thiếu dữ liệu.

@@ -110,9 +110,9 @@ let ordersSyncInFlight: Promise<void> | null = null;
 let membersSyncInFlight: Promise<void> | null = null;
 let presenceSyncInFlight: Promise<void> | null = null;
 
-export function syncOrdersFromServer(force = false): void {
-  if (typeof window === "undefined" || (hasSyncedOrdersWithServer && !force)) return;
-  if (ordersSyncInFlight) return;
+export function syncOrdersFromServer(force = false): Promise<void> {
+  if (typeof window === "undefined" || (hasSyncedOrdersWithServer && !force)) return Promise.resolve();
+  if (ordersSyncInFlight) return ordersSyncInFlight;
   hasSyncedOrdersWithServer = true;
   ordersSyncInFlight = safeFetchJson<{ success: boolean; orders: Order[] }>("/api/orders?limit=200", 10000)
     .then((data) => {
@@ -157,6 +157,7 @@ export function syncOrdersFromServer(force = false): void {
     .finally(() => {
       ordersSyncInFlight = null;
     });
+  return ordersSyncInFlight;
 }
 
 

@@ -47,13 +47,14 @@ export const ProductGallery = memo(function ProductGallery({
         <div className="absolute inset-0 bg-gradient-to-tr from-amber-100/30 via-emerald-50/20 to-transparent pointer-events-none" />
 
         {activeGalleryImage && (
-          <div key={activeGalleryImage} className="absolute inset-0 z-10 flex items-center justify-center p-2 transition-opacity duration-300 ease-out">
+          <div className="absolute inset-0 z-10 flex items-center justify-center p-2 transition-opacity duration-300 ease-out">
             <Image
               src={activeGalleryImage}
               alt={productName}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 580px"
               className="object-contain"
+              quality={60}
               priority={selectedImageIndex === 0 && !customActiveImage}
             />
           </div>
@@ -126,7 +127,7 @@ export const ProductGallery = memo(function ProductGallery({
                     : "border-[#F0E5D8] opacity-60 hover:border-[#FFB98A] hover:opacity-100"
                 }`}
               >
-                <Image src={image} alt="" fill sizes="80px" className="object-contain transition-transform duration-500 hover:scale-105" />
+                <Image src={image} alt="" fill sizes="80px" quality={50} className="object-contain transition-transform duration-500 hover:scale-105" />
               </button>
             );
           })}

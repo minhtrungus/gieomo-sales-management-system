@@ -36,7 +36,10 @@ export function OrderThankYouCardDialog({ order, onClose }: OrderThankYouCardDia
     try {
       const { customerName, orderDate } = getThankYouCardData(order);
       const canvas = await renderThankYouCard(customerName, orderDate);
-      const imageUrl = canvas.toDataURL("image/png");
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
+        value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
+      const imageUrl = URL.createObjectURL(blob);
+      printWindow.onafterprint = () => URL.revokeObjectURL(imageUrl);
       printWindow.document.write(
         `<!doctype html><html lang="vi"><head><title>Thiệp cảm ơn Gieo Mơ</title>` +
           `<style>@page{size:auto;margin:0}html,body{margin:0;background:#fff}img{display:block;width:100%;height:auto}</style>` +

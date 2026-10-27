@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { DoubleConfirmDialog } from "@/components/ui/DoubleConfirmDialog";
-import { Check, X, RefreshCw, Search, Eye, Image as ImageIcon } from "lucide-react";
+import { X, RefreshCw, Search, Eye, Image as ImageIcon } from "lucide-react";
 import {
-  approveStoredPayment,
   getStoredOrders,
   syncOrdersFromServer,
   type PaymentRecord,
@@ -97,30 +98,34 @@ export default function AdminPaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
   const [confirmingPayment, setConfirmingPayment] = useState<PaymentRecord | null>(null);
+  const [bankReference, setBankReference] = useState("");
   const [rejectingPayment, setRejectingPayment] = useState<PaymentRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [viewingProof, setViewingProof] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [paymentReadError, setPaymentReadError] = useState<string | null>(null);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const loadData = () => {
     setOrders(getStoredOrders());
   };
 
   useEffect(() => {
-    syncOrdersFromServer(true);
-    void fetchRecordedPayments()
-      .then((result) => {
+    void (async () => {
+      try {
+        await syncOrdersFromServer(true);
+        setOrders(getStoredOrders());
+        const result = await fetchRecordedPayments();
         setPayments(result.payments);
         setMissingLedger(result.missingLedger);
         setPaymentReadError(null);
-      })
-      .catch(() => {
+      } catch {
         setPayments([]);
         setMissingLedger([]);
         setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
-      });
+      }
+    })();
 
     const handleUpdate = () => {
       loadData();
@@ -163,23 +168,35 @@ export default function AdminPaymentsPage() {
           action: "confirm",
           amount: confirmingPayment.amount,
           paymentMethod: confirmingPayment.paymentMethod,
-          referenceNumber: confirmingPayment.transactionCode,
+          referenceNumber: bankReference.trim(),
         }),
       });
       const data = await res.json();
       if (data.success) {
-        approveStoredPayment(confirmingPayment.paymentId);
-        setPayments((prev) =>
-          prev.map((p) =>
-            p.paymentId === confirmingPayment.paymentId ? { ...p, status: "paid" } : p
-          )
-        );
         setConfirmingPayment(null);
+        setBankReference("");
+        try {
+          await syncOrdersFromServer(true);
+          loadData();
+          const refreshed = await fetchRecordedPayments();
+          setPayments(refreshed.payments);
+          setMissingLedger(refreshed.missingLedger);
+          setActionMessage("Đã xác nhận thanh toán và tải lại dữ liệu từ database.");
+        } catch {
+          setActionMessage("Thanh toán đã được xác nhận nhưng chưa tải lại được danh sách. Không xác nhận lần nữa; hãy thử tải lại dữ liệu.");
+        }
       } else {
-        alert(data.error || "Lỗi xác nhận thanh toán");
+        if (res.status === 409) {
+          await syncOrdersFromServer(true);
+          loadData();
+          const refreshed = await fetchRecordedPayments();
+          setPayments(refreshed.payments);
+          setMissingLedger(refreshed.missingLedger);
+        }
+        setActionMessage(data.error || "Không thể xác nhận thanh toán.");
       }
     } catch (err) {
-      alert("Lỗi kết nối: " + (err as Error).message);
+      setActionMessage("Lỗi kết nối: " + (err as Error).message);
     } finally {
       setActionLoading(false);
     }
@@ -188,7 +205,7 @@ export default function AdminPaymentsPage() {
   const handleReject = async () => {
     if (!rejectingPayment) return;
     if (!rejectReason.trim()) {
-      alert("Vui lòng nhập lý do từ chối thanh toán");
+      setActionMessage("Vui lòng nhập lý do từ chối thanh toán.");
       return;
     }
     setActionLoading(true);
@@ -204,17 +221,30 @@ export default function AdminPaymentsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        await syncOrdersFromServer(true);
-        const refreshed = await fetchRecordedPayments();
-        setPayments(refreshed.payments);
-        setMissingLedger(refreshed.missingLedger);
         setRejectingPayment(null);
         setRejectReason("");
+        try {
+          await syncOrdersFromServer(true);
+          loadData();
+          const refreshed = await fetchRecordedPayments();
+          setPayments(refreshed.payments);
+          setMissingLedger(refreshed.missingLedger);
+          setActionMessage("Đã từ chối chứng từ và tải lại trạng thái mới nhất.");
+        } catch {
+          setActionMessage("Chứng từ đã bị từ chối nhưng chưa tải lại được danh sách. Không gửi lại thao tác; hãy thử tải lại dữ liệu.");
+        }
       } else {
-        alert(data.error || "Lỗi từ chối thanh toán");
+        if (res.status === 409) {
+          await syncOrdersFromServer(true);
+          loadData();
+          const refreshed = await fetchRecordedPayments();
+          setPayments(refreshed.payments);
+          setMissingLedger(refreshed.missingLedger);
+        }
+        setActionMessage(data.error || "Không thể từ chối thanh toán.");
       }
     } catch (err) {
-      alert("Lỗi kết nối: " + (err as Error).message);
+      setActionMessage("Lỗi kết nối: " + (err as Error).message);
     } finally {
       setActionLoading(false);
     }
@@ -256,6 +286,19 @@ export default function AdminPaymentsPage() {
         row.customerPhone.includes(q),
     );
   }, [missingLedger, searchQuery]);
+
+  // Only proofs without a ledger event can enter the confirm/reject workflow.
+  // Pending ledger rows are reconciliation exceptions; replaying them would
+  // correctly return HTTP 409 from the idempotent payment RPC.
+  const proofCandidates = useMemo(() => {
+    const orderCodesWithLedger = new Set(payments.map((payment) => payment.orderCode));
+    return orders.filter((order) =>
+      order.payment_status === "pending" &&
+      order.payment_method === "banking" &&
+      Boolean(order.payment_proof) &&
+      !orderCodesWithLedger.has(order.order_code),
+    );
+  }, [orders, payments]);
 
   const pendingCount = payments.filter((p) => p.status === "pending").length;
   const paidCount = payments.filter((p) => p.status === "paid").length;
@@ -304,6 +347,56 @@ export default function AdminPaymentsPage() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {paymentReadError}
         </div>
+      )}
+
+      {actionMessage && (
+        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900" role="status">
+          {actionMessage}
+        </p>
+      )}
+
+      {proofCandidates.length > 0 && (
+        <section className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-soft">
+          <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-extrabold text-emerald-950">Chứng từ mới chờ xác minh</h2>
+            <p className="mt-1 text-xs text-emerald-800">
+              Chỉ xác nhận sau khi đối chiếu tiền thực nhận và nhập mã giao dịch thật của ngân hàng.
+            </p>
+          </div>
+          <div className="divide-y divide-emerald-100">
+            {proofCandidates.map((order) => {
+              const candidate: PaymentRecord = {
+                paymentId: `proof:${order.order_id}`,
+                orderCode: order.order_code,
+                amount: order.final_amount,
+                paymentMethod: "banking",
+                transactionCode: "",
+                status: "pending",
+                createdAt: order.created_at,
+              };
+              return (
+                <div key={order.order_id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-mono text-xs font-bold text-[#1B3622]">{order.order_code}</p>
+                    <p className="text-xs font-semibold text-[#231B16]">{order.buyer_name || order.receiver_name || "Khách mua lẻ"}</p>
+                    <MoneyDisplay amount={order.final_amount} className="text-sm font-extrabold text-[#1B3622]" />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setViewingProof(order.payment_proof || null)} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+                      Xem biên lai
+                    </button>
+                    <button type="button" onClick={() => { setBankReference(""); setConfirmingPayment(candidate); }} className="rounded-xl border border-emerald-300 bg-[#BFE9C3] px-3 py-2 text-xs font-bold text-[#16381D]">
+                      Xác nhận
+                    </button>
+                    <button type="button" onClick={() => { setRejectReason(""); setRejectingPayment(candidate); }} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                      Từ chối
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {missingLedger.length > 0 && (
@@ -486,14 +579,12 @@ export default function AdminPaymentsPage() {
                   )}
 
                   {p.status === "pending" ? (
-                   <button
-                     type="button"
-                     onClick={() => setConfirmingPayment(p)}
+                   <Link
+                     href="/admin/reconciliation"
                      className="w-full py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                    >
-                     <Check className="w-3.5 h-3.5 text-emerald-800" />
-                     <span>Xác nhận thanh toán</span>
-                   </button>
+                     <span>Mở đối soát giao dịch ngoại lệ</span>
+                   </Link>
                  ) : (
                    <div className="py-1.5 rounded-xl bg-emerald-50 text-[#16381D] font-bold text-[11px] text-center border border-emerald-200">
                      ✓ Giao dịch đã được duyệt thành công
@@ -582,23 +673,9 @@ export default function AdminPaymentsPage() {
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         {p.status === "pending" ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => setConfirmingPayment(p)}
-                              className="px-2.5 py-1 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-bold text-[11px] transition-all shadow-2xs border border-[#9ed4a3] active:scale-95 cursor-pointer inline-flex items-center gap-1"
-                            >
-                              <Check className="w-3 h-3" /> Duyệt
-                            </button>
-                            <button
-                              onClick={() => {
-                                setRejectingPayment(p);
-                                setRejectReason("");
-                              }}
-                              className="px-2.5 py-1 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] transition-all border border-red-200 active:scale-95 cursor-pointer inline-flex items-center gap-1"
-                            >
-                              <X className="w-3 h-3" /> Từ chối
-                            </button>
-                          </div>
+                          <Link href="/admin/reconciliation" className="inline-flex rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900">
+                            Mở đối soát
+                          </Link>
                         ) : (
                           <span className="text-[10px] text-[#2D6338] font-bold">✓ Đã duyệt</span>
                         )}
@@ -627,14 +704,22 @@ export default function AdminPaymentsPage() {
                  <X className="w-4 h-4" />
                </button>
              </div>
-             <div className="max-h-[70vh] overflow-auto rounded-2xl bg-gray-50 p-2 flex items-center justify-center">
-               {/* eslint-disable-next-line @next/next/no-img-element */}
-               <img
+             <div className="relative h-[65vh] max-h-[720px] overflow-hidden rounded-2xl bg-gray-50 p-2">
+               <Image
                  src={viewingProof}
                  alt="Minh chứng thanh toán"
-                 className="max-h-[65vh] w-auto object-contain rounded-xl shadow-xs"
+                 fill
+                 sizes="(max-width: 640px) calc(100vw - 48px), 480px"
+                 quality={50}
+                 unoptimized={viewingProof.startsWith("data:")}
+                 className="object-contain rounded-xl shadow-xs"
                />
              </div>
+             {!viewingProof.startsWith("data:") && (
+               <a href={viewingProof} target="_blank" rel="noreferrer" className="block text-center text-xs font-bold text-emerald-800 underline">
+                 Mở ảnh gốc
+               </a>
+             )}
              <button
                onClick={() => setViewingProof(null)}
                className="w-full py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs cursor-pointer"
@@ -649,7 +734,7 @@ export default function AdminPaymentsPage() {
 {confirmingPayment && (
           <DoubleConfirmDialog
             open={true}
-            onClose={() => setConfirmingPayment(null)}
+            onClose={() => { setConfirmingPayment(null); setBankReference(""); }}
             onConfirm={handleApprove}
             title="Xác nhận thanh toán"
             message="Bạn có chắc muốn xác nhận thanh toán cho đơn hàng này?"
@@ -672,8 +757,22 @@ export default function AdminPaymentsPage() {
                 value: "Xác nhận thanh toán",
               },
             ]}
+            continueDisabled={!/^[A-Za-z0-9][A-Za-z0-9 _\-/]{2,63}$/.test(bankReference.trim())}
             loading={actionLoading}
-          />
+          >
+            <label htmlFor="bank-reference" className="mb-1.5 block text-sm font-medium text-foreground">
+              Mã giao dịch ngân hàng thật <span className="text-danger">*</span>
+            </label>
+            <input
+              id="bank-reference"
+              value={bankReference}
+              onChange={(event) => setBankReference(event.target.value)}
+              maxLength={64}
+              autoComplete="off"
+              placeholder="Ví dụ: FT24301ABC123"
+              className="w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/50"
+            />
+          </DoubleConfirmDialog>
         )}
 
         {/* MODAL: TỪ CHỐI THANH TOÁN */}

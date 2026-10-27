@@ -48,6 +48,10 @@ export async function POST(request: Request) {
     });
     if (claimError) {
       console.error("[payment-reminders] claim failed:", claimError.message);
+      const schemaUnavailable = claimError.code === "PGRST202" || /could not find the function|schema cache/i.test(claimError.message);
+      if (schemaUnavailable) {
+        return NextResponse.json({ success: false, error: "Chức năng nhắc thanh toán chưa sẵn sàng trên database hiện tại" }, { status: 503 });
+      }
       return NextResponse.json({ success: false, error: "Không thể khóa lượt gửi nhắc" }, { status: 500 });
     }
     if (claim?.outcome !== "claimed") {

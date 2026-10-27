@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
@@ -693,11 +694,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       onClick={() => setZoomedProof(proofSrc)}
                       className="relative w-full rounded-2xl overflow-hidden border border-emerald-200 bg-gray-50 group cursor-pointer hover:border-emerald-500 transition-all shadow-2xs hover:shadow-md"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={proofSrc}
                         alt="Biên lai chuyển khoản"
-                        className="w-full h-auto max-h-72 object-contain mx-auto transition-transform group-hover:scale-[1.02]"
+                        width={720}
+                        height={420}
+                        sizes="(max-width: 768px) calc(100vw - 48px), 720px"
+                        quality={50}
+                        unoptimized={proofSrc.startsWith("data:")}
+                        className="h-auto max-h-72 w-full object-contain mx-auto transition-transform group-hover:scale-[1.02]"
                       />
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white font-bold text-xs">
                         <ZoomIn className="w-5 h-5" />
@@ -776,12 +781,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </div>
 
             {/* Modal Image Area */}
-            <div className="relative w-full flex-1 flex items-center justify-center overflow-auto max-h-[80vh] p-2 bg-black/40 rounded-2xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <div className="relative h-[76vh] w-full flex-1 overflow-hidden p-2 bg-black/40 rounded-2xl">
+              <Image
                 src={zoomedProof}
                 alt="Ảnh biên lai phóng to"
-                className="max-w-full max-h-[76vh] object-contain rounded-xl shadow-lg select-none"
+                fill
+                sizes="(max-width: 1024px) calc(100vw - 32px), 960px"
+                quality={50}
+                unoptimized={zoomedProof.startsWith("data:")}
+                className="object-contain rounded-xl shadow-lg select-none"
               />
             </div>
           </div>
