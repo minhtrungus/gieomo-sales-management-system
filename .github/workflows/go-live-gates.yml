@@ -35,7 +35,7 @@ jobs:
     env:
       ATOMIC_PG_URL: postgresql://postgres:postgres@127.0.0.1:5432/gieomo_ci?sslmode=disable
       GIEOMO_PG_ISOLATED: "1"
-      GIEOMO_EXPECTED_MIGRATION_TIP: "040"
+      GIEOMO_EXPECTED_MIGRATION_TIP: "041"
       PGPASSWORD: postgres
       PGSSLMODE: disable
 

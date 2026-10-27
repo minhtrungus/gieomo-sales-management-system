@@ -10,6 +10,7 @@ import {
   getStoredOrders,
   updateStoredOrderStatus,
   cancelStoredOrder,
+  syncOrdersFromServer,
   syncStoredPaymentStatusLocal,
   updateStoredDeliveryStatus,
   updateStoredOrderDetails,
@@ -56,6 +57,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [paymentAdjustmentReason, setPaymentAdjustmentReason] = useState("");
   const [paymentAdjustmentError, setPaymentAdjustmentError] = useState<string | null>(null);
   const [isAdjustingPayment, setIsAdjustingPayment] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelOutcome, setCancelOutcome] = useState<string | null>(null);
 
   const handleAdjustPaymentConfirmation = async () => {
     if (!order || isAdjustingPayment) return;
@@ -81,8 +84,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       if (!response.ok || result.success !== true) {
         throw new Error(result.error || "Không thể điều chỉnh xác nhận thanh toán.");
       }
-      setPaymentStatus("pending");
-      setOrder((current) => current ? { ...current, payment_status: "pending" } : current);
+      await syncOrdersFromServer(true);
+      const fresh = getStoredOrders().find((item) => item.order_id === order.order_id) || null;
+      if (fresh) {
+        setOrder(fresh); setOrderStatus(fresh.order_status); setPaymentStatus(fresh.payment_status);
+        setDeliveryStatus(fresh.delivery_status || "not_ready");
+      }
       setShowPaymentAdjustment(false);
       setPaymentAdjustmentReason("");
     } catch (error) {
@@ -178,12 +185,22 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       // Batch 2D — chuyển sang cancelled phải server xác nhận trước; thất bại
       // → hiện lỗi, KHÔNG áp dụng cập nhật nào (local giữ nguyên).
       if (statusChanged && orderStatus === "cancelled") {
-        const res = await cancelStoredOrder(order.order_id);
+        if (cancelReason.trim().length < 8) {
+          setSaveError("Vui lòng nhập lý do hủy cụ thể, tối thiểu 8 ký tự.");
+          return;
+        }
+        const res = await cancelStoredOrder(order.order_id, cancelReason);
         if (!res.success) {
           setSaveError(res.error);
           return;
         }
-        setOrder((prev) => (prev ? { ...prev, order_status: "cancelled" } : prev));
+        await syncOrdersFromServer(true);
+        const fresh = getStoredOrders().find((item) => item.order_id === order.order_id) || null;
+        if (fresh) setOrder(fresh);
+        else setOrder((prev) => (prev ? { ...prev, order_status: "cancelled" } : prev));
+        setCancelOutcome(res.refundRequired
+          ? "Đơn đã hủy; trạng thái đã thanh toán và ledger được giữ nguyên. Cần thực hiện hoàn tiền/đối soát bằng quy trình riêng."
+          : "Đơn đã hủy; tồn kho/voucher đủ điều kiện đã được hoàn tác nguyên tử.");
       }
       const changes = {
         ...(internalNote !== (order.internal_note || "") ? { internalNote } : {}),
@@ -614,6 +631,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <option value="completed">Hoàn thành</option>
                 <option value="cancelled">Hủy đơn</option>
               </select>
+              {orderStatus === "cancelled" && order.order_status !== "cancelled" && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <p className="text-xs font-bold text-amber-950">Hủy đơn chỉ dừng fulfillment và hoàn tác kho/voucher khi có đủ chứng cứ. Nếu đơn đã thanh toán, tiền và ledger không bị đổi; hoàn tiền là bước riêng.</p>
+                <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} rows={3} maxLength={500} placeholder="Lý do hủy bắt buộc (tối thiểu 8 ký tự)" className="w-full rounded-xl border border-amber-200 bg-white p-2.5 text-xs outline-none" />
+              </div>}
+              {cancelOutcome && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">{cancelOutcome}</p>}
             </div>
 
             <div className="space-y-2">

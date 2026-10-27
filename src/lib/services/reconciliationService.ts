@@ -356,7 +356,19 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   // 2. Phase A — fetch payments theo CHUNKS (Batch 3C): mỗi lần tối đa
   //    PAYMENTS_CHUNK_SIZE IDs — tránh URL overflow của `.in()` PostgREST
   //    khi số orders lớn. Chunk đầu lỗi → throw ngay (không nuốt).
-  const orderRows: LightweightOrder[] = rawOrders;
+  let orderRows: LightweightOrder[] = rawOrders;
+  if (orderRows.length > 0) {
+    const archived = await supabase.from("test_order_archives").select("order_id")
+      .in("order_id", orderRows.map((order) => order.order_id));
+    if (archived.error) {
+      const missing = (archived.error.code === "PGRST205" || archived.error.code === "42P01") &&
+        /test_order_archives/i.test(archived.error.message || "");
+      if (!missing) throw new Error("Không thể xác minh danh sách đơn đã lưu trữ");
+    } else {
+      const archivedIds = new Set((archived.data || []).map((row: { order_id: string }) => row.order_id));
+      orderRows = orderRows.filter((order) => !archivedIds.has(order.order_id));
+    }
+  }
   const orderIds = orderRows.map((order) => order.order_id);
   const rawPayments: PaymentRow[] = [];
   for (let i = 0; i < orderIds.length; i += PAYMENTS_CHUNK_SIZE) {

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Download, Share2 } from "lucide-react";
 import type { Order } from "@/types/database";
-import { getThankYouCardData, renderThankYouCard, THANK_YOU_CARD } from "@/lib/utils/thankYouCard";
+import { ensureThankYouCardFonts, getThankYouCardData, renderThankYouCard, THANK_YOU_CARD } from "@/lib/utils/thankYouCard";
 
 interface ThankYouStoryCardProps {
   order?: Order | null;
@@ -30,7 +30,18 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fontsReady, setFontsReady] = useState(false);
   const { customerName, orderDate } = getThankYouCardData(order);
+
+  useEffect(() => {
+    let active = true;
+    // Register only the two small card fonts here. Canvas/image generation stays
+    // deferred until export so opening the preview remains a light interaction.
+    void ensureThankYouCardFonts()
+      .then(() => { if (active) setFontsReady(true); })
+      .catch(() => { if (active) setError("Không tải được phông chữ của thiệp. Vui lòng tải lại trang."); });
+    return () => { active = false; };
+  }, []);
 
   async function download() {
     const canvas = await renderThankYouCard(customerName, orderDate);
@@ -78,13 +89,13 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
         />
         {customerName && (
           <span aria-hidden="true" className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap text-center"
-            style={{ left: "12.96%", top: "30.78%", width: "74.08%", height: "6.67%", color: THANK_YOU_CARD.name.color, fontFamily: THANK_YOU_CARD.fontFamily, fontSize: "6.94cqw" }}>
+            style={{ left: "12.96%", top: "30.78%", width: "74.08%", height: "6.67%", color: THANK_YOU_CARD.name.color, fontFamily: THANK_YOU_CARD.fontFamily, fontSize: "6.94cqw", visibility: fontsReady ? "visible" : "hidden" }}>
             {customerName}
           </span>
         )}
         {orderDate && (
           <span aria-hidden="true" className="absolute flex items-center justify-center overflow-hidden whitespace-nowrap text-center"
-            style={{ left: "51.39%", top: "47.6%", width: "31.02%", height: "3.39%", color: THANK_YOU_CARD.date.color, fontFamily: THANK_YOU_CARD.dateFontFamily, fontSize: "6.02cqw" }}>
+            style={{ left: "51.39%", top: "47.6%", width: "31.02%", height: "3.39%", color: THANK_YOU_CARD.date.color, fontFamily: THANK_YOU_CARD.dateFontFamily, fontSize: "6.02cqw", visibility: fontsReady ? "visible" : "hidden" }}>
             {orderDate}
           </span>
         )}

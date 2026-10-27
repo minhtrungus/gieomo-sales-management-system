@@ -236,13 +236,16 @@ export async function PATCH(request: Request) {
         // Lỗi RAISE trong function = rollback toàn tx (không side effect).
         // B2A1:VOUCHER_RELEASE_UNSAFE là dữ liệu lệch → retry không tự hết.
         const unsafe = String(rpcError?.details || "").includes("B2A1:VOUCHER_RELEASE_UNSAFE");
+        const unavailable = /PGRST202|could not find the function|schema cache/i.test(
+          `${rpcError?.message || ""} ${rpcError?.details || ""}`
+        );
         return NextResponse.json(
           {
             success: false,
-            error: rpcError?.message || "Không gọi được cancel_order_atomic",
+            error: unavailable ? "Database hiện tại chưa áp dụng migration hủy đơn nguyên tử." : rpcError?.message || "Không gọi được cancel_order_atomic",
             ...(unsafe ? { retryable: false, needsRecon: true } : { retryable: true }),
           },
-          { status: 500 }
+          { status: unavailable ? 503 : 500 }
         );
       }
 
@@ -271,6 +274,14 @@ export async function PATCH(request: Request) {
           },
           { status: 409 }
         );
+      }
+      if (outcome === "inventory_unverified") {
+        return NextResponse.json({ success: false, outcome, retryable: false,
+          error: "Không thể hủy tự động: đơn lịch sử này không có chứng cứ giữ kho để hoàn kho an toàn. Cần đối soát thủ công." }, { status: 409 });
+      }
+      if (outcome === "voucher_release_unsafe") {
+        return NextResponse.json({ success: false, outcome, retryable: false, needsRecon: true,
+          error: "Không thể hủy tự động vì trạng thái voucher không đủ an toàn để hoàn tác. Cần đối soát thủ công." }, { status: 409 });
       }
 
       // Contract không xác định — KHÔNG BAO GIỜ trả success giả

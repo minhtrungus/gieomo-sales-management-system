@@ -36,6 +36,7 @@ const mandatoryFiles = [
   "tests/paymentRejectionPg.integration.test.ts",
   "tests/paymentConfirmationAdjustmentPg.integration.test.ts",
   "tests/paymentReminderPg.integration.test.ts",
+  "tests/testOrderArchivalPg.integration.test.ts",
   "tests/voucherConcurrency.integration.test.ts",
 ];
 

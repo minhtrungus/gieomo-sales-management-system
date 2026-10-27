@@ -45,9 +45,10 @@ const expected = [
   "038_order_deletion_idempotency_cleanup.sql",
   "039_controlled_payment_confirmation_adjustment.sql",
   "040_payment_reminders.sql",
+  "041_safe_test_order_archival.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 040", () => {
+test("the migration chain has exactly one SQL file for 001 through 041", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();

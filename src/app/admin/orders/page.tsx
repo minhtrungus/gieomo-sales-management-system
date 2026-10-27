@@ -118,9 +118,11 @@ function AdminOrdersContent() {
     orderCode: string;
     newStatus: OrderStatus;
     buyerName: string;
+    paymentStatus: string;
   } | null>(null);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isStatusChangeBusy, setIsStatusChangeBusy] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const handleConfirmStatusChange = async () => {
     if (!pendingStatusChange || isStatusChangeBusy) return;
@@ -132,11 +134,16 @@ function AdminOrdersContent() {
     setIsStatusChangeBusy(true);
     try {
       if (change.newStatus === "cancelled") {
-        const res = await cancelStoredOrder(change.orderId);
+        if (cancelReason.trim().length < 8) {
+          setStatusChangeError("Vui lòng nhập lý do hủy cụ thể, tối thiểu 8 ký tự.");
+          return;
+        }
+        const res = await cancelStoredOrder(change.orderId, cancelReason);
         if (!res.success) {
           setStatusChangeError(res.error);
           return;
         }
+        await syncOrdersFromServer(true);
       } else {
         updateStoredOrderStatus(change.orderId, change.newStatus);
       }
@@ -153,6 +160,7 @@ function AdminOrdersContent() {
         )
       );
       setStatusChangeError(null);
+      setCancelReason("");
       setPendingStatusChange(null);
     } finally {
       setIsStatusChangeBusy(false);
@@ -459,6 +467,7 @@ function AdminOrdersContent() {
                       orderCode: ord.order_code,
                       newStatus: e.target.value as OrderStatus,
                       buyerName: ord.buyer_name || "Khách",
+                      paymentStatus: ord.payment_status,
                     });
                   }}
                   className="flex-1 text-[10.5px] font-bold py-1.5 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none"
@@ -666,6 +675,7 @@ function AdminOrdersContent() {
                             orderCode: ord.order_code,
                             newStatus: e.target.value as OrderStatus,
                             buyerName: ord.buyer_name || "Khách",
+                            paymentStatus: ord.payment_status,
                           });
                         }}
                         className="text-[10px] font-bold py-1 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none hover:border-[#16381D] cursor-pointer"
@@ -730,6 +740,14 @@ function AdminOrdersContent() {
                   {ORDER_STATUS_LABELS[pendingStatusChange.newStatus]}
                 </span>
               </div>
+              {pendingStatusChange.newStatus === "cancelled" && <div className="space-y-2 pt-2 text-left">
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] font-semibold text-amber-950">
+                  {pendingStatusChange.paymentStatus === "paid"
+                    ? "Đơn đã thanh toán: hủy đơn không hoàn tiền và không sửa ledger. Sau khi hủy phải xử lý hoàn tiền/đối soát riêng."
+                    : "Hủy đơn sẽ hoàn tác kho/voucher nguyên tử khi dữ liệu đủ điều kiện."}
+                </p>
+                <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} rows={3} maxLength={500} placeholder="Lý do hủy bắt buộc (tối thiểu 8 ký tự)" className="w-full rounded-xl border border-gray-200 p-2.5 text-xs outline-none" />
+              </div>}
               {statusChangeError ? (
                 <p className="pt-2 text-xs font-bold text-red-600 leading-relaxed" role="alert">
                   {statusChangeError}
@@ -742,6 +760,7 @@ function AdminOrdersContent() {
                 onClick={() => {
                   if (isStatusChangeBusy) return;
                   setStatusChangeError(null);
+                  setCancelReason("");
                   setPendingStatusChange(null);
                 }}
                 disabled={isStatusChangeBusy}

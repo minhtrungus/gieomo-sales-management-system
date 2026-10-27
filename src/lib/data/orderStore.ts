@@ -25,6 +25,8 @@ type CancelOrderApiResponse = {
   error?: string;
   currentStatus?: string;
   retryable?: boolean;
+  refundRequired?: boolean;
+  refund_required?: boolean;
 };
 
 type StoredCustomerSummary = {
@@ -76,6 +78,8 @@ function parseCancelOrderResponse(value: unknown): CancelOrderApiResponse | null
     error: typeof value.error === "string" ? value.error : undefined,
     currentStatus: typeof value.currentStatus === "string" ? value.currentStatus : undefined,
     retryable: typeof value.retryable === "boolean" ? value.retryable : undefined,
+    refundRequired: typeof value.refundRequired === "boolean" ? value.refundRequired : undefined,
+    refund_required: typeof value.refund_required === "boolean" ? value.refund_required : undefined,
   };
 }
 
@@ -618,7 +622,7 @@ export function cacheServerCreatedOrder(newOrder: Order): void {
 const UUID_ORDER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type CancelOrderResult =
-  | { success: true; alreadyCancelled: boolean }
+  | { success: true; alreadyCancelled: boolean; refundRequired: boolean }
   | {
       success: false;
       outcome:
@@ -1062,7 +1066,7 @@ export function recoverPendingCancelJournals(): void {
  */
 const inFlightCancels = new Map<string, Promise<CancelOrderResult>>();
 
-export async function cancelStoredOrder(orderIdOrCode: string): Promise<CancelOrderResult> {
+export async function cancelStoredOrder(orderIdOrCode: string, cancelReason?: string): Promise<CancelOrderResult> {
   const localOrder = findLocalOrderByIdOrCode(orderIdOrCode);
 
   // Nhận diện server: UUID order_id → trường orderId; ngược lại → trường
@@ -1083,7 +1087,7 @@ export async function cancelStoredOrder(orderIdOrCode: string): Promise<CancelOr
   const existing = inFlightCancels.get(flightKey);
   if (existing) return existing;
 
-  const flight = performCancelStoredOrder(identity, localOrder).finally(() => {
+  const flight = performCancelStoredOrder(identity, localOrder, cancelReason).finally(() => {
     inFlightCancels.delete(flightKey);
   });
   inFlightCancels.set(flightKey, flight);
@@ -1092,14 +1096,15 @@ export async function cancelStoredOrder(orderIdOrCode: string): Promise<CancelOr
 
 async function performCancelStoredOrder(
   identity: Record<string, string>,
-  localOrder: Order | undefined
+  localOrder: Order | undefined,
+  cancelReason?: string,
 ): Promise<CancelOrderResult> {
   let res: Response;
   try {
     res = await fetch("/api/orders", {
       method: "PATCH",
       headers: getAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ ...identity, orderStatus: "cancelled" }),
+      body: JSON.stringify({ ...identity, orderStatus: "cancelled", cancelReason: cancelReason?.trim() || undefined }),
     });
   } catch (err: unknown) {
     return {
@@ -1147,7 +1152,7 @@ async function performCancelStoredOrder(
         };
       }
     }
-    return { success: true, alreadyCancelled };
+    return { success: true, alreadyCancelled, refundRequired: body.refundRequired === true || body.refund_required === true };
   }
 
   if (res.status === 404 && body.outcome === "not_found") {

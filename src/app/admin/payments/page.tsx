@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
@@ -106,13 +106,15 @@ export default function AdminPaymentsPage() {
   const [paymentReadError, setPaymentReadError] = useState<string | null>(null);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const refreshInFlight = useRef<Promise<boolean> | null>(null);
 
   const loadData = () => {
     setOrders(getStoredOrders());
   };
 
-  useEffect(() => {
-    void (async () => {
+  const refreshAuthoritativeData = useCallback((showError = true) => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const flight = (async () => {
       try {
         await syncOrdersFromServer(true);
         setOrders(getStoredOrders());
@@ -120,32 +122,46 @@ export default function AdminPaymentsPage() {
         setPayments(result.payments);
         setMissingLedger(result.missingLedger);
         setPaymentReadError(null);
+        return true;
       } catch {
-        setPayments([]);
-        setMissingLedger([]);
-        setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
+        if (showError) {
+          setPayments([]);
+          setMissingLedger([]);
+          setPaymentReadError("Không thể tải sổ giao dịch thực từ database.");
+        }
+        return false;
       }
-    })();
+    })().finally(() => { refreshInFlight.current = null; });
+    refreshInFlight.current = flight;
+    return flight;
+  }, []);
 
-    const handleUpdate = () => {
-      loadData();
+  useEffect(() => {
+    void refreshAuthoritativeData();
+
+    const handleUpdate = () => setOrders(getStoredOrders());
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshAuthoritativeData(false);
     };
+    const interval = window.setInterval(refreshWhenVisible, 30_000);
 
     window.addEventListener("gieomo_orders_updated", handleUpdate);
-    return () => window.removeEventListener("gieomo_orders_updated", handleUpdate);
-  }, []);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("gieomo_orders_updated", handleUpdate);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshAuthoritativeData]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     setRefreshMessage(null);
     try {
-      await syncOrdersFromServer(true);
-      loadData();
-      const result = await fetchRecordedPayments();
-      setPayments(result.payments);
-      setMissingLedger(result.missingLedger);
-      setPaymentReadError(null);
-      setRefreshMessage("Đã tải lại trạng thái đơn và sổ giao dịch từ database của hệ thống.");
+      const refreshed = await refreshAuthoritativeData();
+      setRefreshMessage(refreshed ? "Đã tải lại trạng thái đơn và sổ giao dịch từ database của hệ thống." : null);
     } catch {
       setPayments([]);
       setMissingLedger([]);

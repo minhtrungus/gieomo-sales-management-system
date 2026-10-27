@@ -37,7 +37,8 @@ test("missing reminder RPC is reported as service unavailable instead of opaque 
 });
 
 test("interaction hot paths avoid eager canvas export and gallery remount", () => {
-  assert.doesNotMatch(thankYou, /useEffect/);
+  assert.doesNotMatch(thankYou, /useEffect\([\s\S]{0,500}renderThankYouCard/);
+  assert.match(thankYou, /useEffect\([\s\S]{0,500}ensureThankYouCardFonts/);
   assert.doesNotMatch(thankYou, /canvas\.toDataURL/);
   assert.match(thankYou, /canvas\.toBlob/);
   assert.doesNotMatch(gallery, /key=\{activeGalleryImage\}/);

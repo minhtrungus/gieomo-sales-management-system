@@ -37,7 +37,7 @@ export function getThankYouCardData(order?: Pick<Order, "buyer_name" | "created_
 }
 
 let fontPromise: Promise<void> | undefined;
-async function loadCardFont(): Promise<void> {
+export async function ensureThankYouCardFonts(): Promise<void> {
   if (!fontPromise) {
     fontPromise = (async () => {
       await Promise.all([
@@ -60,7 +60,7 @@ export async function renderThankYouCard(customerName: string, orderDate: string
       image.onload = () => resolve(image);
       image.onerror = () => reject(new Error("Cannot load ThankYouCard template"));
       image.src = THANK_YOU_CARD.template;
-    }), loadCardFont(),
+    }), ensureThankYouCardFonts(),
   ]);
   const canvas = document.createElement("canvas");
   canvas.width = THANK_YOU_CARD.width; canvas.height = THANK_YOU_CARD.height;

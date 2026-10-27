@@ -21,6 +21,7 @@ import {
   Bell,
   MessageSquare,
   ExternalLink,
+  Archive,
 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import { useNotifications } from "@/lib/notifications/NotificationContext";
@@ -70,6 +71,7 @@ function AdminSidebarInner({ isOpen, onClose }: AdminSidebarProps) {
     { href: "/admin/customers", label: "Khách hàng", icon: Users },
     { href: "/admin/payments", label: "Xác nhận thanh toán", icon: CreditCard },
     { href: "/admin/reconciliation", label: "Đối soát 3 chiều", icon: Scale },
+    { href: "/admin/test-data-cleanup", label: "Lưu trữ dữ liệu test", icon: Archive },
     { href: "/admin/messages", label: "Tin nhắn & Đánh giá", icon: MessageSquare },
     { href: "/admin/vouchers", label: "Mã giảm giá", icon: Ticket },
     { href: "/admin/members", label: "Thành viên & Referral", icon: UserCheck },

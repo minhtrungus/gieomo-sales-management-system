@@ -163,7 +163,10 @@ export async function POST(request: Request) {
       });
       if (error) {
         console.error("[POST /api/orders/payment] adjust_payment_confirmation_atomic failed:", error.message);
-        return NextResponse.json({ success: false, error: "Không thể điều chỉnh; toàn bộ thay đổi đã rollback" }, { status: 500 });
+        const unavailable = error.code === "PGRST202" || /could not find the function|schema cache/i.test(error.message);
+        return NextResponse.json({ success: false, error: unavailable
+          ? "Database hiện tại chưa áp dụng migration 039 cho điều chỉnh xác nhận tiền mặt."
+          : "Không thể điều chỉnh; toàn bộ thay đổi đã rollback" }, { status: unavailable ? 503 : 500 });
       }
       if (result?.outcome === "adjusted") {
         return NextResponse.json({ success: true, ...result });
