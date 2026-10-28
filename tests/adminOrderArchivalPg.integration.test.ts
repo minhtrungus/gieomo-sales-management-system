@@ -144,9 +144,11 @@ test("045 archives terminal orders only and never changes inventory/payment/hist
     await client.query(`DROP TRIGGER ${triggerName} ON public.audit_logs`);
     await client.query(`DROP FUNCTION public.${triggerFunction}()`);
 
+    await client.query("SAVEPOINT archive_acl_case");
     await client.query("SET LOCAL ROLE authenticated");
     await assert.rejects(client.query("SELECT public.archive_order_atomic('{}'::jsonb)"), /permission denied/);
-    await client.query("RESET ROLE");
+    await client.query("ROLLBACK TO SAVEPOINT archive_acl_case");
+    await client.query("RELEASE SAVEPOINT archive_acl_case");
   } finally {
     await client.query("ROLLBACK");
     await client.end();
