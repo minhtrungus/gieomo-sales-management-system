@@ -34,8 +34,10 @@ test("045 archives terminal orders only and never changes inventory/payment/hist
       const row = (await client.query(
         `INSERT INTO public.orders(order_code,customer_id,receiver_name,receiver_phone,delivery_type,subtotal,final_amount,
           order_status,payment_status,delivery_status,payment_method,inventory_reservation_recorded_at,completed_at,cancelled_at)
-         VALUES($1,$2,'Archive Fixture','0900000000','self_pickup',200000,200000,$3,$4,$5,'banking',$6,
-          CASE WHEN $3='completed' THEN now() ELSE NULL END, CASE WHEN $3='cancelled' THEN now() ELSE NULL END)
+         VALUES($1,$2,'Archive Fixture','0900000000','self_pickup',200000,200000,
+          $3::public.order_status,$4::public.payment_status,$5::public.delivery_status,'banking',$6,
+          CASE WHEN $3::public.order_status='completed'::public.order_status THEN now() ELSE NULL END,
+          CASE WHEN $3::public.order_status='cancelled'::public.order_status THEN now() ELSE NULL END)
          RETURNING order_id`,
         [`ARC-${id}`, customer, orderStatus, paymentStatus, deliveryStatus, withReservation ? new Date() : null],
       )).rows[0];
