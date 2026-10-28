@@ -46,7 +46,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ...data });
     }
     const status = data?.outcome === "not_found" ? 404 : data?.outcome === "invalid_actor" ? 403 : 409;
-    return NextResponse.json({ success: false, ...data, error: "Đơn không thể được xóa ở trạng thái hiện tại" }, { status });
+    const message = data?.outcome === "not_terminal"
+      ? "Chỉ có thể lưu trữ đơn đã hoàn tất hoặc đã hủy đúng quy trình. Hãy xử lý giao hàng/giữ hàng trước."
+      : "Đơn không thể được lưu trữ ở trạng thái hiện tại";
+    return NextResponse.json({ success: false, ...data, error: message }, { status });
   }
 
   if (body.mode !== "preview" && body.mode !== "delete") {

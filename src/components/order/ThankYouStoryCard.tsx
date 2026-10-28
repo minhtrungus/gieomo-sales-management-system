@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Download, Share2 } from "lucide-react";
 import type { Order } from "@/types/database";
-import { ensureThankYouCardFonts, getThankYouCardData, renderThankYouCard, THANK_YOU_CARD } from "@/lib/utils/thankYouCard";
+import { createThankYouCardPng, downloadThankYouCardPng, ensureThankYouCardFonts, getThankYouCardData, renderThankYouCard, THANK_YOU_CARD } from "@/lib/utils/thankYouCard";
 
 interface ThankYouStoryCardProps {
   order?: Order | null;
@@ -30,7 +30,9 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  const [fallbackImage, setFallbackImage] = useState<{ url: string; blob: Blob; fileName: string } | null>(null);
   const { customerName, orderDate } = getThankYouCardData(order);
 
   useEffect(() => {
@@ -43,36 +45,36 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
     return () => { active = false; };
   }, []);
 
+  useEffect(() => () => {
+    if (fallbackImage) URL.revokeObjectURL(fallbackImage.url);
+  }, [fallbackImage]);
+
   async function download() {
-    const canvas = await renderThankYouCard(customerName, orderDate);
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
-      value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = `Thiep-Cam-On-Gieo-Mo${customerName ? "-" + customerName.replace(/\s+/g, "-") : ""}.png`;
-    link.href = url;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    const image = await createThankYouCardPng(customerName, orderDate);
+    downloadThankYouCardPng(image.blob, image.fileName);
   }
   const handleDownloadCard = async () => {
     if (isGenerating || isSharing) return;
-    setIsGenerating(true); setError(null);
-    try { onDownloadStart?.(); await download(); }
+    setIsGenerating(true); setError(null); setNotice(null);
+    try { onDownloadStart?.(); await download(); setNotice("Đã tạo và gửi ảnh PNG tới trình tải xuống."); }
     catch { setError("Không xuất được thiệp. Vui lòng thử lại."); }
     finally { setIsGenerating(false); onDownloadEnd?.(); }
   };
   const handleShareCard = async () => {
     if (isSharing || isGenerating) return;
-    setIsSharing(true); setError(null);
+    setIsSharing(true); setError(null); setNotice(null);
     try {
-      const canvas = await renderThankYouCard(customerName, orderDate);
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
-        value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
-      const file = new File([blob], "Thiep-Cam-On-Gieo-Mo.png", { type: "image/png" });
-      const data = { title: "Gieo Mơ", text: "Gom từng mảnh nhỏ, dệt thành yêu thương", url: "https://gieomo.store" };
-      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: data.title, text: data.text });
-      else if (navigator.share) await navigator.share(data);
-      else await download();
+      const image = await createThankYouCardPng(customerName, orderDate);
+      const file = new File([image.blob], image.fileName, { type: "image/png" });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Gieo Mơ", text: "Gom từng mảnh nhỏ, dệt thành yêu thương" });
+        setNotice("Đã gửi ảnh PNG tới bảng chia sẻ.");
+      } else {
+        setFallbackImage((current) => {
+          if (current) URL.revokeObjectURL(current.url);
+          return { ...image, url: URL.createObjectURL(image.blob) };
+        });
+      }
     } catch (err) {
       if (!(err instanceof DOMException && err.name === "AbortError")) setError("Không chia sẻ được thiệp. Bạn có thể tải ảnh PNG.");
     } finally { setIsSharing(false); }
@@ -104,6 +106,18 @@ export const ThankYouStoryCard = React.memo(function ThankYouStoryCard({
         {!customerName && "Chưa có tên người đặt. "}{!orderDate && "Chưa có ngày đặt hàng hợp lệ. "}Thiệp giữ trống phần thiếu dữ liệu.
       </p>}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {notice && <p role="status" className="text-sm font-bold text-emerald-800">{notice}</p>}
+      {fallbackImage && (
+        <div className="space-y-2 rounded-2xl border border-[#F0E5D8] bg-white p-3" role="status">
+          <p className="text-xs font-bold text-[#342A24]">Trình duyệt này không hỗ trợ chia sẻ file ảnh. Ảnh PNG đã được tạo; hãy tải xuống hoặc mở ảnh để lưu/chia sẻ thủ công.</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- object URL is generated locally and cannot use next/image. */}
+          <img src={fallbackImage.url} alt="Ảnh thiệp cảm ơn đã tạo để lưu thủ công" className="mx-auto max-h-80 rounded-xl border object-contain" />
+          <div className="flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={() => downloadThankYouCardPng(fallbackImage.blob, fallbackImage.fileName)} className="min-h-10 rounded-xl bg-[#BFE9C3] px-3 text-xs font-extrabold text-[#16381D]">Tải ảnh PNG</button>
+            <a href={fallbackImage.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center rounded-xl border px-3 text-xs font-bold text-[#342A24]">Mở ảnh</a>
+          </div>
+        </div>
+      )}
       <div className="flex justify-center gap-4 text-xs">
         <a href="https://gieomo.store" target="_blank" rel="noopener noreferrer">Gieomo.store</a>
         <a href="https://facebook.com/BanHangGieoMo" target="_blank" rel="noopener noreferrer">Tạp hóa Gieo Mơ</a>

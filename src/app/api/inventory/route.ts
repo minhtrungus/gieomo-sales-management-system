@@ -46,36 +46,95 @@ const DEFAULT_WAREHOUSES: Warehouse[] = [
 ];
 
 async function getConfigJson<T>(supabase: AdminSupabaseClient, key: string, fallback: T): Promise<T> {
-  try {
-    const { data } = await supabase
-      .from("system_configs")
-      .select("config_value")
-      .eq("config_key", key)
-      .maybeSingle();
-
-    if (data?.config_value) {
-      const parsed = JSON.parse(data.config_value);
-      if (parsed !== undefined && parsed !== null) return parsed as T;
-    }
-  } catch (err) {
-    console.warn(`[inventory API] Error reading config ${key}:`, err);
+  const { data, error } = await supabase
+    .from("system_configs")
+    .select("config_value")
+    .eq("config_key", key)
+    .maybeSingle();
+  if (error) throw new Error(`Không thể đọc cấu hình ${key}: ${error.message}`);
+  if (data?.config_value) {
+    const parsed = JSON.parse(data.config_value);
+    if (parsed !== undefined && parsed !== null) return parsed as T;
   }
   return fallback;
 }
 
 async function setConfigJson<T>(supabase: AdminSupabaseClient, key: string, value: T): Promise<void> {
-  try {
-    await supabase.from("system_configs").upsert(
-      {
-        config_key: key,
-        config_value: JSON.stringify(value),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "config_key" }
-    );
-  } catch (err) {
-    console.warn(`[inventory API] Error saving config ${key}:`, err);
+  const { error } = await supabase.from("system_configs").upsert(
+    {
+      config_key: key,
+      config_value: JSON.stringify(value),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "config_key" }
+  );
+  if (error) throw new Error(`Không thể lưu cấu hình ${key}: ${error.message}`);
+}
+
+async function compareAndSetWarehouses(
+  supabase: AdminSupabaseClient,
+  expected: Warehouse[],
+  next: Warehouse[],
+): Promise<boolean> {
+  const currentResult = await supabase
+    .from("system_configs")
+    .select("config_value, updated_at")
+    .eq("config_key", WAREHOUSES_KEY)
+    .maybeSingle();
+  if (currentResult.error) throw new Error(`Không thể đọc cấu hình ${WAREHOUSES_KEY}: ${currentResult.error.message}`);
+
+  const currentRaw = currentResult.data?.config_value
+    ? JSON.parse(currentResult.data.config_value) as unknown
+    : DEFAULT_WAREHOUSES;
+  const current = validateWarehouses(currentRaw);
+  if (!current) throw new Error("Cấu hình kho hiện tại không hợp lệ; từ chối ghi đè.");
+  if (JSON.stringify(current) !== JSON.stringify(expected)) return false;
+
+  const payload = {
+    config_key: WAREHOUSES_KEY,
+    config_value: JSON.stringify(next),
+    updated_at: new Date().toISOString(),
+  };
+  if (currentResult.data) {
+    const updateResult = await supabase
+      .from("system_configs")
+      .update(payload)
+      .eq("config_key", WAREHOUSES_KEY)
+      .eq("updated_at", currentResult.data.updated_at)
+      .select("config_key")
+      .maybeSingle();
+    if (updateResult.error) throw new Error(`Không thể lưu cấu hình ${WAREHOUSES_KEY}: ${updateResult.error.message}`);
+    return Boolean(updateResult.data);
   }
+
+  const insertResult = await supabase.from("system_configs").insert(payload);
+  if (insertResult.error?.code === "23505") return false;
+  if (insertResult.error) throw new Error(`Không thể lưu cấu hình ${WAREHOUSES_KEY}: ${insertResult.error.message}`);
+  return true;
+}
+
+function validateWarehouses(value: unknown): Warehouse[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 50) return null;
+  const normalized: Warehouse[] = [];
+  const ids = new Set<string>();
+  const codes = new Set<string>();
+  for (const entry of value) {
+    if (!isRecord(entry)) return null;
+    const warehouse_id = typeof entry.warehouse_id === "string" ? entry.warehouse_id.trim() : "";
+    const code = typeof entry.code === "string" ? entry.code.trim().toUpperCase() : "";
+    const name = typeof entry.name === "string" ? entry.name.trim() : "";
+    const address = typeof entry.address === "string" ? entry.address.trim() : "";
+    const phone = typeof entry.phone === "string" ? entry.phone.trim() : "";
+    const manager_name = typeof entry.manager_name === "string" ? entry.manager_name.trim() : "";
+    if (!warehouse_id || warehouse_id.length > 100 || !code || code.length > 40 || !name || name.length > 160 ||
+        address.length > 500 || phone.length > 40 || manager_name.length > 160 || ids.has(warehouse_id) || codes.has(code)) {
+      return null;
+    }
+    ids.add(warehouse_id); codes.add(code);
+    normalized.push({ warehouse_id, code, name, address, phone, manager_name, is_default: entry.is_default === true });
+  }
+  if (normalized.filter((entry) => entry.is_default).length !== 1) return null;
+  return normalized;
 }
 
 export async function GET(request: Request) {
@@ -101,12 +160,7 @@ export async function GET(request: Request) {
     });
   } catch (err: unknown) {
     console.error("[GET /api/inventory] Exception:", err);
-    return NextResponse.json({
-      success: true,
-      warehouses: DEFAULT_WAREHOUSES,
-      inflowLogs: [],
-      transferLogs: [],
-    });
+    return NextResponse.json({ success: false, error: "Không thể tải dữ liệu kho từ máy chủ." }, { status: 500 });
   }
 }
 
@@ -122,13 +176,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Dữ liệu kho không hợp lệ" }, { status: 400 });
     }
     const body = parsedBody;
-    const { action, warehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog } = body;
+    const { action, warehouses, expectedWarehouses, inflowLogs, transferLogs, newInflowLog, newTransferLog } = body;
 
     const supabase = createAdminClient();
 
-    if (action === "saveWarehouses" && Array.isArray(warehouses)) {
-      await setConfigJson(supabase, WAREHOUSES_KEY, warehouses);
-      return NextResponse.json({ success: true });
+    if (action === "saveWarehouses") {
+      const validatedWarehouses = validateWarehouses(warehouses);
+      const validatedExpected = validateWarehouses(expectedWarehouses);
+      if (!validatedWarehouses || !validatedExpected) {
+        return NextResponse.json({ success: false, error: "Danh sách kho không hợp lệ hoặc thiếu đúng một kho mặc định." }, { status: 400 });
+      }
+      const saved = await compareAndSetWarehouses(supabase, validatedExpected, validatedWarehouses);
+      if (!saved) {
+        return NextResponse.json({
+          success: false,
+          error: "Dữ liệu kho đã được cập nhật ở nơi khác. Hãy tải lại trước khi lưu để không ghi đè thay đổi mới.",
+        }, { status: 409 });
+      }
+      return NextResponse.json({ success: true, warehouses: validatedWarehouses });
     }
 
     if (action === "saveInflowLogs" && Array.isArray(inflowLogs)) {

@@ -38,6 +38,18 @@ test("preview and print are separate explicit actions", () => {
   assert.doesNotMatch(sharedDialog, /useEffect\([\s\S]{0,300}window\.print/);
 });
 
+test("download and Android share use a real PNG file with an explicit image fallback", () => {
+  assert.match(renderer, /blob\.type !== "image\/png" \|\| blob\.size < 1/);
+  assert.match(renderer, /document\.body\.appendChild\(link\)/);
+  assert.match(renderer, /URL\.revokeObjectURL\(url\), 30_000/);
+  assert.match(card, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
+  assert.match(card, /navigator\.share\(\{ files: \[file\]/);
+  assert.doesNotMatch(card, /navigator\.share\(data\)/);
+  assert.match(card, /Ảnh PNG đã được tạo/);
+  assert.match(card, /alt="Ảnh thiệp cảm ơn đã tạo để lưu thủ công"/);
+  assert.match(card, /err\.name === "AbortError"/);
+});
+
 test("independent admin card library searches orders and reuses the same dialog", () => {
   assert.match(libraryPage, /syncOrdersFromServer\(true\)/);
   assert.match(libraryPage, /setSelectedOrder\(order\)/);

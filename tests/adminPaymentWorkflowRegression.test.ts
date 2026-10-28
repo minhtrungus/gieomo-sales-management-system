@@ -60,7 +60,7 @@ test("interaction hot paths avoid eager canvas export and gallery remount", () =
   assert.doesNotMatch(previewEffect, /renderThankYouCard/);
   assert.match(previewEffect, /ensureThankYouCardFonts/);
   assert.doesNotMatch(thankYou, /canvas\.toDataURL/);
-  assert.match(thankYou, /canvas\.toBlob/);
+  assert.match(thankYou, /createThankYouCardPng/);
   assert.doesNotMatch(gallery, /key=\{activeGalleryImage\}/);
   assert.match(gallery, /quality=\{60\}/);
 });

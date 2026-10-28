@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Printer, X } from "lucide-react";
 import type { Order } from "@/types/database";
 import { ThankYouStoryCard } from "@/components/order/ThankYouStoryCard";
-import { getThankYouCardData, renderThankYouCard } from "@/lib/utils/thankYouCard";
+import { createThankYouCardPng, getThankYouCardData } from "@/lib/utils/thankYouCard";
 
 interface OrderThankYouCardDialogProps {
   order: Order;
@@ -35,9 +35,7 @@ export function OrderThankYouCardDialog({ order, onClose }: OrderThankYouCardDia
     setPrintError(null);
     try {
       const { customerName, orderDate } = getThankYouCardData(order);
-      const canvas = await renderThankYouCard(customerName, orderDate);
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
-        value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
+      const { blob } = await createThankYouCardPng(customerName, orderDate);
       const imageUrl = URL.createObjectURL(blob);
       printWindow.onafterprint = () => URL.revokeObjectURL(imageUrl);
       printWindow.document.write(

@@ -2802,100 +2802,79 @@ export function getStoredWarehouses(): Warehouse[] {
   }
 }
 
-export function saveNewWarehouse(warehouse: Warehouse): void {
-  if (typeof window === "undefined") return;
+export type WarehouseMutationResult =
+  | { success: true; warehouses: Warehouse[] }
+  | { success: false; error: string };
+
+async function persistWarehouses(warehouses: Warehouse[], expectedWarehouses: Warehouse[]): Promise<WarehouseMutationResult> {
+  if (typeof window === "undefined") return { success: false, error: "Chỉ có thể lưu kho từ trình duyệt." };
   try {
-    let list = getStoredWarehouses();
-    if (warehouse.is_default) {
-      list = list.map((w) => ({ ...w, is_default: false }));
-    }
-    const updated = [
-      warehouse,
-      ...list.filter((w) => w.warehouse_id !== warehouse.warehouse_id && w.code !== warehouse.code),
-    ];
-    cachedWarehouses = updated;
-    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
-
-    // Initialize stock = 0 for this new warehouse across all products
-    try {
-      const prods = getStoredProducts();
-      const updatedProds = prods.map((p) => ({
-        ...p,
-        variants: p.variants?.map((v) => {
-          const stocks = { ...(v.warehouse_stocks || {}) };
-          if (stocks[warehouse.warehouse_id] === undefined) {
-            stocks[warehouse.warehouse_id] = 0;
-          }
-          return {
-            ...v,
-            warehouse_stocks: stocks,
-          };
-        }),
-      }));
-      cachedProducts = updatedProds;
-      localStorage.setItem("gieomo_products", JSON.stringify(updatedProds));
-      window.dispatchEvent(new Event("gieomo_products_updated"));
-    } catch {
-      // ignore
-    }
-
-    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/inventory", {
+    const response = await fetch("/api/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
-    }).catch((err) => console.warn("Could not save warehouse to server:", err));
-  } catch (e) {
-    console.error("Error saving new warehouse", e);
+      body: JSON.stringify({ action: "saveWarehouses", warehouses, expectedWarehouses }),
+    });
+    const body = await response.json() as { success?: boolean; warehouses?: Warehouse[]; error?: string };
+    if (!response.ok || body.success !== true || !Array.isArray(body.warehouses)) {
+      return { success: false, error: body.error || "Máy chủ chưa xác nhận lưu kho." };
+    }
+    cachedWarehouses = body.warehouses;
+    localStorage.setItem("gieomo_warehouses", JSON.stringify(body.warehouses));
+    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
+    return { success: true, warehouses: body.warehouses };
+  } catch {
+    return { success: false, error: "Không kết nối được máy chủ. Dữ liệu đã nhập vẫn được giữ để thử lại." };
   }
 }
 
-export function updateStoredWarehouse(warehouse: Warehouse): void {
-  if (typeof window === "undefined") return;
-  try {
-    let list = getStoredWarehouses();
-    if (warehouse.is_default) {
-      list = list.map((w) => ({ ...w, is_default: false }));
-    }
-    const updated = list.map((w) => (w.warehouse_id === warehouse.warehouse_id ? warehouse : w));
-    cachedWarehouses = updated;
-    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
-    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
-    }).catch((err) => console.warn("Could not update warehouse on server:", err));
-  } catch (e) {
-    console.error("Error updating warehouse", e);
+export async function saveNewWarehouse(warehouse: Warehouse): Promise<WarehouseMutationResult> {
+  let list = getStoredWarehouses();
+  if (list.some((item) => item.warehouse_id === warehouse.warehouse_id || item.code === warehouse.code)) {
+    return { success: false, error: "Mã kho đã tồn tại." };
   }
+  const expected = list;
+  if (warehouse.is_default) list = list.map((item) => ({ ...item, is_default: false }));
+  const result = await persistWarehouses([warehouse, ...list], expected);
+  if (!result.success) return result;
+
+  // Warehouse distribution is display metadata only. Initializing its local
+  // stock buckets to zero must never write product stock back to the server.
+  const products = getStoredProducts().map((product) => ({
+    ...product,
+    variants: product.variants?.map((variant) => ({
+      ...variant,
+      warehouse_stocks: {
+        ...(variant.warehouse_stocks || {}),
+        [warehouse.warehouse_id]: variant.warehouse_stocks?.[warehouse.warehouse_id] ?? 0,
+      },
+    })),
+  }));
+  cachedProducts = products;
+  localStorage.setItem("gieomo_products", JSON.stringify(products));
+  window.dispatchEvent(new Event("gieomo_products_updated"));
+  return result;
 }
 
-export function deleteStoredWarehouse(warehouseId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const list = getStoredWarehouses();
-    const updated = list.filter((w) => w.warehouse_id !== warehouseId);
-    if (updated.length > 0 && !updated.some((w) => w.is_default)) {
-      updated[0].is_default = true;
-    }
-    cachedWarehouses = updated;
-    localStorage.setItem("gieomo_warehouses", JSON.stringify(updated));
-    window.dispatchEvent(new Event("gieomo_warehouses_updated"));
-
-    // Sync to Supabase in background
-    fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "saveWarehouses", warehouses: updated }),
-    }).catch((err) => console.warn("Could not delete warehouse on server:", err));
-  } catch (e) {
-    console.error("Error deleting warehouse", e);
+export async function updateStoredWarehouse(warehouse: Warehouse): Promise<WarehouseMutationResult> {
+  let list = getStoredWarehouses();
+  if (!list.some((item) => item.warehouse_id === warehouse.warehouse_id)) {
+    return { success: false, error: "Kho không còn tồn tại. Hãy tải lại dữ liệu." };
   }
+  if (list.some((item) => item.warehouse_id !== warehouse.warehouse_id && item.code === warehouse.code)) {
+    return { success: false, error: "Mã kho đã được sử dụng." };
+  }
+  const expected = list;
+  if (warehouse.is_default) list = list.map((item) => ({ ...item, is_default: false }));
+  return persistWarehouses(list.map((item) => item.warehouse_id === warehouse.warehouse_id ? warehouse : item), expected);
+}
+
+export async function deleteStoredWarehouse(warehouseId: string): Promise<WarehouseMutationResult> {
+  const list = getStoredWarehouses();
+  if (list.length <= 1) return { success: false, error: "Hệ thống phải còn ít nhất một kho." };
+  const updated = list.filter((item) => item.warehouse_id !== warehouseId).map((item) => ({ ...item }));
+  if (updated.length === list.length) return { success: false, error: "Kho không còn tồn tại. Hãy tải lại dữ liệu." };
+  if (!updated.some((item) => item.is_default)) updated[0].is_default = true;
+  return persistWarehouses(updated, list);
 }
 
 /**

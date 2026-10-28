@@ -17,7 +17,7 @@ test("customer lookup exposes the shared thank-you preview and print action only
 
 test("admin and customer flows share the same print implementation", () => {
   assert.match(ADMIN_DIALOG, /<OrderThankYouCardDialog order=\{order\} onClose=\{onClose\}/);
-  assert.match(DIALOG, /renderThankYouCard\(customerName, orderDate\)/);
+  assert.match(DIALOG, /createThankYouCardPng\(customerName, orderDate\)/);
   assert.match(DIALOG, /window\.print\(\)/);
   assert.match(DIALOG, /event\.key === "Escape"/);
 });

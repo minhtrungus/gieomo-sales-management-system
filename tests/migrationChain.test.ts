@@ -49,9 +49,10 @@ const expected = [
   "042_guarded_test_payment_deletion.sql",
   "043_admin_order_archival.sql",
   "044_combo_bottom_up_allocation.sql",
+  "045_guard_admin_order_archival.sql",
 ];
 
-test("the migration chain has exactly one SQL file for 001 through 044", () => {
+test("the migration chain has exactly one SQL file for 001 through 045", () => {
   const actual = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_.*\.sql$/.test(name))
     .sort();

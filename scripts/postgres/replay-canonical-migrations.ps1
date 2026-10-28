@@ -55,7 +55,7 @@ try {
   }
 
   Invoke-Checked "migration chain validation" {
-    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "044"
+    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "045"
     try { & node (Join-Path $repoRoot "scripts/migrations/validate-chain.mjs") | Out-Null }
     finally { Remove-Item Env:GIEOMO_EXPECTED_MIGRATION_TIP -ErrorAction SilentlyContinue }
   }
@@ -112,6 +112,7 @@ BEGIN
      OR to_regprocedure('public.manage_order_deletion_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.manage_test_order_archival_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.manage_test_payment_deletion_atomic(jsonb)') IS NULL
+     OR to_regprocedure('public.archive_order_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.mark_duplicate_order_atomic(jsonb)') IS NULL THEN
     RAISE EXCEPTION 'canonical RPC set is incomplete';
   END IF;

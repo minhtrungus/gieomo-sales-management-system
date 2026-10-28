@@ -5,29 +5,29 @@ import { spawnSync } from "node:child_process";
 
 const text = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("migration chain is contiguous through 044", () => {
+test("migration chain is contiguous through 045", () => {
   const files = readdirSync(new URL("../supabase/migrations/", import.meta.url))
     .filter((name) => /^\d{3}_.+\.sql$/.test(name))
     .sort();
 
-  assert.equal(files.length, 44);
+  assert.equal(files.length, 45);
   assert.equal(files[0], "001_initial_schema.sql");
-  assert.equal(files.at(-1), "044_combo_bottom_up_allocation.sql");
+  assert.equal(files.at(-1), "045_guard_admin_order_archival.sql");
   assert.deepEqual(
     files.map((name) => Number(name.slice(0, 3))),
-    Array.from({ length: 44 }, (_, index) => index + 1)
+    Array.from({ length: 45 }, (_, index) => index + 1)
   );
 });
 
-test("migration validator accepts the canonical chain and enforces tip 044", () => {
+test("migration validator accepts the canonical chain and enforces tip 045", () => {
   const result = spawnSync(process.execPath, ["scripts/migrations/validate-chain.mjs"], {
     cwd: new URL("..", import.meta.url),
-    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "044" },
+    env: { ...process.env, GIEOMO_EXPECTED_MIGRATION_TIP: "045" },
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
   const manifest = JSON.parse(result.stdout) as { count: number; tip: string };
-  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 44, tip: "044" });
+  assert.deepEqual({ count: manifest.count, tip: manifest.tip }, { count: 45, tip: "045" });
 });
 
 test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory", () => {
@@ -37,7 +37,7 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   const sourceRunner = text("scripts/tests/run-source-tests.mjs");
   assert.match(workflow, /services:\s*\n\s+postgres:/);
   assert.match(workflow, /GIEOMO_PG_ISOLATED:\s*"1"/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"044"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"045"/);
   assert.match(workflow, /find supabase\/migrations[^\n]+sort/);
   assert.match(workflow, /npm run test:pg:mandatory/);
   assert.match(workflow, /npm run test:source/);
@@ -66,7 +66,7 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /\bschedule:/);
   assert.match(workflow, /EXPECTED_PRODUCTION_PROJECT_REF:\s*snmmiwpvlpknkinhfqsv/);
-  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"044"/);
+  assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"045"/);
   assert.match(workflow, /supabase db push --linked --dry-run/);
   assert.match(workflow, /environment:\s*production/);
   assert.match(workflow, /vars\.PRODUCTION_DEPLOY_ENABLED == 'true'/);
@@ -81,11 +81,12 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.match(workflow, /supabase\/setup-cli@v3/);
 });
 
-test("Preview migration runbook fails closed on Production and requires exactly 043-044", () => {
-  const runbook = text("docs/engineering/PREVIEW_MIGRATIONS_043_044_RUNBOOK.md");
+test("Preview migration runbook fails closed on Production and requires exactly 043-045", () => {
+  const runbook = text("docs/engineering/PREVIEW_MIGRATIONS_043_045_RUNBOOK.md");
   assert.match(runbook, /snmmiwpvlpknkinhfqsv/);
   assert.match(runbook, /043_admin_order_archival\.sql/);
   assert.match(runbook, /044_combo_bottom_up_allocation\.sql/);
+  assert.match(runbook, /045_guard_admin_order_archival\.sql/);
   assert.match(runbook, /supabase db push --linked --dry-run/);
   assert.match(runbook, /Do not run|Stop immediately/i);
 });
@@ -96,7 +97,7 @@ test("local replay harness uses unique disposable targets and guarded teardown",
   assert.match(runner, /127\.0\.0\.1/);
   assert.match(runner, /Refusing unsafe teardown target/);
   assert.match(runner, /run-mandatory-pg-tests\.mjs/);
-  assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "044"/);
+  assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "045"/);
   assert.match(runner, /node scripts\/tests\/run-source-tests\.mjs/);
   assert.match(runner, /CANONICAL_REPLAY_PASS/);
   assert.doesNotMatch(runner, /SUPABASE_ACCESS_TOKEN|service_role_key/i);

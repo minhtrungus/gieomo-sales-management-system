@@ -22,6 +22,8 @@ test("swap UI is state/line gated and combo lines fail closed", () => {
   assert.match(component, /item\.combo_id/);
   assert.match(component, /Dòng combo chưa hỗ trợ/);
   assert.match(component, /selected\.stock >= item\.quantity/);
+  assert.match(component, /Không thể đổi mẫu: chỉ áp dụng/);
+  assert.match(component, /Dòng hàng cũ không có mã variant/);
 });
 
 test("order read contract exposes stable product/variant/combo identities", () => {
