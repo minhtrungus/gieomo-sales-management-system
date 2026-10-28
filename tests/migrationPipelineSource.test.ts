@@ -53,6 +53,8 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   assert.match(mandatoryRunner, /MANDATORY_PG_SKIP_FAILURE/);
   assert.match(mandatoryRunner, /skippedMatch/);
   assert.match(mandatoryRunner, /\.integration\.test\.ts/);
+  assert.match(mandatoryRunner, /r1PaymentPg\.integration\.test\.ts/);
+  assert.match(mandatoryRunner, /supersededIntegrationFiles/);
   assert.match(sourceRunner, /!entry\.name\.endsWith\("\.integration\.test\.ts"\)/);
   assert.match(sourceRunner, /SOURCE_TEST_PASS/);
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/);
