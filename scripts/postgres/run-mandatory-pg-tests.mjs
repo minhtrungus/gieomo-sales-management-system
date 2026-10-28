@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 
 const requiredEnvironment = ["ATOMIC_PG_URL", "GIEOMO_PG_ISOLATED"];
 const missing = requiredEnvironment.filter((name) => !process.env[name]);
@@ -21,25 +22,14 @@ try {
   process.exit(2);
 }
 
-const mandatoryFiles = [
-  "tests/adjustStockPg.integration.test.ts",
-  "tests/atomicOrderPg.integration.test.ts",
-  "tests/cancelOrderPg.integration.test.ts",
-  "tests/comboPersistencePg.integration.test.ts",
-  "tests/comboWildcardCheckoutPg.integration.test.ts",
-  "tests/legacyStockDeductPg.integration.test.ts",
-  "tests/ordersPaymentsPrivilegesPg.integration.test.ts",
-  "tests/orderDeletionPg.integration.test.ts",
-  "tests/swapVariantPg.integration.test.ts",
-  "tests/paymentApplyFaultPg.integration.test.ts",
-  "tests/paymentIdempotencyPg.integration.test.ts",
-  "tests/paymentRejectionPg.integration.test.ts",
-  "tests/paymentConfirmationAdjustmentPg.integration.test.ts",
-  "tests/paymentReminderPg.integration.test.ts",
-  "tests/testOrderArchivalPg.integration.test.ts",
-  "tests/testPaymentDeletionPg.integration.test.ts",
-  "tests/voucherConcurrency.integration.test.ts",
-];
+const mandatoryFiles = readdirSync("tests", { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".integration.test.ts"))
+  .map((entry) => `tests/${entry.name}`)
+  .sort();
+if (mandatoryFiles.length === 0) {
+  process.stderr.write("MANDATORY_PG_RUNNER_FAILURE no PostgreSQL integration tests discovered\n");
+  process.exit(2);
+}
 
 const result = spawnSync(
   process.execPath,

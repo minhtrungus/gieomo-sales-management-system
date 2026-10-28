@@ -139,11 +139,8 @@ END `$`$;
     Invoke-Checked "mandatory Node PostgreSQL tests" {
       & node scripts/postgres/run-mandatory-pg-tests.mjs
     }
-    $allNodeTestFiles = Get-ChildItem (Join-Path $repoRoot "tests") -File -Filter "*.test.ts" |
-      Sort-Object FullName |
-      ForEach-Object FullName
-    Invoke-Checked "complete Node test suite with PostgreSQL target" {
-      & node --test --test-concurrency=1 @allNodeTestFiles
+    Invoke-Checked "source Node test suite without duplicate PostgreSQL files" {
+      & node scripts/tests/run-source-tests.mjs
     }
     if ($ProposalFiles.Count -gt 0) {
       Invoke-Checked "remediation proposal PostgreSQL tests" {

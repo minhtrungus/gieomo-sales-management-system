@@ -34,19 +34,27 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   const workflow = text(".github/workflows/go-live-gates.yml");
   const packageJson = text("package.json");
   const mandatoryRunner = text("scripts/postgres/run-mandatory-pg-tests.mjs");
+  const sourceRunner = text("scripts/tests/run-source-tests.mjs");
   assert.match(workflow, /services:\s*\n\s+postgres:/);
   assert.match(workflow, /GIEOMO_PG_ISOLATED:\s*"1"/);
   assert.match(workflow, /GIEOMO_EXPECTED_MIGRATION_TIP:\s*"044"/);
   assert.match(workflow, /find supabase\/migrations[^\n]+sort/);
   assert.match(workflow, /npm run test:pg:mandatory/);
-  assert.match(workflow, /node --test --test-concurrency=1 tests\/\*\.test\.ts/);
+  assert.match(workflow, /npm run test:source/);
   assert.match(workflow, /npm run lint/);
-  assert.match(workflow, /playwright install --with-deps chromium/);
+  assert.match(workflow, /PLAYWRIGHT_BROWSER_CHANNEL:\s*chrome/);
   assert.match(workflow, /npm run test:e2e/);
+  assert.doesNotMatch(workflow, /playwright install/);
+  assert.doesNotMatch(workflow, /supabase\/setup-cli/);
+  assert.match(workflow, /actions\/checkout@v5/);
+  assert.match(workflow, /actions\/setup-node@v5/);
   assert.doesNotMatch(workflow, /npm install --no-save/);
   assert.match(packageJson, /"pg":\s*"\^8\./);
   assert.match(mandatoryRunner, /MANDATORY_PG_SKIP_FAILURE/);
   assert.match(mandatoryRunner, /skippedMatch/);
+  assert.match(mandatoryRunner, /\.integration\.test\.ts/);
+  assert.match(sourceRunner, /!entry\.name\.endsWith\("\.integration\.test\.ts"\)/);
+  assert.match(sourceRunner, /SOURCE_TEST_PASS/);
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/);
 });
 
@@ -64,6 +72,19 @@ test("Production migration deployment is manual, target-pinned, dry-run first, a
   assert.doesNotMatch(workflow, /startsWith\(github\.ref, 'refs\/tags\/'\)/);
   assert.match(workflow, /checks:\s*read/);
   assert.match(workflow, /requiredCheck = "source-and-postgres"/);
+  assert.match(workflow, /actions\/checkout@v5/);
+  assert.match(workflow, /actions\/setup-node@v5/);
+  assert.match(workflow, /actions\/github-script@v8/);
+  assert.match(workflow, /supabase\/setup-cli@v3/);
+});
+
+test("Preview migration runbook fails closed on Production and requires exactly 043-044", () => {
+  const runbook = text("docs/engineering/PREVIEW_MIGRATIONS_043_044_RUNBOOK.md");
+  assert.match(runbook, /snmmiwpvlpknkinhfqsv/);
+  assert.match(runbook, /043_admin_order_archival\.sql/);
+  assert.match(runbook, /044_combo_bottom_up_allocation\.sql/);
+  assert.match(runbook, /supabase db push --linked --dry-run/);
+  assert.match(runbook, /Do not run|Stop immediately/i);
 });
 
 test("local replay harness uses unique disposable targets and guarded teardown", () => {
@@ -73,7 +94,7 @@ test("local replay harness uses unique disposable targets and guarded teardown",
   assert.match(runner, /Refusing unsafe teardown target/);
   assert.match(runner, /run-mandatory-pg-tests\.mjs/);
   assert.match(runner, /GIEOMO_EXPECTED_MIGRATION_TIP = "044"/);
-  assert.match(runner, /node --test --test-concurrency=1 @allNodeTestFiles/);
+  assert.match(runner, /node scripts\/tests\/run-source-tests\.mjs/);
   assert.match(runner, /CANONICAL_REPLAY_PASS/);
   assert.doesNotMatch(runner, /SUPABASE_ACCESS_TOKEN|service_role_key/i);
 });
