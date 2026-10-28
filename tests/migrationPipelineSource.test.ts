@@ -43,8 +43,9 @@ test("CI replays migrations on isolated PostgreSQL and makes PG tests mandatory"
   assert.match(workflow, /npm run test:source/);
   assert.match(workflow, /npm run lint/);
   assert.match(workflow, /PLAYWRIGHT_BROWSER_CHANNEL:\s*chrome/);
+  assert.match(workflow, /playwright install ffmpeg/);
   assert.match(workflow, /npm run test:e2e/);
-  assert.doesNotMatch(workflow, /playwright install/);
+  assert.doesNotMatch(workflow, /playwright install --with-deps chromium/);
   assert.doesNotMatch(workflow, /supabase\/setup-cli/);
   assert.match(workflow, /actions\/checkout@v5/);
   assert.match(workflow, /actions\/setup-node@v5/);
