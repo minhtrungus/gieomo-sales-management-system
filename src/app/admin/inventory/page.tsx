@@ -247,10 +247,12 @@ export default function AdminInventoryPage() {
   const [newWhPhone, setNewWhPhone] = useState("");
   const [newWhManager, setNewWhManager] = useState("");
   const [newWhIsDefault, setNewWhIsDefault] = useState(false);
+  const [warehouseSaving, setWarehouseSaving] = useState(false);
+  const [warehouseFeedback, setWarehouseFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const handleCreateWarehouseSubmit = (e: React.FormEvent) => {
+  const handleCreateWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWhCode || !newWhName) return;
+    if (!newWhCode || !newWhName || warehouseSaving) return;
 
     const wh: Warehouse = {
       warehouse_id: `wh-${Date.now()}`,
@@ -262,9 +264,17 @@ export default function AdminInventoryPage() {
       is_default: newWhIsDefault,
     };
 
-    saveNewWarehouse(wh);
-    setWarehouses(getStoredWarehouses());
+    setWarehouseSaving(true);
+    setWarehouseFeedback(null);
+    const result = await saveNewWarehouse(wh);
+    setWarehouseSaving(false);
+    if (!result.success) {
+      setWarehouseFeedback({ type: "error", message: result.error });
+      return;
+    }
+    setWarehouses(result.warehouses);
     setIsAddWarehouseOpen(false);
+    setWarehouseFeedback({ type: "success", message: `Đã lưu kho ${wh.name}.` });
 
     // Reset Form
     setNewWhCode("");
@@ -275,29 +285,54 @@ export default function AdminInventoryPage() {
     setNewWhIsDefault(false);
   };
 
-  const handleEditWarehouseSubmit = (e: React.FormEvent) => {
+  const handleEditWarehouseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingWarehouse) return;
+    if (!editingWarehouse || warehouseSaving) return;
 
-    updateStoredWarehouse({
+    setWarehouseSaving(true);
+    setWarehouseFeedback(null);
+    const result = await updateStoredWarehouse({
       ...editingWarehouse,
       code: editingWarehouse.code.toUpperCase().trim(),
       name: editingWarehouse.name.trim(),
     });
-    setWarehouses(getStoredWarehouses());
+    setWarehouseSaving(false);
+    if (!result.success) {
+      setWarehouseFeedback({ type: "error", message: result.error });
+      return;
+    }
+    setWarehouses(result.warehouses);
     setEditingWarehouse(null);
+    setWarehouseFeedback({ type: "success", message: "Đã lưu thay đổi kho." });
   };
 
-  const handleConfirmDeleteWarehouse = () => {
-    if (!deletingWarehouse) return;
-    deleteStoredWarehouse(deletingWarehouse.warehouse_id);
-    setWarehouses(getStoredWarehouses());
+  const handleConfirmDeleteWarehouse = async () => {
+    if (!deletingWarehouse || warehouseSaving) return;
+    setWarehouseSaving(true);
+    setWarehouseFeedback(null);
+    const result = await deleteStoredWarehouse(deletingWarehouse.warehouse_id);
+    setWarehouseSaving(false);
+    if (!result.success) {
+      setWarehouseFeedback({ type: "error", message: result.error });
+      return;
+    }
+    setWarehouses(result.warehouses);
     setDeletingWarehouse(null);
+    setWarehouseFeedback({ type: "success", message: "Đã xóa kho khỏi danh sách điều phối." });
   };
 
-  const handleSetDefaultWarehouse = (wh: Warehouse) => {
-    updateStoredWarehouse({ ...wh, is_default: true });
-    setWarehouses(getStoredWarehouses());
+  const handleSetDefaultWarehouse = async (wh: Warehouse) => {
+    if (warehouseSaving) return;
+    setWarehouseSaving(true);
+    setWarehouseFeedback(null);
+    const result = await updateStoredWarehouse({ ...wh, is_default: true });
+    setWarehouseSaving(false);
+    if (!result.success) {
+      setWarehouseFeedback({ type: "error", message: result.error });
+      return;
+    }
+    setWarehouses(result.warehouses);
+    setWarehouseFeedback({ type: "success", message: `Đã đặt ${wh.name} làm kho mặc định.` });
   };
 
   // ==========================================
@@ -1634,6 +1669,11 @@ export default function AdminInventoryPage() {
 
           {/* Warehouses Table & Mobile Cards */}
           <div className="bg-white rounded-3xl border border-[#F0E5D8] shadow-soft overflow-hidden">
+            {warehouseFeedback && (
+              <p role={warehouseFeedback.type === "error" ? "alert" : "status"} className={`m-3 rounded-xl border px-3 py-2 text-xs font-bold ${warehouseFeedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                {warehouseFeedback.message}
+              </p>
+            )}
             {/* MOBILE CARD VIEW (< sm) */}
             <div className="block sm:hidden p-3 space-y-3">
               {warehouses.map((wh) => (
@@ -2194,9 +2234,10 @@ export default function AdminInventoryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
+                  disabled={warehouseSaving}
+                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer disabled:cursor-wait disabled:opacity-60"
                 >
-                  Thêm kho ➔
+                  {warehouseSaving ? "Đang lưu..." : "Thêm kho ➔"}
                 </button>
               </div>
             </form>
@@ -2314,9 +2355,10 @@ export default function AdminInventoryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer"
+                  disabled={warehouseSaving}
+                  className="px-5 py-2.5 rounded-xl bg-[#BFE9C3] hover:bg-[#aee0b3] text-[#16381D] font-extrabold text-xs shadow-xs border border-[#9ed4a3] cursor-pointer disabled:cursor-wait disabled:opacity-60"
                 >
-                  Lưu thay đổi ➔
+                  {warehouseSaving ? "Đang lưu..." : "Lưu thay đổi ➔"}
                 </button>
               </div>
             </form>
@@ -2351,9 +2393,10 @@ export default function AdminInventoryPage() {
               <button
                 type="button"
                 onClick={handleConfirmDeleteWarehouse}
-                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                disabled={warehouseSaving}
+                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:cursor-wait disabled:opacity-60"
               >
-                Xóa kho vĩnh viễn
+                {warehouseSaving ? "Đang lưu..." : "Xóa kho vĩnh viễn"}
               </button>
             </div>
           </div>

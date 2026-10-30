@@ -210,9 +210,9 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
     const result = await callCheckout(c, { comboRef: combo.combo_id, quantity: 1 });
     assert.equal(result.outcome, "created");
 
-    // Explicit A always consumes one unit. The wildcard consumes one unit from
-    // the first eligible UUID because migration 035 deliberately locks and
-    // allocates in variant_id order (seed INSERT order is not allocation order).
+    // Explicit A always consumes one unit. Both seeded variants have the same
+    // default sort_order, so migration 044's bottom-up allocation uses the
+    // descending UUID tie-breaker (seed INSERT order is not allocation order).
     const [{ variant_id: variantA }, { variant_id: variantB }] = variants;
     const stocks = (
       await c.query(
@@ -221,7 +221,7 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
       )
     ).rows;
     const stockByVariant = new Map(stocks.map((row: any) => [row.variant_id, row.stock]));
-    const wildcardVariant = [variantA, variantB].sort()[0];
+    const wildcardVariant = [variantA, variantB].sort().at(-1)!;
     assert.equal(stockByVariant.get(variantA), wildcardVariant === variantA ? 0 : 1);
     assert.equal(stockByVariant.get(variantB), wildcardVariant === variantB ? 4 : 5);
     assert.equal(Number(stockByVariant.get(variantA)) + Number(stockByVariant.get(variantB)), 5);
@@ -238,6 +238,42 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
     );
     assert.equal(reservedByVariant.get(variantA), wildcardVariant === variantA ? 2 : 1);
     assert.equal(reservedByVariant.get(variantB) ?? 0, wildcardVariant === variantB ? 1 : 0);
+    await c.query("ROLLBACK");
+  } finally {
+    await c.end();
+  }
+});
+
+test("migration 044 allocates wildcard demand from highest sort_order first", {
+  skip: !canRun,
+}, async () => {
+  const c = client();
+  await c.connect();
+  try {
+    await c.query("BEGIN");
+    const suffix = `${Date.now()}-bottom-up`;
+    const { product, variants } = await seedCatalog(c, suffix, [3, 3]);
+    await c.query(
+      `UPDATE public.product_variants
+          SET sort_order = CASE variant_id WHEN $1 THEN 10 ELSE 20 END
+        WHERE variant_id IN ($1, $2)`,
+      [variants[0].variant_id, variants[1].variant_id],
+    );
+    const combo = await saveWildcardCombo(c, suffix, product, 1);
+    assert.equal(combo.outcome, "saved");
+
+    const result = await callCheckout(c, { comboRef: combo.combo_id, quantity: 2 });
+    assert.equal(result.outcome, "created");
+    const stocks = await stocksFor(c, variants);
+    const byVariant = new Map(stocks.map((row: any) => [row.variant_id, Number(row.stock)]));
+    assert.equal(byVariant.get(variants[0].variant_id), 3, "lower sort_order must remain untouched");
+    assert.equal(byVariant.get(variants[1].variant_id), 1, "highest sort_order must satisfy demand first");
+
+    const reservations = await reservationsFor(c, result.order_id);
+    assert.deepEqual(
+      reservations.map((row: any) => ({ variant_id: row.variant_id, quantity: Number(row.quantity) })),
+      [{ variant_id: variants[1].variant_id, quantity: 2 }],
+    );
     await c.query("ROLLBACK");
   } finally {
     await c.end();

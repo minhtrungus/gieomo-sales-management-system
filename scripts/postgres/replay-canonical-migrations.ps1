@@ -2,6 +2,8 @@
 param(
   [int]$Port = 55441,
   [string]$PostgresBin = "$env:USERPROFILE\scoop\apps\postgresql\current\bin",
+  [ValidatePattern('^[a-z][a-z0-9_]{0,62}$')]
+  [string]$DatabaseName = "",
   [string[]]$ProposalFiles = @(),
   [switch]$RequireSupabaseLint,
   [switch]$KeepCluster
@@ -25,7 +27,7 @@ $tempRoot = Join-Path $repoRoot ".tmp"
 $suffix = [Guid]::NewGuid().ToString("N").Substring(0, 10)
 $dataDirectory = Join-Path $tempRoot "postgres-canonical-$suffix"
 $logPath = Join-Path $tempRoot "postgres-canonical-$suffix.log"
-$database = "gieomo_canonical_$suffix"
+$database = if ($DatabaseName) { $DatabaseName } else { "gieomo_canonical_$suffix" }
 $databaseUser = "gieomo_canonical_admin_$suffix"
 $started = $false
 
@@ -55,7 +57,7 @@ try {
   }
 
   Invoke-Checked "migration chain validation" {
-    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "038"
+    $env:GIEOMO_EXPECTED_MIGRATION_TIP = "045"
     try { & node (Join-Path $repoRoot "scripts/migrations/validate-chain.mjs") | Out-Null }
     finally { Remove-Item Env:GIEOMO_EXPECTED_MIGRATION_TIP -ErrorAction SilentlyContinue }
   }
@@ -110,6 +112,9 @@ BEGIN
      OR to_regprocedure('public.save_combo_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.swap_order_item_variant_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.manage_order_deletion_atomic(jsonb)') IS NULL
+     OR to_regprocedure('public.manage_test_order_archival_atomic(jsonb)') IS NULL
+     OR to_regprocedure('public.manage_test_payment_deletion_atomic(jsonb)') IS NULL
+     OR to_regprocedure('public.archive_order_atomic(jsonb)') IS NULL
      OR to_regprocedure('public.mark_duplicate_order_atomic(jsonb)') IS NULL THEN
     RAISE EXCEPTION 'canonical RPC set is incomplete';
   END IF;
@@ -137,11 +142,8 @@ END `$`$;
     Invoke-Checked "mandatory Node PostgreSQL tests" {
       & node scripts/postgres/run-mandatory-pg-tests.mjs
     }
-    $allNodeTestFiles = Get-ChildItem (Join-Path $repoRoot "tests") -File -Filter "*.test.ts" |
-      Sort-Object FullName |
-      ForEach-Object FullName
-    Invoke-Checked "complete Node test suite with PostgreSQL target" {
-      & node --test --test-concurrency=1 @allNodeTestFiles
+    Invoke-Checked "source Node test suite without duplicate PostgreSQL files" {
+      & node scripts/tests/run-source-tests.mjs
     }
     if ($ProposalFiles.Count -gt 0) {
       Invoke-Checked "remediation proposal PostgreSQL tests" {

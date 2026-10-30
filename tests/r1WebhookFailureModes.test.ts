@@ -47,3 +47,9 @@ test("R1-W6 — DB RPC classifies underpaid, additional and cancelled money even
   assert.match(paymentMigration, /FOR UPDATE/);
   assert.match(paymentMigration, /INSERT INTO public\.payment_events/);
 });
+
+test("R1-W7 — webhook distinguishes payment-row status from canonical order payment status", () => {
+  assert.match(route, /payment_record_status:/);
+  assert.match(route, /order_payment_status:/);
+  assert.match(route, /\.from\("orders"\)[\s\S]*\.select\("payment_status"\)/);
+});

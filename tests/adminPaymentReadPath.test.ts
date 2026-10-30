@@ -8,7 +8,7 @@ const source = readFileSync(
 );
 
 test("H29-P1 — admin payments reads recorded ledger rows and does not synthesize transactions from orders", () => {
-  assert.match(source, /\/api\/admin\/reconciliation\?limit=200&offset=0/);
+  assert.match(source, /\/api\/admin\/payments/);
   assert.match(source, /record\.payments/);
   assert.doesNotMatch(source, /getStoredPayments/);
   assert.doesNotMatch(source, /Math\.random/);
@@ -20,4 +20,10 @@ test("H29-P2 — paid orders without payment rows are shown as reconciliation ga
   assert.match(source, /Đơn đã đánh dấu thanh toán nhưng thiếu giao dịch đối soát/);
   assert.match(source, /Đây không phải giao dịch VietQR/);
   assert.doesNotMatch(source, /paymentId:\s*record\.order_code/);
+});
+
+test("H29-P3 — refresh is described as a database refresh, not a SePay transaction sync", () => {
+  assert.match(source, /Làm mới từ hệ thống/);
+  assert.match(source, /không tải giao dịch trực tiếp từ SePay/);
+  assert.doesNotMatch(source, />Đồng bộ giao dịch</);
 });

@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractOrderCodeCandidates } from "@/lib/payments/orderReference";
 
 function apiKeysMatch(provided: string, configured: string): boolean {
   const left = createHash("sha256").update(provided, "utf8").digest();
@@ -64,12 +65,43 @@ export async function POST(request: Request) {
       return response(422, { success: false, outcome: "invalid_amount", needs_review: true });
     }
 
-    const match = content.match(/GM[-_]?([0-9]{4,8}|[A-Z0-9]{4,8})/i);
-    const orderCode = match
-      ? (match[0].toUpperCase().includes("-")
-          ? match[0].toUpperCase()
-          : `GM-${match[0].toUpperCase().replace("GM", "")}`)
-      : null;
+    const orderCodeCandidates = extractOrderCodeCandidates(content);
+    let orderCode: string | null = null;
+
+    if (orderCodeCandidates.length > 0) {
+      const { data: matchingOrders, error: matchError } = await supabase
+        .from("orders")
+        .select("order_code")
+        .in("order_code", orderCodeCandidates);
+      if (matchError) {
+        console.error("[SePay] order reference lookup failed:", matchError.message);
+        return response(500, {
+          success: false,
+          error: "Không thể đối chiếu mã đơn; yêu cầu nhà cung cấp retry",
+          retryable: true,
+        });
+      }
+      const exactMatches = [...new Set((matchingOrders || []).map((row) => String(row.order_code)))];
+      if (exactMatches.length === 1) orderCode = exactMatches[0];
+      if (exactMatches.length > 1) {
+        const { error: eventError } = await supabase.from("payment_events").insert({
+          provider: "sepay",
+          provider_transaction_id: transactionCode,
+          received_amount: amount,
+          classification: "unmatched_reference",
+          outcome: "ambiguous_order_reference",
+          payload_fingerprint: fingerprint,
+        });
+        if (eventError) return response(500, { success: false, error: "Không lưu được payment event" });
+        return response(200, {
+          success: false,
+          outcome: "ambiguous_order_reference",
+          needs_review: true,
+          message: "Nội dung chuyển khoản khớp nhiều đơn; cần kiểm tra thủ công",
+          amount_received: amount,
+        });
+      }
+    }
 
     if (!orderCode) {
       const { error } = await supabase.from("payment_events").insert({
@@ -115,6 +147,19 @@ export async function POST(request: Request) {
     }
 
     const success = data.outcome === "applied" || data.outcome === "duplicate";
+    let canonicalOrderPaymentStatus: string | null = null;
+    if (data.order_id) {
+      const { data: canonicalOrder, error: canonicalOrderError } = await supabase
+        .from("orders")
+        .select("payment_status")
+        .eq("order_id", data.order_id)
+        .maybeSingle();
+      if (canonicalOrderError) {
+        console.error("[SePay] cannot read canonical order payment status:", canonicalOrderError.message);
+      } else {
+        canonicalOrderPaymentStatus = canonicalOrder?.payment_status ?? null;
+      }
+    }
     return response(200, {
       success,
       outcome: data.outcome,
@@ -123,7 +168,10 @@ export async function POST(request: Request) {
       matched_order_code: orderCode,
       order_id: data.order_id ?? null,
       payment_id: data.payment_id ?? null,
+      // Backward-compatible: payment_status is the newly recorded payment row.
       payment_status: data.payment_status ?? null,
+      payment_record_status: data.payment_status ?? null,
+      order_payment_status: canonicalOrderPaymentStatus,
       order_status: data.order_status ?? null,
       amount_received: data.amount_received ?? amount,
       amount_expected: data.amount_expected ?? null,

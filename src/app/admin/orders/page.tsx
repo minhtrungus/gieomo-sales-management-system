@@ -20,6 +20,7 @@ import {
 import { isNoIntroducerValue } from "@/lib/checkout/introducer";
 import type { Order, OrderStatus } from "@/types/database";
 import { AdminSearchInput } from "@/components/admin/AdminSearchInput";
+import { AdminOrderThankYouCardDialog } from "@/components/admin/AdminOrderThankYouCardDialog";
 import {
   Plus,
   Filter,
@@ -29,6 +30,7 @@ import {
   ShoppingBag,
   Sparkles,
   ChevronRight,
+  Printer,
 } from "lucide-react";
 
 type OrderTab = "all" | "my_orders" | "by_btc";
@@ -50,6 +52,7 @@ function AdminOrdersContent() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introducerFilter, setIntroducerFilter] = useState<string>("all");
   const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
+  const [thankYouOrder, setThankYouOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -115,9 +118,11 @@ function AdminOrdersContent() {
     orderCode: string;
     newStatus: OrderStatus;
     buyerName: string;
+    paymentStatus: string;
   } | null>(null);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isStatusChangeBusy, setIsStatusChangeBusy] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const handleConfirmStatusChange = async () => {
     if (!pendingStatusChange || isStatusChangeBusy) return;
@@ -129,11 +134,16 @@ function AdminOrdersContent() {
     setIsStatusChangeBusy(true);
     try {
       if (change.newStatus === "cancelled") {
-        const res = await cancelStoredOrder(change.orderId);
+        if (cancelReason.trim().length < 8) {
+          setStatusChangeError("Vui lòng nhập lý do hủy cụ thể, tối thiểu 8 ký tự.");
+          return;
+        }
+        const res = await cancelStoredOrder(change.orderId, cancelReason);
         if (!res.success) {
           setStatusChangeError(res.error);
           return;
         }
+        await syncOrdersFromServer(true);
       } else {
         updateStoredOrderStatus(change.orderId, change.newStatus);
       }
@@ -150,6 +160,7 @@ function AdminOrdersContent() {
         )
       );
       setStatusChangeError(null);
+      setCancelReason("");
       setPendingStatusChange(null);
     } finally {
       setIsStatusChangeBusy(false);
@@ -456,6 +467,7 @@ function AdminOrdersContent() {
                       orderCode: ord.order_code,
                       newStatus: e.target.value as OrderStatus,
                       buyerName: ord.buyer_name || "Khách",
+                      paymentStatus: ord.payment_status,
                     });
                   }}
                   className="flex-1 text-[10.5px] font-bold py-1.5 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none"
@@ -474,6 +486,9 @@ function AdminOrdersContent() {
                 >
                   Chi tiết ➔
                 </Link>
+                <button type="button" onClick={() => setThankYouOrder(ord)} className="rounded-xl border border-[#9ed4a3] bg-[#EAF7ED] px-2.5 py-1.5 text-[10.5px] font-extrabold text-[#16381D]" aria-label={`Xem hoặc in thiệp cảm ơn ${ord.order_code}`}>
+                  <Printer className="inline h-3 w-3" /> Thiệp
+                </button>
               </div>
             </div>
           ))
@@ -503,7 +518,7 @@ function AdminOrdersContent() {
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Thanh toán</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Trạng thái</th>
                 <th className="py-2.5 px-2.5 whitespace-nowrap">Thời gian giao</th>
-                <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Đổi trạng thái</th>
+                <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0E5D8]">
@@ -647,6 +662,10 @@ function AdminOrdersContent() {
                     </td>
 
                     <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                      <button type="button" onClick={() => setThankYouOrder(ord)} className="rounded-xl border border-[#9ed4a3] bg-[#EAF7ED] p-1.5 text-[#16381D] hover:bg-[#BFE9C3]" title={`Xem / in thiệp ${ord.order_code}`} aria-label={`Xem hoặc in thiệp cảm ơn ${ord.order_code}`}>
+                        <Printer className="h-3.5 w-3.5" />
+                      </button>
                       <select
                         value={ord.order_status}
                         onChange={(e) => {
@@ -656,6 +675,7 @@ function AdminOrdersContent() {
                             orderCode: ord.order_code,
                             newStatus: e.target.value as OrderStatus,
                             buyerName: ord.buyer_name || "Khách",
+                            paymentStatus: ord.payment_status,
                           });
                         }}
                         className="text-[10px] font-bold py-1 px-2 rounded-xl border border-[#F0E5D8] bg-[#FFFDF9] text-[#342A24] outline-none hover:border-[#16381D] cursor-pointer"
@@ -667,6 +687,7 @@ function AdminOrdersContent() {
                         <option value="completed">Đã hoàn thành</option>
                         <option value="cancelled">Đã hủy đơn</option>
                       </select>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -719,6 +740,14 @@ function AdminOrdersContent() {
                   {ORDER_STATUS_LABELS[pendingStatusChange.newStatus]}
                 </span>
               </div>
+              {pendingStatusChange.newStatus === "cancelled" && <div className="space-y-2 pt-2 text-left">
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] font-semibold text-amber-950">
+                  {pendingStatusChange.paymentStatus === "paid"
+                    ? "Đơn đã thanh toán: hủy đơn không hoàn tiền và không sửa ledger. Sau khi hủy phải xử lý hoàn tiền/đối soát riêng."
+                    : "Hủy đơn sẽ hoàn tác kho/voucher nguyên tử khi dữ liệu đủ điều kiện."}
+                </p>
+                <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} rows={3} maxLength={500} placeholder="Lý do hủy bắt buộc (tối thiểu 8 ký tự)" className="w-full rounded-xl border border-gray-200 p-2.5 text-xs outline-none" />
+              </div>}
               {statusChangeError ? (
                 <p className="pt-2 text-xs font-bold text-red-600 leading-relaxed" role="alert">
                   {statusChangeError}
@@ -731,6 +760,7 @@ function AdminOrdersContent() {
                 onClick={() => {
                   if (isStatusChangeBusy) return;
                   setStatusChangeError(null);
+                  setCancelReason("");
                   setPendingStatusChange(null);
                 }}
                 disabled={isStatusChangeBusy}
@@ -748,6 +778,9 @@ function AdminOrdersContent() {
             </div>
           </div>
         </div>
+      )}
+      {thankYouOrder && (
+        <AdminOrderThankYouCardDialog order={thankYouOrder} onClose={() => setThankYouOrder(null)} />
       )}
     </div>
   );

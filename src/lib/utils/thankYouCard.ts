@@ -37,7 +37,7 @@ export function getThankYouCardData(order?: Pick<Order, "buyer_name" | "created_
 }
 
 let fontPromise: Promise<void> | undefined;
-async function loadCardFont(): Promise<void> {
+export async function ensureThankYouCardFonts(): Promise<void> {
   if (!fontPromise) {
     fontPromise = (async () => {
       await Promise.all([
@@ -60,7 +60,7 @@ export async function renderThankYouCard(customerName: string, orderDate: string
       image.onload = () => resolve(image);
       image.onerror = () => reject(new Error("Cannot load ThankYouCard template"));
       image.src = THANK_YOU_CARD.template;
-    }), loadCardFont(),
+    }), ensureThankYouCardFonts(),
   ]);
   const canvas = document.createElement("canvas");
   canvas.width = THANK_YOU_CARD.width; canvas.height = THANK_YOU_CARD.height;
@@ -83,4 +83,33 @@ export async function renderThankYouCard(customerName: string, orderDate: string
   text(customerName.normalize("NFC"), THANK_YOU_CARD.name);
   text(orderDate, THANK_YOU_CARD.date);
   return canvas;
+}
+
+export function thankYouCardFileName(customerName: string): string {
+  const safeName = customerName.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `Thiep-Cam-On-Gieo-Mo${safeName ? `-${safeName}` : ""}.png`;
+}
+
+export async function createThankYouCardPng(customerName: string, orderDate: string): Promise<{ blob: Blob; fileName: string }> {
+  const canvas = await renderThankYouCard(customerName, orderDate);
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) =>
+    value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
+  if (blob.type !== "image/png" || blob.size < 1) throw new Error("Invalid PNG export");
+  return { blob, fileName: thankYouCardFileName(customerName) };
+}
+
+/** Attach the anchor for Android/WebView compatibility and revoke only after the browser consumed it. */
+export function downloadThankYouCardPng(blob: Blob, fileName: string): void {
+  if (blob.type !== "image/png" || blob.size < 1) throw new Error("Invalid PNG download");
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.download = fileName;
+  link.href = url;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

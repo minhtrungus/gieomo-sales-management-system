@@ -5,19 +5,6 @@ import { useRouter } from "next/navigation";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import type { DeliveryStatus, OrderStatus, PaymentStatus } from "@/types/database";
 
-type PreviewResult = {
-  outcome?: string;
-  eligible?: boolean;
-  order_code?: string;
-  order_status?: string;
-  payment_status?: string;
-  delivery_status?: string;
-  final_amount?: number;
-  updated_at?: string;
-  blockers?: string[];
-  relations?: Record<string, number>;
-};
-
 export function ControlledOrderDeletePanel(props: {
   orderId: string;
   orderCode: string;
@@ -29,59 +16,30 @@ export function ControlledOrderDeletePanel(props: {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
-  const [confirmation, setConfirmation] = useState("");
-  const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const looksLikeDraft = props.orderStatus === "pending" && props.paymentStatus === "pending" && props.deliveryStatus === "not_ready";
-  const blockerLabels: Record<string, string> = {
-    order_not_draft: "Đơn không còn ở trạng thái chờ ban đầu",
-    payment_state_not_pending: "Trạng thái thanh toán đã phát sinh xử lý",
-    payment_evidence_present: "Có bản ghi thanh toán cần giữ lại",
-    payment_event_present: "Có sự kiện thanh toán cần đối soát",
-    shipment_present: "Đã có hồ sơ giao hàng",
-    delivery_started: "Quá trình giao hàng đã bắt đầu",
-    business_history_present: "Đơn đã có lịch sử nghiệp vụ",
-    inventory_effect_present: "Đơn đã tác động tồn kho",
-    idempotency_claim_present: "Đơn có khóa chống tạo trùng cần giữ lại",
-    lifecycle_effect_present: "Đơn đã có tác động voucher hoặc vòng đời",
-  };
+  const isTerminal = props.orderStatus === "completed" || props.orderStatus === "cancelled";
 
-  const request = async (mode: "preview" | "delete") => {
-    if (busy) return;
+  const archiveOrder = async () => {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason || busy) return;
     setBusy(true);
     setError(null);
     try {
       const response = await fetch("/api/orders/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          orderId: props.orderId,
-          reason,
-          confirmation: mode === "delete" ? confirmation : undefined,
-          expectedUpdatedAt: mode === "delete" ? preview?.updated_at : undefined,
-        }),
+        body: JSON.stringify({ mode: "archive", orderId: props.orderId, reason: trimmedReason }),
       });
-      const body = await response.json() as {
-        success?: boolean;
-        error?: string;
-        results?: PreviewResult[];
-      };
-      const result = body.results?.[0] || null;
-      if (mode === "preview") {
-        setPreview(result);
-      }
+      const body = await response.json() as { success?: boolean; error?: string };
       if (!response.ok || !body.success) {
-        setError(body.error || (result?.blockers?.length ? `Bị chặn: ${result.blockers.join(", ")}` : "Không đủ điều kiện xóa"));
+        setError(body.error || "Không thể xóa đơn hàng");
         return;
       }
-      if (mode === "delete") {
-        router.replace("/admin/orders");
-        router.refresh();
-      }
+      router.replace("/admin/orders");
+      router.refresh();
     } catch {
-      setError("Không nhận được phản hồi từ máy chủ; chưa có đơn nào được xác nhận là đã xóa.");
+      setError("Không nhận được phản hồi từ máy chủ; đơn hàng chưa được xác nhận là đã xóa.");
     } finally {
       setBusy(false);
     }
@@ -89,44 +47,39 @@ export function ControlledOrderDeletePanel(props: {
 
   return (
     <div className="text-right">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-xs font-bold text-red-700 hover:text-red-900 underline underline-offset-2"
-      >
-        {looksLikeDraft ? "Xóa đơn test/nháp" : "Xem lý do không thể xóa"}
+      <button type="button" onClick={() => setOpen(true)} className="text-xs font-bold text-amber-800 underline underline-offset-2 hover:text-amber-950">
+        Lưu trữ đơn hàng
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 text-left">
-          <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-order-title" className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
             <div>
-              <h2 className="font-heading text-lg font-extrabold text-red-900">Preview xóa đơn {props.orderCode}</h2>
-              <p className="text-xs text-gray-600">Mã đơn: <strong>{props.orderCode}</strong> · Giá trị: <MoneyDisplay amount={props.finalAmount} /></p>
-              <p className="text-xs text-gray-600">Đơn: {props.orderStatus} · Thanh toán: {props.paymentStatus} · Giao hàng: {props.deliveryStatus}</p>
+              <h2 id="delete-order-title" className="font-heading text-lg font-extrabold text-amber-950">Lưu trữ đơn hàng {props.orderCode}</h2>
+              <p className="mt-1 text-sm text-gray-700">Mã đơn <strong>{props.orderCode}</strong> · <MoneyDisplay amount={props.finalAmount} /></p>
             </div>
-            <p className="text-xs text-gray-600">Chỉ xóa vật lý bản nháp/test chưa có payment, shipment, tồn kho, voucher hay lịch sử nghiệp vụ. Khóa idempotency của chính đơn sẽ được dọn sạch cùng đơn khi xóa (H51).</p>
-            <textarea value={reason} onChange={(event) => { setReason(event.target.value); setPreview(null); }} placeholder="Lý do xóa" className="min-h-20 w-full rounded-xl border p-2 text-sm" />
-            <button type="button" disabled={busy} onClick={() => request("preview")} className="rounded-xl bg-amber-100 px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">
-              {busy ? "Đang kiểm tra..." : "Chạy preview — không thay đổi dữ liệu"}
-            </button>
-            {preview ? (
-              <div className="rounded-xl border bg-gray-50 p-3 text-xs">
-                <p className="font-bold">Kết quả: {preview.outcome}</p>
-                {preview.blockers?.length ? <ul className="mt-1 list-disc pl-4">{preview.blockers.map((blocker) => <li key={blocker}>{blockerLabels[blocker] || blocker}</li>)}</ul> : null}
-                {preview.relations ? <p>Quan hệ: {Object.entries(preview.relations).map(([key, value]) => `${key}=${value}`).join(", ")}</p> : null}
-              </div>
-            ) : null}
-            {preview?.eligible ? (
-              <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
-                <p className="text-xs font-bold text-red-900">Gõ XOA để xác nhận xóa vật lý. Trạng thái sẽ được kiểm tra lại trong transaction.</p>
-                <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="XOA" className="w-full rounded-xl border p-2 text-sm" />
-                <button type="button" disabled={busy || confirmation !== "XOA"} onClick={() => request("delete")} className="rounded-xl bg-red-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
-                  Xóa đơn đã preview
-                </button>
-              </div>
-            ) : null}
+            <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+              <p>Đơn sẽ bị ẩn khỏi danh sách đang hoạt động; dữ liệu giao dịch và lịch sử được giữ để tra cứu/kiểm toán.</p>
+              <p><strong>Lưu trữ không tự hoàn tiền và không tự hoàn hàng về kho.</strong> Trạng thái đơn, reservation, lịch sử kho, payment ledger và mã giao dịch provider không thay đổi.</p>
+              <p>Hiện chưa có thao tác khôi phục/unarchive trên giao diện.</p>
+              {!isTerminal ? <p className="font-extrabold text-red-800">Đơn chưa kết thúc. Hãy hoàn tất hoặc hủy đơn đúng quy trình (bao gồm xử lý hàng đang giữ) trước khi lưu trữ.</p> : null}
+            </div>
+            <p className="text-xs text-gray-600">Đơn: {props.orderStatus} · Thanh toán: {props.paymentStatus} · Giao hàng: {props.deliveryStatus}</p>
+            <label htmlFor="delete-order-reason" className="block text-sm font-bold text-gray-800">Lý do lưu trữ <span className="text-red-600">*</span></label>
+            <textarea
+              id="delete-order-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              maxLength={500}
+              placeholder="Nhập lý do lưu trữ ngắn gọn"
+              className="min-h-24 w-full rounded-xl border border-gray-300 p-3 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
+            />
             {error ? <p role="alert" className="text-xs font-bold text-red-700">{error}</p> : null}
-            <button type="button" disabled={busy} onClick={() => setOpen(false)} className="text-xs font-bold text-gray-600">Đóng</button>
+            <div className="flex justify-end gap-3">
+              <button type="button" disabled={busy} onClick={() => setOpen(false)} className="rounded-xl border px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-50">Đóng</button>
+              <button type="button" disabled={busy || !isTerminal || !reason.trim()} onClick={archiveOrder} className="rounded-xl bg-amber-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">
+                {busy ? "Đang lưu trữ..." : "Xác nhận lưu trữ"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

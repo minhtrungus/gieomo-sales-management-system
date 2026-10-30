@@ -61,6 +61,10 @@ export async function POST(request: Request) {
 
     if (dbError) {
       console.error("[POST /api/auth/login] Database query error:", dbError);
+      return NextResponse.json(
+        { success: false, error: "Dịch vụ đăng nhập tạm thời không khả dụng. Vui lòng thử lại sau." },
+        { status: 503 }
+      );
     }
 
     const matchedMember = (members || [])[0];

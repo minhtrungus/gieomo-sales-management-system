@@ -356,7 +356,19 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
   // 2. Phase A — fetch payments theo CHUNKS (Batch 3C): mỗi lần tối đa
   //    PAYMENTS_CHUNK_SIZE IDs — tránh URL overflow của `.in()` PostgREST
   //    khi số orders lớn. Chunk đầu lỗi → throw ngay (không nuốt).
-  const orderRows: LightweightOrder[] = rawOrders;
+  let orderRows: LightweightOrder[] = rawOrders;
+  if (orderRows.length > 0) {
+    const archived = await supabase.from("test_order_archives").select("order_id")
+      .in("order_id", orderRows.map((order) => order.order_id));
+    if (archived.error) {
+      const missing = (archived.error.code === "PGRST205" || archived.error.code === "42P01") &&
+        /test_order_archives/i.test(archived.error.message || "");
+      if (!missing) throw new Error("Không thể xác minh danh sách đơn đã lưu trữ");
+    } else {
+      const archivedIds = new Set((archived.data || []).map((row: { order_id: string }) => row.order_id));
+      orderRows = orderRows.filter((order) => !archivedIds.has(order.order_id));
+    }
+  }
   const orderIds = orderRows.map((order) => order.order_id);
   const rawPayments: PaymentRow[] = [];
   for (let i = 0; i < orderIds.length; i += PAYMENTS_CHUNK_SIZE) {
@@ -524,6 +536,9 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     const paidRecords = relatedPayments.filter(
       (p) => p.payment_status === "paid" || !p.payment_status
     );
+    const pendingPaymentRecords = relatedPayments.filter(
+      (p) => p.payment_status === "pending"
+    );
     const totalPaidAmount = paidRecords.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const difference = totalPaidAmount - orderFinalAmount;
 
@@ -621,7 +636,24 @@ export async function getReconciliationDataServer(options?: ReconciliationFilter
     const isOrderCancelled = o.order_status === "cancelled";
     const isOrderMarkedPaid = o.payment_status === "paid";
 
-    if (isOrderCancelled) {
+    const hasManualPaymentAdjustment =
+      typeof o.internal_note === "string" && o.internal_note.includes("[ĐIỀU CHỈNH THANH TOÁN]");
+
+    if (hasManualPaymentAdjustment) {
+      recStatus = "NEEDS_REVIEW";
+      recReason = "Xác nhận tiền mặt đã được quản trị viên điều chỉnh; payment ledger gốc vẫn được giữ để truy vết.";
+      actionRecommended = "Đọc audit log và payment_confirmation_adjustments trước khi xác nhận lại. Không suy đoán rằng tiền đã được hoàn.";
+    } else if (pendingPaymentRecords.length > 0) {
+      const pendingAmount = pendingPaymentRecords.reduce(
+        (sum, payment) => sum + (Number(payment.amount) || 0),
+        0
+      );
+      recStatus = "NEEDS_REVIEW";
+      recReason = `${pendingPaymentRecords.length} giao dịch (${pendingAmount.toLocaleString("vi-VN")}đ) đang chờ đối soát và chưa được áp dụng vào trạng thái thanh toán của đơn.`;
+      actionRecommended = isOrderMarkedPaid
+        ? "Đơn đã được đánh dấu thanh toán. Kiểm tra giao dịch đến sau để hoàn tiền hoặc xử lý như khoản đóng góp; không xác nhận lại tự động."
+        : "Kiểm tra mã giao dịch, số tiền và lịch sử đơn trước khi xác nhận hoặc từ chối.";
+    } else if (isOrderCancelled) {
       recStatus = "NEEDS_REVIEW";
       recReason = "Đơn hàng đã hủy trên hệ thống.";
       actionRecommended = totalPaidAmount > 0

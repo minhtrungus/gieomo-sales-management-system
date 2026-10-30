@@ -10,6 +10,7 @@
     "type-check": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
+    "test:source": "node scripts/tests/run-source-tests.mjs",
     "test:pg:mandatory": "node scripts/postgres/run-mandatory-pg-tests.mjs"
   },
   "dependencies": {

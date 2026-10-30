@@ -62,3 +62,13 @@ test("login route checks limit before database access, records failures, clears 
   assert.match(source, /status:\s*429/);
   assert.match(source, /"Retry-After"/);
 });
+
+test("login distinguishes invalid credentials from an unavailable database", () => {
+  const source = readFileSync(new URL("../src/app/api/auth/login/route.ts", import.meta.url), "utf8");
+  const dbErrorBranch = source.slice(source.indexOf("if (dbError)"), source.indexOf("const matchedMember"));
+  assert.match(dbErrorBranch, /status:\s*503/);
+  assert.doesNotMatch(dbErrorBranch, /recordLoginFailure/);
+  assert.match(source, /status:\s*401/);
+  assert.match(source, /clearLoginFailures\(rateLimitKey\)/);
+  assert.match(source, /response\.cookies\.set/);
+});

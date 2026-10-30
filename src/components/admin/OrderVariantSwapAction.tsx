@@ -40,9 +40,14 @@ export function OrderVariantSwapAction({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!canShowVariantSwap(orderStatus, deliveryStatus, item)) return null;
+  if (!item.variant_id) {
+    return <p className="mt-1 text-[11px] font-medium text-gray-500">Dòng hàng cũ không có mã variant nên không thể đổi mẫu an toàn.</p>;
+  }
   if (item.combo_id) {
     return <p className="mt-1 text-[11px] font-medium text-amber-700">Dòng combo chưa hỗ trợ thay đổi mẫu riêng lẻ.</p>;
+  }
+  if (!canShowVariantSwap(orderStatus, deliveryStatus, item)) {
+    return <p className="mt-1 text-[11px] font-medium text-amber-700">Không thể đổi mẫu: chỉ áp dụng khi đơn đang chờ/xác nhận/xử lý và chưa đóng gói.</p>;
   }
 
   const loadCandidates = async () => {

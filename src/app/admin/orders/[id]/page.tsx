@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { MoneyDisplay } from "@/components/ui/MoneyDisplay";
 import { Badge } from "@/components/ui/Badge";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
@@ -9,6 +10,7 @@ import {
   getStoredOrders,
   updateStoredOrderStatus,
   cancelStoredOrder,
+  syncOrdersFromServer,
   syncStoredPaymentStatusLocal,
   updateStoredDeliveryStatus,
   updateStoredOrderDetails,
@@ -17,11 +19,11 @@ import {
 } from "@/lib/data/orderStore";
 import { confirmPaymentServerFirst } from "@/lib/data/paymentConfirm";
 import { ControlledOrderDeletePanel } from "@/components/admin/ControlledOrderDeletePanel";
-import { AdminOrderThankYouCard } from "@/components/admin/AdminOrderThankYouCard";
 import { OrderVariantSwapAction } from "@/components/admin/OrderVariantSwapAction";
 import { DuplicateOrderReviewPanel } from "@/components/admin/DuplicateOrderReviewPanel";
+import { AdminOrderThankYouCardDialog } from "@/components/admin/AdminOrderThankYouCardDialog";
 import type { OrderStatus, PaymentStatus, DeliveryStatus, Order } from "@/types/database";
-import { ArrowLeft, UserCheck, Copy, Check, Building, Bike, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle } from "lucide-react";
+import { ArrowLeft, UserCheck, Copy, Check, Building, Bike, Maximize2, X, Download, ZoomIn, ShieldCheck, AlertCircle, Printer } from "lucide-react";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -50,6 +52,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   // Confirmation modal state for manual payment verification
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+  const [showThankYouCard, setShowThankYouCard] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelOutcome, setCancelOutcome] = useState<string | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -137,12 +142,22 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       // Batch 2D — chuyển sang cancelled phải server xác nhận trước; thất bại
       // → hiện lỗi, KHÔNG áp dụng cập nhật nào (local giữ nguyên).
       if (statusChanged && orderStatus === "cancelled") {
-        const res = await cancelStoredOrder(order.order_id);
+        if (cancelReason.trim().length < 8) {
+          setSaveError("Vui lòng nhập lý do hủy cụ thể, tối thiểu 8 ký tự.");
+          return;
+        }
+        const res = await cancelStoredOrder(order.order_id, cancelReason);
         if (!res.success) {
           setSaveError(res.error);
           return;
         }
-        setOrder((prev) => (prev ? { ...prev, order_status: "cancelled" } : prev));
+        await syncOrdersFromServer(true);
+        const fresh = getStoredOrders().find((item) => item.order_id === order.order_id) || null;
+        if (fresh) setOrder(fresh);
+        else setOrder((prev) => (prev ? { ...prev, order_status: "cancelled" } : prev));
+        setCancelOutcome(res.refundRequired
+          ? "Đơn đã hủy; trạng thái đã thanh toán và ledger được giữ nguyên. Cần thực hiện hoàn tiền/đối soát bằng quy trình riêng."
+          : "Đơn đã hủy; tồn kho/voucher đủ điều kiện đã được hoàn tác nguyên tử.");
       }
       const changes = {
         ...(internalNote !== (order.internal_note || "") ? { internalNote } : {}),
@@ -252,8 +267,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 8 Cols */}
         <div className="lg:col-span-8 space-y-6">
-          {/* H51: thank-you card for this order (view / download / share / print) */}
-          <AdminOrderThankYouCard order={order} />
           {/* Customer & Shipping Address */}
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
@@ -552,6 +565,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
         {/* Right 4 Cols Controls */}
         <div className="lg:col-span-4 space-y-6">
+          <button type="button" onClick={() => setShowThankYouCard(true)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#9ed4a3] bg-[#EAF7ED] px-4 py-3 text-xs font-extrabold text-[#16381D] hover:bg-[#BFE9C3]">
+            <Printer className="h-4 w-4" /> Xem / In thiệp cảm ơn
+          </button>
           <div className="bg-white rounded-3xl p-6 border border-gray-200/80 shadow-2xs space-y-4">
             <h3 className="font-heading font-bold text-base text-emerald-950 border-b border-gray-100 pb-3">
               Cập nhật trạng thái
@@ -572,6 +588,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <option value="completed">Hoàn thành</option>
                 <option value="cancelled">Hủy đơn</option>
               </select>
+              {orderStatus === "cancelled" && order.order_status !== "cancelled" && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <p className="text-xs font-bold text-amber-950">Hủy đơn chỉ dừng fulfillment và hoàn tác kho/voucher khi có đủ chứng cứ. Nếu đơn đã thanh toán, tiền và ledger không bị đổi; hoàn tiền là bước riêng.</p>
+                <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} rows={3} maxLength={500} placeholder="Lý do hủy bắt buộc (tối thiểu 8 ký tự)" className="w-full rounded-xl border border-amber-200 bg-white p-2.5 text-xs outline-none" />
+              </div>}
+              {cancelOutcome && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900">{cancelOutcome}</p>}
             </div>
 
             <div className="space-y-2">
@@ -579,13 +600,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <select
                 value={paymentStatus}
                 onChange={(e) => handlePaymentStatusChange(e.target.value as PaymentStatus)}
+                disabled={paymentStatus === "paid"}
                 className="w-full p-2.5 rounded-xl border border-gray-200 text-xs font-bold bg-white outline-none"
               >
                 <option value="pending">⏳ Chờ thanh toán</option>
                 <option value="paid">✅ Đã thanh toán (Khớp VietQR)</option>
-                <option value="refunded">↩️ Đã hoàn tiền</option>
-                <option value="failed">❌ Thất bại</option>
               </select>
+              <p className="text-[10px] leading-relaxed text-gray-500">Giao dịch ngân hàng không thể hủy xác nhận tại đây; phải xử lý đối soát hoặc hoàn tiền ngoài ngân hàng.</p>
             </div>
 
             <div className="space-y-2">
@@ -647,11 +668,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       onClick={() => setZoomedProof(proofSrc)}
                       className="relative w-full rounded-2xl overflow-hidden border border-emerald-200 bg-gray-50 group cursor-pointer hover:border-emerald-500 transition-all shadow-2xs hover:shadow-md"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={proofSrc}
                         alt="Biên lai chuyển khoản"
-                        className="w-full h-auto max-h-72 object-contain mx-auto transition-transform group-hover:scale-[1.02]"
+                        width={720}
+                        height={420}
+                        sizes="(max-width: 768px) calc(100vw - 48px), 720px"
+                        quality={50}
+                        unoptimized={proofSrc.startsWith("data:")}
+                        className="h-auto max-h-72 w-full object-contain mx-auto transition-transform group-hover:scale-[1.02]"
                       />
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white font-bold text-xs">
                         <ZoomIn className="w-5 h-5" />
@@ -730,12 +755,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </div>
 
             {/* Modal Image Area */}
-            <div className="relative w-full flex-1 flex items-center justify-center overflow-auto max-h-[80vh] p-2 bg-black/40 rounded-2xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <div className="relative h-[76vh] w-full flex-1 overflow-hidden p-2 bg-black/40 rounded-2xl">
+              <Image
                 src={zoomedProof}
                 alt="Ảnh biên lai phóng to"
-                className="max-w-full max-h-[76vh] object-contain rounded-xl shadow-lg select-none"
+                fill
+                sizes="(max-width: 1024px) calc(100vw - 32px), 960px"
+                quality={50}
+                unoptimized={zoomedProof.startsWith("data:")}
+                className="object-contain rounded-xl shadow-lg select-none"
               />
             </div>
           </div>
@@ -831,6 +859,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </div>
           </div>
         </div>
+      )}
+      {showThankYouCard && order && (
+        <AdminOrderThankYouCardDialog order={order} onClose={() => setShowThankYouCard(false)} />
       )}
     </div>
   );

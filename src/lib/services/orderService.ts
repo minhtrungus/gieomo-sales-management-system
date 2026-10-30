@@ -67,6 +67,18 @@ function isMissingPackingReservationTable(error: DbReadError | null | undefined)
   );
 }
 
+function isMissingTestArchiveTable(error: DbReadError | null | undefined): boolean {
+  if (!error) return false;
+  return (error.code === "PGRST205" || error.code === "42P01") &&
+    String(error.message || "").toLowerCase().includes("test_order_archives");
+}
+
+function isMissingAdminArchiveTable(error: DbReadError | null | undefined): boolean {
+  if (!error) return false;
+  return (error.code === "PGRST205" || error.code === "42P01") &&
+    String(error.message || "").toLowerCase().includes("admin_order_archives");
+}
+
 function maskName(name?: string | null): string {
   if (!name) return "Khách hàng";
   const parts = name.trim().split(/\s+/);
@@ -175,6 +187,26 @@ export async function getOrdersServer(options?: {
       throw new Error("Không thể tải danh sách đơn hàng.");
     }
 
+    let visibleRows = (data || []) as OrderQueryRow[];
+    const candidateIds = visibleRows.map((row) => row.order_id).filter(Boolean);
+    if (candidateIds.length > 0) {
+      const archived = await supabase.from("test_order_archives").select("order_id").in("order_id", candidateIds);
+      if (archived.error && !isMissingTestArchiveTable(archived.error)) {
+        console.error("[getOrdersServer] test-archive-read-failed", { code: archived.error.code || "unknown" });
+        throw new Error("Không thể xác minh danh sách đơn đã lưu trữ.");
+      }
+      const archivedIds = new Set((archived.data || []).map((row: { order_id: string }) => row.order_id));
+      visibleRows = visibleRows.filter((row) => !archivedIds.has(row.order_id));
+
+      const adminArchived = await supabase.from("admin_order_archives").select("order_id").in("order_id", candidateIds);
+      if (adminArchived.error && !isMissingAdminArchiveTable(adminArchived.error)) {
+        console.error("[getOrdersServer] admin-archive-read-failed", { code: adminArchived.error.code || "unknown" });
+        throw new Error("Không thể xác minh danh sách đơn đã xóa.");
+      }
+      const adminArchivedIds = new Set((adminArchived.data || []).map((row: { order_id: string }) => row.order_id));
+      visibleRows = visibleRows.filter((row) => !adminArchivedIds.has(row.order_id));
+    }
+
     const packingByOrder = new Map<string, Array<{
       variant_id: string;
       quantity: number;
@@ -182,7 +214,7 @@ export async function getOrdersServer(options?: {
       variant_name: string;
       sku: string | null;
     }>>();
-    const orderIds = (data || []).map((row: OrderQueryRow) => row.order_id).filter(Boolean);
+    const orderIds = visibleRows.map((row) => row.order_id).filter(Boolean);
 
     if (orderIds.length > 0) {
       const reservationResult = await supabase
@@ -242,7 +274,7 @@ export async function getOrdersServer(options?: {
       }
     }
 
-    return (data || []).flatMap((sourceRow: OrderQueryRow) => {
+    return visibleRows.flatMap((sourceRow: OrderQueryRow) => {
       const customer = Array.isArray(sourceRow.customers) ? sourceRow.customers[0] : sourceRow.customers;
       const row = { ...sourceRow, customers: customer };
       const inputPhone = options?.phone?.replace(/\D/g, "") || "";

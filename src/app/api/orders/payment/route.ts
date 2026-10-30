@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     if (!authCheck.authorized) return authCheck.response;
 
     const body = await request.json();
-    const { orderId, orderCode, action } = body;
+    const { orderId, orderCode } = body;
+    const action = body.action === "cancel" ? "reject" : body.action;
     if (!orderId && !orderCode) {
       return NextResponse.json({ success: false, error: "Thiếu orderId hoặc orderCode" }, { status: 400 });
     }
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
     if (action === "reject") {
       const reason = typeof body.reason === "string" ? body.reason.trim() : "";
       if (!reason) {
-        return NextResponse.json({ success: false, error: "Lý do từ chối là bắt buộc" }, { status: 400 });
+        return NextResponse.json({ success: false, error: "Lý do hủy thanh toán là bắt buộc" }, { status: 400 });
       }
       const { data: result, error } = await supabase.rpc("reject_payment_atomic", {
         p: { order_id: order.order_id, reason, actor_member_id: authCheck.user.memberId },
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
       if (error) {
         console.error("[POST /api/orders/payment] reject_payment_atomic failed:", error.message);
         return NextResponse.json(
-          { success: false, error: "Không thể từ chối thanh toán; toàn bộ thay đổi đã rollback" },
+          { success: false, error: "Không thể hủy thanh toán; toàn bộ thay đổi đã rollback" },
           { status: 500 }
         );
       }
@@ -139,9 +140,47 @@ export async function POST(request: Request) {
       }
       const status = result?.outcome === "not_found" ? 404 : result?.outcome === "invalid_reason" ? 400 : 409;
       return NextResponse.json(
-        { success: false, outcome: result?.outcome ?? "invalid_result", error: "Payment state không cho phép từ chối" },
+        { success: false, outcome: result?.outcome ?? "invalid_result", error: "Trạng thái thanh toán đã thay đổi; hãy tải lại trước khi hủy" },
         { status }
       );
+    }
+
+    // Deprecated compatibility path for previously deployed clients. There is
+    // intentionally no admin UI caller; keep the audited RPC contract intact.
+    if (action === "adjust_confirmation") {
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+      if (reason.length < 8 || reason.length > 500) {
+        return NextResponse.json({ success: false, error: "Lý do phải có từ 8 đến 500 ký tự" }, { status: 400 });
+      }
+      if (!expectedUpdatedAt) {
+        return NextResponse.json({ success: false, error: "Thiếu phiên bản đơn hàng để chống cập nhật đồng thời" }, { status: 400 });
+      }
+      const { data: result, error } = await supabase.rpc("adjust_payment_confirmation_atomic", {
+        p: {
+          order_id: order.order_id,
+          reason,
+          expected_updated_at: expectedUpdatedAt,
+          actor_member_id: authCheck.user.memberId,
+        },
+      });
+      if (error) {
+        console.error("[POST /api/orders/payment] adjust_payment_confirmation_atomic failed:", error.message);
+        const unavailable = error.code === "PGRST202" || /could not find the function|schema cache/i.test(error.message);
+        return NextResponse.json({ success: false, error: unavailable
+          ? "Database hiện tại chưa áp dụng migration 039 cho điều chỉnh xác nhận tiền mặt."
+          : "Không thể điều chỉnh; toàn bộ thay đổi đã rollback" }, { status: unavailable ? 503 : 500 });
+      }
+      if (result?.outcome === "adjusted") {
+        return NextResponse.json({ success: true, ...result });
+      }
+      const status = result?.outcome === "not_found" ? 404 : result?.outcome === "version_conflict" ? 409 : 422;
+      return NextResponse.json({
+        success: false,
+        outcome: result?.outcome ?? "invalid_result",
+        needsReview: result?.needs_review === true,
+        error: result?.message || "Đơn hoặc lịch sử thanh toán không cho phép điều chỉnh",
+      }, { status });
     }
 
     return NextResponse.json({ success: false, error: "Hành động không hợp lệ" }, { status: 400 });

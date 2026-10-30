@@ -200,7 +200,7 @@ test("R2 — lỗi schema/query payments → THROW 'Không thể tải dữ li�
 //      → phân biệt "không có payment record" với "không query được"
 // ============================================================
 test("R3 — payments trống thật sự → không throw, verdict PAYMENT_MISMATCH/UNPAID tính đúng", async () => {
-  seedDb({ withPayment: false });
+  const db = seedDb({ withPayment: false });
 
   const res = await getReconciliationDataServer();
 
@@ -252,4 +252,26 @@ test("R4 — source contract: payments select chỉ dùng cột có trong migrat
     );
   }
   assert.ok(!selected.includes("confirmed_at"), "confirmed_at không tồn tại trong 001 → không được select");
+});
+
+test("R5 — giao dịch bổ sung pending không bị che bởi payment paid trước đó", async () => {
+  const db = seedDb();
+  db.tables.payments.push({
+    payment_id: "pay-rec-additional",
+    order_id: ORDER_A,
+    payment_method: "banking",
+    amount: 100000,
+    payment_status: "pending",
+    transaction_code: "REF-REC-ADDITIONAL",
+    created_at: "2026-01-01T02:00:00.000Z",
+  });
+
+  const res = await getReconciliationDataServer();
+  const recA = res.records.find((record) => record.order_id === ORDER_A);
+  assert.ok(recA);
+  assert.equal(recA.paid_amount, 100000, "chỉ payment paid được cộng vào số đã thu");
+  assert.equal(recA.payments_count, 2, "payment pending vẫn phải xuất hiện trong ledger UI");
+  assert.equal(recA.reconciliation_status, "NEEDS_REVIEW");
+  assert.match(recA.reconciliation_reason, /1 giao dịch.*đang chờ đối soát/);
+  assert.match(recA.action_recommended || "", /không xác nhận lại tự động/i);
 });
