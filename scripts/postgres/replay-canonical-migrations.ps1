@@ -2,6 +2,8 @@
 param(
   [int]$Port = 55441,
   [string]$PostgresBin = "$env:USERPROFILE\scoop\apps\postgresql\current\bin",
+  [ValidatePattern('^[a-z][a-z0-9_]{0,62}$')]
+  [string]$DatabaseName = "",
   [string[]]$ProposalFiles = @(),
   [switch]$RequireSupabaseLint,
   [switch]$KeepCluster
@@ -25,7 +27,7 @@ $tempRoot = Join-Path $repoRoot ".tmp"
 $suffix = [Guid]::NewGuid().ToString("N").Substring(0, 10)
 $dataDirectory = Join-Path $tempRoot "postgres-canonical-$suffix"
 $logPath = Join-Path $tempRoot "postgres-canonical-$suffix.log"
-$database = "gieomo_canonical_$suffix"
+$database = if ($DatabaseName) { $DatabaseName } else { "gieomo_canonical_$suffix" }
 $databaseUser = "gieomo_canonical_admin_$suffix"
 $started = $false
 

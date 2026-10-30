@@ -244,6 +244,42 @@ test("explicit variant plus wildcard on one product never consumes the same stoc
   }
 });
 
+test("migration 044 allocates wildcard demand from highest sort_order first", {
+  skip: !canRun,
+}, async () => {
+  const c = client();
+  await c.connect();
+  try {
+    await c.query("BEGIN");
+    const suffix = `${Date.now()}-bottom-up`;
+    const { product, variants } = await seedCatalog(c, suffix, [3, 3]);
+    await c.query(
+      `UPDATE public.product_variants
+          SET sort_order = CASE variant_id WHEN $1 THEN 10 ELSE 20 END
+        WHERE variant_id IN ($1, $2)`,
+      [variants[0].variant_id, variants[1].variant_id],
+    );
+    const combo = await saveWildcardCombo(c, suffix, product, 1);
+    assert.equal(combo.outcome, "saved");
+
+    const result = await callCheckout(c, { comboRef: combo.combo_id, quantity: 2 });
+    assert.equal(result.outcome, "created");
+    const stocks = await stocksFor(c, variants);
+    const byVariant = new Map(stocks.map((row: any) => [row.variant_id, Number(row.stock)]));
+    assert.equal(byVariant.get(variants[0].variant_id), 3, "lower sort_order must remain untouched");
+    assert.equal(byVariant.get(variants[1].variant_id), 1, "highest sort_order must satisfy demand first");
+
+    const reservations = await reservationsFor(c, result.order_id);
+    assert.deepEqual(
+      reservations.map((row: any) => ({ variant_id: row.variant_id, quantity: Number(row.quantity) })),
+      [{ variant_id: variants[1].variant_id, quantity: 2 }],
+    );
+    await c.query("ROLLBACK");
+  } finally {
+    await c.end();
+  }
+});
+
 test("undersupplied wildcard pool fails with STOCK_INSUFFICIENT and rolls back clean", {
   skip: !canRun,
 }, async () => {
